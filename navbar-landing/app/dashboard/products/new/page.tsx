@@ -15,12 +15,6 @@ import { toast } from 'sonner'
 import { ArrowLeft, Save } from 'lucide-react'
 import Link from 'next/link'
 
-const SPECS_OPTIONS = [
-  'Regular',
-  'Single Level only',
-  'Class WorkBooks Only',
-]
-
 export default function NewProductPage() {
   const router = useRouter()
   const currentUser = getCurrentUser()
@@ -36,6 +30,7 @@ export default function NewProductPage() {
     newSubject: '',
     hasSpecs: false,
     specs: [] as string[],
+    newSpec: '',
     prodStatus: 1,
   })
 
@@ -73,11 +68,12 @@ export default function NewProductPage() {
     })
   }
 
-  const addSpec = (spec: string) => {
-    if (spec && !form.specs.includes(spec)) {
+  const addSpec = () => {
+    if (form.newSpec.trim() && !form.specs.includes(form.newSpec.trim())) {
       setForm({
         ...form,
-        specs: [...form.specs, spec],
+        specs: [...form.specs, form.newSpec.trim()],
+        newSpec: '',
       })
     }
   }
@@ -270,21 +266,19 @@ export default function NewProductPage() {
           {form.hasSpecs && (
             <div>
               <Label>Specs *</Label>
-              <p className="text-xs text-neutral-500 mb-2">Select one or multiple specs</p>
-              <Select
-                onValueChange={(v) => addSpec(v)}
-              >
-                <SelectTrigger className="bg-white text-neutral-900 mt-1">
-                  <SelectValue placeholder="Select a spec to add" />
-                </SelectTrigger>
-                <SelectContent>
-                  {SPECS_OPTIONS.filter(spec => !form.specs.includes(spec)).map((spec) => (
-                    <SelectItem key={spec} value={spec}>
-                      {spec}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <p className="text-xs text-neutral-500 mb-2">Add one or multiple specs</p>
+              <div className="flex gap-2 mb-2">
+                <Input
+                  className="bg-white text-neutral-900"
+                  placeholder="Enter spec name"
+                  value={form.newSpec}
+                  onChange={(e) => setForm({ ...form, newSpec: e.target.value })}
+                  onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addSpec())}
+                />
+                <Button type="button" onClick={addSpec} variant="outline">
+                  Add Spec
+                </Button>
+              </div>
               {form.specs.length > 0 && (
                 <div className="flex flex-wrap gap-2 mt-2">
                   {form.specs.map((spec, idx) => (

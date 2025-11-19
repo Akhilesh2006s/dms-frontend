@@ -123,6 +123,7 @@ export default function WarehouseDcAtWarehouse() {
 
   const openProcessDialog = async (dc: DC) => {
     try {
+      setOpenDialog(true) // Open dialog first to show loading state
       // Fetch warehouse inventory first
       const inventory = await apiRequest<WarehouseItem[]>('/warehouse')
       // Ensure inventory is an array before setting
@@ -135,31 +136,104 @@ export default function WarehouseDcAtWarehouse() {
       
       // Helper function to find matching inventory item
       const findInventoryItem = (productName: string, category?: string, level?: string, specs?: string, subject?: string): WarehouseItem | null => {
-        // Try exact match first (productName, category, level, specs, subject)
-        let match = inventoryArray.find(item => 
-          item.productName?.toLowerCase() === productName?.toLowerCase() &&
-          item.category === category &&
-          item.level === level &&
-          (item.specs || 'Regular') === (specs || 'Regular') &&
-          (item.subject || undefined) === (subject || undefined)
-        )
+        // Normalize subject for comparison (handle empty strings, null, undefined)
+        const normalizedSubject = subject && subject.trim() !== '' ? subject.trim() : undefined
+        const normalizedSpecs = (specs && specs.trim() !== '') ? specs.trim() : 'Regular'
         
-        // If no exact match, try productName, category, level, and specs (without subject)
-        if (!match) {
-          match = inventoryArray.find(item => 
+        // If subject is provided, we MUST match it exactly - don't fall back to items without subjects
+        if (normalizedSubject !== undefined) {
+          // Try exact match with subject (productName, category, level, specs, subject)
+          let match = inventoryArray.find(item => {
+            const itemSubject = item.subject && item.subject.trim() !== '' ? item.subject.trim() : undefined
+            const itemSpecs = (item.specs && item.specs.trim() !== '') ? item.specs.trim() : 'Regular'
+            return (
+              item.productName?.toLowerCase() === productName?.toLowerCase() &&
+              (item.category || '') === (category || '') &&
+              (item.level || '') === (level || '') &&
+              itemSpecs === normalizedSpecs &&
+              itemSubject === normalizedSubject // Exact subject match required
+            )
+          })
+          
+          // If no exact match with category, try without category (productName, level, specs, subject)
+          if (!match) {
+            match = inventoryArray.find(item => {
+              const itemSubject = item.subject && item.subject.trim() !== '' ? item.subject.trim() : undefined
+              const itemSpecs = (item.specs && item.specs.trim() !== '') ? item.specs.trim() : 'Regular'
+              return (
+                item.productName?.toLowerCase() === productName?.toLowerCase() &&
+                (item.level || '') === (level || '') &&
+                itemSpecs === normalizedSpecs &&
+                itemSubject === normalizedSubject // Exact subject match required
+              )
+            })
+          }
+          
+          // If no exact match with subject, try case-insensitive subject match (with category)
+          if (!match) {
+            match = inventoryArray.find(item => {
+              const itemSubject = item.subject && item.subject.trim() !== '' ? item.subject.trim().toLowerCase() : undefined
+              const itemSpecs = (item.specs && item.specs.trim() !== '') ? item.specs.trim() : 'Regular'
+              return (
+                item.productName?.toLowerCase() === productName?.toLowerCase() &&
+                (item.category || '') === (category || '') &&
+                (item.level || '') === (level || '') &&
+                itemSpecs === normalizedSpecs &&
+                itemSubject === normalizedSubject?.toLowerCase() // Case-insensitive subject match
+              )
+            })
+          }
+          
+          // If no match, try case-insensitive subject match without category
+          if (!match) {
+            match = inventoryArray.find(item => {
+              const itemSubject = item.subject && item.subject.trim() !== '' ? item.subject.trim().toLowerCase() : undefined
+              const itemSpecs = (item.specs && item.specs.trim() !== '') ? item.specs.trim() : 'Regular'
+              return (
+                item.productName?.toLowerCase() === productName?.toLowerCase() &&
+                (item.level || '') === (level || '') &&
+                itemSpecs === normalizedSpecs &&
+                itemSubject === normalizedSubject?.toLowerCase() // Case-insensitive subject match
+              )
+            })
+          }
+          
+          return match || null
+        }
+        
+        // If no subject is provided, try matching without subject
+        // Try exact match first (productName, category, level, specs, no subject)
+        let match = inventoryArray.find(item => {
+          const itemSubject = item.subject && item.subject.trim() !== '' ? item.subject.trim() : undefined
+          const itemSpecs = (item.specs && item.specs.trim() !== '') ? item.specs.trim() : 'Regular'
+          return (
             item.productName?.toLowerCase() === productName?.toLowerCase() &&
-            item.category === category &&
-            item.level === level &&
-            (item.specs || 'Regular') === (specs || 'Regular')
+            (item.category || '') === (category || '') &&
+            (item.level || '') === (level || '') &&
+            itemSpecs === normalizedSpecs &&
+            itemSubject === undefined // No subject in inventory item
           )
+        })
+        
+        // If no exact match, try productName, category, level, and specs (ignore subject)
+        if (!match) {
+          match = inventoryArray.find(item => {
+            const itemSpecs = (item.specs && item.specs.trim() !== '') ? item.specs.trim() : 'Regular'
+            return (
+              item.productName?.toLowerCase() === productName?.toLowerCase() &&
+              (item.category || '') === (category || '') &&
+              (item.level || '') === (level || '') &&
+              itemSpecs === normalizedSpecs
+            )
+          })
         }
         
         // If no exact match, try productName, category, and level (without specs/subject)
         if (!match) {
           match = inventoryArray.find(item => 
             item.productName?.toLowerCase() === productName?.toLowerCase() &&
-            item.category === category &&
-            item.level === level
+            (item.category || '') === (category || '') &&
+            (item.level || '') === (level || '')
           )
         }
         
@@ -167,7 +241,7 @@ export default function WarehouseDcAtWarehouse() {
         if (!match) {
           match = inventoryArray.find(item => 
             item.productName?.toLowerCase() === productName?.toLowerCase() &&
-            item.category === category
+            (item.category || '') === (category || '')
           )
         }
         
@@ -231,10 +305,26 @@ export default function WarehouseDcAtWarehouse() {
             } : null
           })
           
-          const requestedQty = p.quantity !== undefined && p.quantity !== null ? Number(p.quantity) : 0
+          // Get requested quantity - use the larger of quantity or strength
+          // Sometimes backend has quantity: 1 but strength: 500, so we use the larger value
+          const qty = (p.quantity !== undefined && p.quantity !== null) ? Number(p.quantity) : 0
+          const str = (p.strength !== undefined && p.strength !== null) ? Number(p.strength) : 0
+          const requestedQty = Math.max(qty, str) // Use the larger value
           const availableQty = inventoryItem ? inventoryItem.currentStock : (p.availableQuantity !== undefined && p.availableQuantity !== null ? Number(p.availableQuantity) : 0)
-          const deliverableQty = p.deliverableQuantity !== undefined && p.deliverableQuantity !== null ? Number(p.deliverableQuantity) : Math.min(requestedQty, availableQty)
+          // Always recalculate deliverable quantity based on requested and available (don't use existing value from backend)
+          // Ignore any existing deliverableQuantity value from the DC data
+          // Deliverable is the minimum of requested and available
+          const deliverableQty = Math.min(requestedQty, availableQty)
           const remainingQty = availableQty - deliverableQty
+          
+          console.log(`Product ${idx + 1} quantity calculation:`, {
+            'p.quantity': p.quantity,
+            'p.strength': p.strength,
+            'p.deliverableQuantity (from backend - IGNORED)': p.deliverableQuantity,
+            'requestedQty (calculated)': requestedQty,
+            'availableQty (from inventory)': availableQty,
+            'deliverableQty (recalculated)': deliverableQty
+          })
           
           const productRow = {
             product: productName,
@@ -330,31 +420,104 @@ export default function WarehouseDcAtWarehouse() {
       
       // Helper function to find matching inventory item
       const findInventoryItem = (productName: string, category?: string, level?: string, specs?: string, subject?: string): WarehouseItem | null => {
-        // Try exact match first (productName, category, level, specs, subject)
-        let match = inventoryArray.find(item => 
-          item.productName?.toLowerCase() === productName?.toLowerCase() &&
-          item.category === category &&
-          item.level === level &&
-          (item.specs || 'Regular') === (specs || 'Regular') &&
-          (item.subject || undefined) === (subject || undefined)
-        )
+        // Normalize subject for comparison (handle empty strings, null, undefined)
+        const normalizedSubject = subject && subject.trim() !== '' ? subject.trim() : undefined
+        const normalizedSpecs = (specs && specs.trim() !== '') ? specs.trim() : 'Regular'
         
-        // If no exact match, try productName, category, level, and specs (without subject)
-        if (!match) {
-          match = inventoryArray.find(item => 
+        // If subject is provided, we MUST match it exactly - don't fall back to items without subjects
+        if (normalizedSubject !== undefined) {
+          // Try exact match with subject (productName, category, level, specs, subject)
+          let match = inventoryArray.find(item => {
+            const itemSubject = item.subject && item.subject.trim() !== '' ? item.subject.trim() : undefined
+            const itemSpecs = (item.specs && item.specs.trim() !== '') ? item.specs.trim() : 'Regular'
+            return (
+              item.productName?.toLowerCase() === productName?.toLowerCase() &&
+              (item.category || '') === (category || '') &&
+              (item.level || '') === (level || '') &&
+              itemSpecs === normalizedSpecs &&
+              itemSubject === normalizedSubject // Exact subject match required
+            )
+          })
+          
+          // If no exact match with category, try without category (productName, level, specs, subject)
+          if (!match) {
+            match = inventoryArray.find(item => {
+              const itemSubject = item.subject && item.subject.trim() !== '' ? item.subject.trim() : undefined
+              const itemSpecs = (item.specs && item.specs.trim() !== '') ? item.specs.trim() : 'Regular'
+              return (
+                item.productName?.toLowerCase() === productName?.toLowerCase() &&
+                (item.level || '') === (level || '') &&
+                itemSpecs === normalizedSpecs &&
+                itemSubject === normalizedSubject // Exact subject match required
+              )
+            })
+          }
+          
+          // If no exact match with subject, try case-insensitive subject match (with category)
+          if (!match) {
+            match = inventoryArray.find(item => {
+              const itemSubject = item.subject && item.subject.trim() !== '' ? item.subject.trim().toLowerCase() : undefined
+              const itemSpecs = (item.specs && item.specs.trim() !== '') ? item.specs.trim() : 'Regular'
+              return (
+                item.productName?.toLowerCase() === productName?.toLowerCase() &&
+                (item.category || '') === (category || '') &&
+                (item.level || '') === (level || '') &&
+                itemSpecs === normalizedSpecs &&
+                itemSubject === normalizedSubject?.toLowerCase() // Case-insensitive subject match
+              )
+            })
+          }
+          
+          // If no match, try case-insensitive subject match without category
+          if (!match) {
+            match = inventoryArray.find(item => {
+              const itemSubject = item.subject && item.subject.trim() !== '' ? item.subject.trim().toLowerCase() : undefined
+              const itemSpecs = (item.specs && item.specs.trim() !== '') ? item.specs.trim() : 'Regular'
+              return (
+                item.productName?.toLowerCase() === productName?.toLowerCase() &&
+                (item.level || '') === (level || '') &&
+                itemSpecs === normalizedSpecs &&
+                itemSubject === normalizedSubject?.toLowerCase() // Case-insensitive subject match
+              )
+            })
+          }
+          
+          return match || null
+        }
+        
+        // If no subject is provided, try matching without subject
+        // Try exact match first (productName, category, level, specs, no subject)
+        let match = inventoryArray.find(item => {
+          const itemSubject = item.subject && item.subject.trim() !== '' ? item.subject.trim() : undefined
+          const itemSpecs = (item.specs && item.specs.trim() !== '') ? item.specs.trim() : 'Regular'
+          return (
             item.productName?.toLowerCase() === productName?.toLowerCase() &&
-            item.category === category &&
-            item.level === level &&
-            (item.specs || 'Regular') === (specs || 'Regular')
+            (item.category || '') === (category || '') &&
+            (item.level || '') === (level || '') &&
+            itemSpecs === normalizedSpecs &&
+            itemSubject === undefined // No subject in inventory item
           )
+        })
+        
+        // If no exact match, try productName, category, level, and specs (ignore subject)
+        if (!match) {
+          match = inventoryArray.find(item => {
+            const itemSpecs = (item.specs && item.specs.trim() !== '') ? item.specs.trim() : 'Regular'
+            return (
+              item.productName?.toLowerCase() === productName?.toLowerCase() &&
+              (item.category || '') === (category || '') &&
+              (item.level || '') === (level || '') &&
+              itemSpecs === normalizedSpecs
+            )
+          })
         }
         
         // If no exact match, try productName, category, and level (without specs/subject)
         if (!match) {
           match = inventoryArray.find(item => 
             item.productName?.toLowerCase() === productName?.toLowerCase() &&
-            item.category === category &&
-            item.level === level
+            (item.category || '') === (category || '') &&
+            (item.level || '') === (level || '')
           )
         }
         
@@ -362,7 +525,7 @@ export default function WarehouseDcAtWarehouse() {
         if (!match) {
           match = inventoryArray.find(item => 
             item.productName?.toLowerCase() === productName?.toLowerCase() &&
-            item.category === category
+            (item.category || '') === (category || '')
           )
         }
         
@@ -387,10 +550,17 @@ export default function WarehouseDcAtWarehouse() {
         )
         
         // Get available qty from database (currentStock)
-        const availableQty = inventoryItem ? inventoryItem.currentStock : (p.availableQuantity || 0)
+        const availableQty = inventoryItem ? inventoryItem.currentStock : (p.availableQuantity !== undefined && p.availableQuantity !== null ? Number(p.availableQuantity) : 0)
+        
+        // Get requested quantity - use the larger of quantity or strength
+        // Sometimes backend has quantity: 1 but strength: 500, so we use the larger value
+        const qty = (p.quantity !== undefined && p.quantity !== null) ? Number(p.quantity) : 0
+        const str = (p.strength !== undefined && p.strength !== null) ? Number(p.strength) : 0
+        const requestedQty = Math.max(qty, str) // Use the larger value
         
         // Calculate deliverable quantity and remaining quantity
-        const deliverableQty = Math.min(p.quantity || 0, availableQty)
+        // Deliverable is the minimum of requested and available
+        const deliverableQty = Math.min(requestedQty, availableQty)
         const remainingQty = availableQty - deliverableQty
         
         return {
@@ -404,8 +574,12 @@ export default function WarehouseDcAtWarehouse() {
       // Update the productRows state to reflect the auto-filled values
       setProductRows(updatedProductRows)
 
-      // Calculate totals
-      const totalRequestedQty = updatedProductRows.reduce((sum, p) => sum + (p.quantity || 0), 0)
+      // Calculate totals - use the larger of quantity or strength for each product
+      const totalRequestedQty = updatedProductRows.reduce((sum, p) => {
+        const qty = p.quantity || 0
+        const str = p.strength || 0
+        return sum + Math.max(qty, str) // Use the larger value
+      }, 0)
       const totalAvailableQty = updatedProductRows.reduce((sum, p) => sum + (p.availableQuantity || 0), 0)
       const totalDeliverableQty = updatedProductRows.reduce((sum, p) => sum + (p.deliverableQuantity || 0), 0)
       // Update DC with product details including available quantities
@@ -477,7 +651,12 @@ export default function WarehouseDcAtWarehouse() {
       deliverableQuantity: Math.min(p.quantity || 0, p.availableQuantity || 0),
     }))
 
-    const totalRequestedQty = productRows.reduce((sum, p) => sum + (p.quantity || 0), 0)
+    // Calculate totals - use the larger of quantity or strength for each product
+    const totalRequestedQty = productRows.reduce((sum, p) => {
+      const qty = p.quantity || 0
+      const str = p.strength || 0
+      return sum + Math.max(qty, str) // Use the larger value
+    }, 0)
     const totalAvailableQty = productRows.reduce((sum, p) => sum + (p.availableQuantity || 0), 0)
     const totalDeliverableQty = updatedProductRows.reduce((sum, p) => sum + (p.deliverableQuantity || 0), 0)
 
@@ -571,7 +750,20 @@ export default function WarehouseDcAtWarehouse() {
                   <TableCell className="truncate max-w-[160px]">{r.customerName || r.saleId?.customerName || '-'}</TableCell>
                   <TableCell className="whitespace-nowrap">{r.customerPhone || '-'}</TableCell>
                   <TableCell className="truncate max-w-[160px]">{r.product || r.saleId?.product || '-'}</TableCell>
-                  <TableCell className="whitespace-nowrap font-medium">{r.requestedQuantity || '-'}</TableCell>
+                  <TableCell className="whitespace-nowrap font-medium">
+                    {(() => {
+                      // Calculate requestedQuantity from productDetails if available, otherwise use requestedQuantity field
+                      if (r.productDetails && Array.isArray(r.productDetails) && r.productDetails.length > 0) {
+                        const calculatedQty = r.productDetails.reduce((sum, p) => {
+                          const qty = p.quantity || 0
+                          const str = p.strength || 0
+                          return sum + Math.max(qty, str) // Use the larger value
+                        }, 0)
+                        return calculatedQty > 0 ? calculatedQty : (r.requestedQuantity || '-')
+                      }
+                      return r.requestedQuantity || '-'
+                    })()}
+                  </TableCell>
                   <TableCell className="whitespace-nowrap">{r.managerId?.name || '-'}</TableCell>
                   <TableCell className="whitespace-nowrap">
                     {(isManager || isAdmin) && (
@@ -780,7 +972,7 @@ export default function WarehouseDcAtWarehouse() {
                             </td>
                             <td className="py-2 px-3 border-r">
                               <div className="h-8 text-xs bg-neutral-50 px-2 py-1.5 rounded border border-neutral-200 text-neutral-700 font-medium">
-                                {row.strength || 0}
+                                {row.quantity || 0}
                               </div>
                             </td>
                             <td className="py-2 px-3 border-r">

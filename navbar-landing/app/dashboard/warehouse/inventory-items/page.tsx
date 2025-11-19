@@ -17,6 +17,7 @@ type WarehouseItem = {
   location?: string
   level?: string
   specs?: string
+  subject?: string
   itemType?: string
   currentStock?: number
 }
@@ -86,6 +87,7 @@ export default function WarehouseInventoryItems() {
               <TableHead>Category</TableHead>
               <TableHead>Level</TableHead>
               <TableHead>Specs</TableHead>
+              <TableHead>Subject</TableHead>
               <TableHead>Item Type</TableHead>
               <TableHead>Quantity</TableHead>
               <TableHead className="w-12"></TableHead>
@@ -94,7 +96,7 @@ export default function WarehouseInventoryItems() {
           <TableBody>
             {!loading && filtered.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="text-center text-neutral-500">No items found.</TableCell>
+                <TableCell colSpan={9} className="text-center text-neutral-500">No items found.</TableCell>
               </TableRow>
             )}
             {filtered.map((row, idx) => (
@@ -104,6 +106,7 @@ export default function WarehouseInventoryItems() {
                 <TableCell>{row.category || '-'}</TableCell>
                 <TableCell>{row.level || row.location || '-'}</TableCell>
                 <TableCell>{row.specs || 'Regular'}</TableCell>
+                <TableCell>{row.subject || '-'}</TableCell>
                 <TableCell>{row.itemType || '—'}</TableCell>
                 <TableCell>{row.currentStock !== undefined && row.currentStock !== null ? row.currentStock : 0}</TableCell>
                 <TableCell>

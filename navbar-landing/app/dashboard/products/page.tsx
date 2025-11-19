@@ -32,12 +32,6 @@ type Product = {
   }
 }
 
-const SPECS_OPTIONS = [
-  'Regular',
-  'Single Level only',
-  'Class WorkBooks Only',
-]
-
 export default function ProductsPage() {
   const router = useRouter()
   const currentUser = getCurrentUser()
@@ -58,6 +52,7 @@ export default function ProductsPage() {
     newSubject: '',
     hasSpecs: false,
     specs: [] as string[],
+    newSpec: '',
     prodStatus: 1,
   })
   const [saving, setSaving] = useState(false)
@@ -98,6 +93,7 @@ export default function ProductsPage() {
       newSubject: '',
       hasSpecs: product.hasSpecs || false,
       specs: Array.isArray(product.specs) ? product.specs : (product.specs ? [product.specs] : []),
+      newSpec: '',
       prodStatus: product.prodStatus,
     })
     setEditModalOpen(true)
@@ -115,6 +111,7 @@ export default function ProductsPage() {
       newSubject: '',
       hasSpecs: false,
       specs: [],
+      newSpec: '',
       prodStatus: 1,
     })
   }
@@ -153,11 +150,12 @@ export default function ProductsPage() {
     })
   }
 
-  const addSpec = (spec: string) => {
-    if (spec && !editForm.specs.includes(spec)) {
+  const addSpec = () => {
+    if (editForm.newSpec.trim() && !editForm.specs.includes(editForm.newSpec.trim())) {
       setEditForm({
         ...editForm,
-        specs: [...editForm.specs, spec],
+        specs: [...editForm.specs, editForm.newSpec.trim()],
+        newSpec: '',
       })
     }
   }
@@ -467,21 +465,18 @@ export default function ProductsPage() {
             {editForm.hasSpecs && (
               <div>
                 <Label>Specs *</Label>
-                <p className="text-xs text-neutral-500 mb-2">Select one or multiple specs</p>
-                <Select
-                  onValueChange={(v) => addSpec(v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a spec to add" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SPECS_OPTIONS.filter(spec => !editForm.specs.includes(spec)).map((spec) => (
-                      <SelectItem key={spec} value={spec}>
-                        {spec}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <p className="text-xs text-neutral-500 mb-2">Add one or multiple specs</p>
+                <div className="flex gap-2 mb-2">
+                  <Input
+                    placeholder="Enter spec name"
+                    value={editForm.newSpec}
+                    onChange={(e) => setEditForm({ ...editForm, newSpec: e.target.value })}
+                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addSpec())}
+                  />
+                  <Button type="button" onClick={addSpec} variant="outline">
+                    Add Spec
+                  </Button>
+                </div>
                 {editForm.specs.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-2">
                     {editForm.specs.map((spec, idx) => (

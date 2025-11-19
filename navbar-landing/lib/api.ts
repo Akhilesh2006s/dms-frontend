@@ -18,22 +18,33 @@ export async function apiRequest<T>(
     (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_BASE_URL}/api${path}`, {
-    ...options,
-    headers,
-    cache: "no-store",
-  });
+  try {
+    const res = await fetch(`${API_BASE_URL}/api${path}`, {
+      ...options,
+      headers,
+      cache: "no-store",
+    });
 
-  if (!res.ok) {
-    let message = "Request failed";
-    try {
-      const data = await res.json();
-      message = data?.message || message;
-    } catch (_) {}
-    throw new Error(message);
+    if (!res.ok) {
+      let message = "Request failed";
+      try {
+        const data = await res.json();
+        message = data?.message || message;
+      } catch (_) {}
+      throw new Error(message);
+    }
+
+    return (await res.json()) as T;
+  } catch (error: any) {
+    // Handle network errors (backend not running, CORS, etc.)
+    if (error instanceof TypeError && error.message.includes("fetch")) {
+      throw new Error(
+        `Cannot connect to backend server at ${API_BASE_URL}. Please make sure the backend is running.`
+      );
+    }
+    // Re-throw other errors as-is
+    throw error;
   }
-
-  return (await res.json()) as T;
 }
 
 

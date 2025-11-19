@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useProducts } from '@/hooks/useProducts'
+import { toast } from 'sonner'
 
 type DcOrder = {
   _id: string
@@ -200,9 +201,27 @@ export default function ClosedSalesPage() {
           isLead: true, // Flag to identify this is a lead, not a DcOrder
         }))
         
-        // Merge closed leads with DcOrders
-        data = [...data, ...closedLeadsAsDeals]
-        console.log('Loaded closed leads:', closedLeadsAsDeals.length)
+        // Filter out closed leads that have a corresponding DcOrder with status 'dc_requested' or 'dc_accepted'
+        // This prevents duplicates where the same school appears twice (once as closed lead with "Raise DC" and once as DcOrder with "Review DC Request")
+        const filteredClosedLeads = closedLeadsAsDeals.filter((lead: DcOrder) => {
+          // Check if there's a DcOrder with status 'dc_requested' or 'dc_accepted' for this lead
+          // Match by school_name and contact_mobile to identify duplicates
+          const hasMatchingDcOrder = data.some((dcOrder: any) => {
+            const schoolNameMatch = (dcOrder.school_name || '').toLowerCase().trim() === (lead.school_name || '').toLowerCase().trim()
+            const mobileMatch = (dcOrder.contact_mobile || '').trim() === (lead.contact_mobile || '').trim()
+            const isDcRequested = dcOrder.status === 'dc_requested' || dcOrder.status === 'dc_accepted'
+            
+            // If school name and mobile match, and the DcOrder has dc_requested or dc_accepted status, exclude the closed lead
+            return schoolNameMatch && mobileMatch && isDcRequested
+          })
+          
+          // Only include the closed lead if there's no matching DcOrder with dc_requested/dc_accepted status
+          return !hasMatchingDcOrder
+        })
+        
+        // Merge filtered closed leads with DcOrders
+        data = [...data, ...filteredClosedLeads]
+        console.log('Loaded closed leads:', closedLeadsAsDeals.length, 'Filtered to:', filteredClosedLeads.length, '(removed duplicates with dc_requested/dc_accepted status)')
       } catch (e) {
         console.warn('Failed to load closed leads:', e)
         // Continue without closed leads if API fails
@@ -236,8 +255,8 @@ export default function ClosedSalesPage() {
         const leadDcPromises = leadIds.map(async (leadId: string) => {
           try {
             // Try to find DC associated with this lead
-            const dcs = await apiRequest<DC[]>(`/dc`)
-            const dcArray = Array.isArray(dcs) ? dcs : (dcs?.data || [])
+            const dcs = await apiRequest<any>(`/dc`)
+            const dcArray = Array.isArray(dcs) ? dcs : ((dcs as any)?.data || [])
             // Find DC that might be related to this lead (check if DC has leadId or if lead was converted)
             const relatedDC = dcArray.find((dc: any) => 
               dc.dcOrderId?._id === leadId || 
@@ -366,8 +385,21 @@ export default function ClosedSalesPage() {
       const existingDCForDeal = dealDCs[deal._id]
       setExistingDC(existingDCForDeal || null)
       
-      // Fetch full deal details to ensure all data is populated
-      const fullDeal = await apiRequest<DcOrder>(`/dc-orders/${deal._id}`)
+      // For closed leads (isLead flag), skip fetching from dc-orders endpoint
+      let fullDeal: DcOrder
+      if ((deal as any).isLead) {
+        // This is a closed lead, not a dc-order, so use the deal data directly
+        fullDeal = deal
+      } else {
+        // Fetch full deal details to ensure all data is populated
+        try {
+          fullDeal = await apiRequest<DcOrder>(`/dc-orders/${deal._id}`)
+        } catch (fetchError: any) {
+          // If fetch fails (deal not found, etc.), use the deal data we have
+          console.warn('Could not fetch full deal details, using list data:', fetchError?.message)
+          fullDeal = deal
+        }
+      }
       console.log('Full deal data from API:', fullDeal)
       console.log('Existing DC for this deal:', existingDCForDeal)
       console.log('assigned_to from API:', fullDeal.assigned_to)
@@ -653,11 +685,42 @@ export default function ClosedSalesPage() {
       console.log('Normalized deal for modal:', normalizedDeal)
       console.log('Final assigned_to in normalized deal:', normalizedDeal.assigned_to)
     } catch (e: any) {
-      console.error('Failed to load full deal details:', e)
+      console.error('Failed to load deal details:', e)
       // Fallback to using the deal data we have
       setSelectedDeal(deal)
       setOpenRaiseDCDialog(true)
-      alert('Warning: Could not load full deal details. Some fields may be empty.')
+      
+      // Initialize form with deal data
+      setDcDate('')
+      setDcRemarks('')
+      setDcCategory('')
+      setDcNotes('')
+      if (deal.products && Array.isArray(deal.products) && deal.products.length > 0) {
+        setProductRows(deal.products.map((p: any, idx: number) => ({
+          id: String(idx + 1),
+          product: p.product_name || 'Abacus',
+          class: '1',
+          category: 'New Students',
+          specs: 'Regular',
+          subject: undefined,
+          strength: p.strength || 0,
+          price: p.price || 0,
+          total: (p.price || 0) * (p.strength || 0),
+          level: p.level || 'L2',
+        })))
+      } else {
+        setProductRows([{ id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, price: 0, total: 0, level: 'L1' }])
+      }
+      
+      const errorMessage = e?.message || 'Unknown error'
+      if (errorMessage.includes('Cannot connect to backend')) {
+        toast.error('Backend server is not running. Please start the backend server on port 5000.')
+      } else if (errorMessage.includes('not found') || errorMessage.includes('DC not found')) {
+        // Don't show warning for "not found" errors - this is expected for some deals
+        console.log('Deal not found in API, using list data (this is normal for some deals)')
+      } else {
+        toast.warning(`Could not load full deal details: ${errorMessage}. Using available data.`)
+      }
     }
   }
 
@@ -719,6 +782,7 @@ export default function ClosedSalesPage() {
         specs: row.specs || 'Regular',
         subject: row.subject || undefined,
         strength: Number(row.strength) || 0,
+        quantity: Number(row.strength) || 0, // Quantity should match strength
         price: Number(row.price) || 0,
         total: Number(row.total) || (Number(row.price) || 0) * (Number(row.strength) || 0),
         level: row.level || 'L2',
@@ -733,6 +797,7 @@ export default function ClosedSalesPage() {
           method: 'PUT',
           body: JSON.stringify({
             ...raisePayload,
+            requestedQuantity: totalQuantity || 1, // Explicitly set requestedQuantity
             financeRemarks: raisePayload.financeRemarks,
             splApproval: raisePayload.splApproval,
             dcDate: raisePayload.dcDate,
@@ -817,6 +882,7 @@ export default function ClosedSalesPage() {
           specs: row.specs || 'Regular',
           subject: row.subject || undefined,
           strength: Number(row.strength) || 0,
+          quantity: Number(row.strength) || 0, // Quantity should match strength
           price: Number(row.price) || 0,
           total: Number(row.total) || (Number(row.price) || 0) * (Number(row.strength) || 0),
           level: row.level || getDefaultLevel(row.product || 'Abacus'),
@@ -869,6 +935,7 @@ export default function ClosedSalesPage() {
         specs: row.specs || 'Regular',
         subject: row.subject || undefined,
           strength: Number(row.strength) || 0,
+          quantity: Number(row.strength) || 0, // Quantity should match strength
           price: Number(row.price) || 0,
           total: Number(row.total) || (Number(row.price) || 0) * (Number(row.strength) || 0),
           level: row.level || getDefaultLevel(row.product || 'Abacus'),
@@ -891,7 +958,7 @@ export default function ClosedSalesPage() {
       }
       
       const finalRequestedQuantity = finalProductDetails.length > 0
-        ? finalProductDetails.reduce((sum: number, p: any) => sum + (Number(p.quantity) || 0), 0)
+        ? finalProductDetails.reduce((sum: number, p: any) => sum + (Number(p.quantity) || Number(p.strength) || 0), 0)
         : 1
       
       // Prepare payload to create/update DC
@@ -987,6 +1054,7 @@ export default function ClosedSalesPage() {
           specs: row.specs || 'Regular',
           subject: row.subject || undefined,
           strength: Number(row.strength) || 0,
+          quantity: Number(row.strength) || 0, // Quantity should match strength
           price: Number(row.price) || 0,
           total: Number(row.total) || (Number(row.price) || 0) * (Number(row.strength) || 0),
           level: row.level || getDefaultLevel(row.product || 'Abacus'),
@@ -1098,7 +1166,8 @@ export default function ClosedSalesPage() {
                   <td className="py-3 px-4">
                     {(() => {
                       // Check for PO photo in pod_proof_url or in associated DC
-                      const poUrl = d.pod_proof_url || (dealDCs[d._id]?.poPhotoUrl) || (dealDCs[d._id]?.poDocument)
+                      const dc = dealDCs[d._id] as any
+                      const poUrl = d.pod_proof_url || dc?.poPhotoUrl || dc?.poDocument
                       
                       if (poUrl) {
                         // Check if it's a PDF
@@ -1177,7 +1246,7 @@ export default function ClosedSalesPage() {
                           }
                           onClick={() => openRaiseDC(d)}
                         >
-                          {d.status === 'dc_requested' ? 'Review DC Request' : d.status === 'dc_accepted' ? 'Update DC' : 'Raise DC'}
+                          {d.status === 'dc_requested' ? 'Raise DC' : d.status === 'dc_accepted' ? 'Update DC' : 'Raise DC'}
                         </Button>
                       )}
                       {!isManager && (
@@ -1208,7 +1277,7 @@ export default function ClosedSalesPage() {
           <DialogHeader className="pb-4 border-b border-slate-200">
             <DialogTitle className="text-slate-900 text-xl font-semibold">
               {selectedDeal?.school_name || 'Client'} - {
-                selectedDeal?.status === 'dc_requested' ? 'Review DC Request' : 
+                selectedDeal?.status === 'dc_requested' ? 'Raise DC' : 
                 selectedDeal?.status === 'dc_accepted' ? 'Update DC' : 
                 'Raise DC'
               }
@@ -1442,7 +1511,7 @@ export default function ClosedSalesPage() {
                         <th className="py-3 px-4 text-left border-r border-slate-200 text-slate-800 font-semibold text-sm">Category</th>
                         <th className="py-3 px-4 text-left border-r border-slate-200 text-slate-800 font-semibold text-sm">Specs</th>
                         <th className="py-3 px-4 text-left border-r border-slate-200 text-slate-800 font-semibold text-sm">Subject</th>
-                        <th className="py-3 px-4 text-left border-r border-slate-200 text-slate-800 font-semibold text-sm">Strength</th>
+                        <th className="py-3 px-4 text-left border-r border-slate-200 text-slate-800 font-semibold text-sm">Quantity</th>
                         <th className="py-3 px-4 text-left border-r border-slate-200 text-slate-800 font-semibold text-sm">Price</th>
                         <th className="py-3 px-4 text-left border-r border-slate-200 text-slate-800 font-semibold text-sm">Total</th>
                         <th className="py-3 px-4 text-left border-r border-slate-200 text-slate-800 font-semibold text-sm">Level</th>
@@ -1550,7 +1619,7 @@ export default function ClosedSalesPage() {
                                 updated[idx].total = updated[idx].price * updated[idx].strength
                                 setProductRows(updated)
                               }}
-                              placeholder="Enter Strength"
+                              placeholder="Enter Quantity"
                               min="0"
                             />
                           </td>

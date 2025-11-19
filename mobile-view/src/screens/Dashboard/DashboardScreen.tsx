@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -20,16 +20,31 @@ export default function DashboardScreen({ navigation }: any) {
   // Determine user role and permissions (like web app)
   const userRole = user?.role || '';
   const userRoles = user?.roles || [];
+  const normalizedRole = userRole.toLowerCase();
+  const normalizedRoles = userRoles.map((role) => role.toLowerCase());
+  const roleIncludes = (match: string) =>
+    normalizedRole.includes(match.toLowerCase()) ||
+    normalizedRoles.some((role) => role.includes(match.toLowerCase()));
   
-  // Role checks (excluding Admin/Super Admin - they use web app)
-  const isEmployee = userRole === 'Employee' || userRole === 'Sales BDE';
-  const isManager = userRole === 'Manager';
-  const isCoordinator = userRole === 'Coordinator';
-  const isSeniorCoordinator = userRole === 'Senior Coordinator';
-  const isTrainer = userRole === 'Trainer' || userRoles.includes('Trainer');
-  const isSalesBDE = userRole === 'Sales BDE' || userRoles.includes('Sales BDE');
-  const isFinanceManager = userRole === 'Finance Manager';
-  const isExecutive = userRole === 'Executive';
+  // Role checks - NOW INCLUDING Admin/Super Admin for mobile app
+  // Note: "Executive" is the role name for employees in the web app
+  const isEmployee = roleIncludes('employee') || roleIncludes('executive') || roleIncludes('sales bde');
+  const isManager = roleIncludes('manager');
+  const isCoordinator = roleIncludes('coordinator');
+  const isSeniorCoordinator = roleIncludes('senior coordinator');
+  const isTrainer = roleIncludes('trainer');
+  const isSalesBDE = roleIncludes('sales bde');
+  const isFinanceManager = roleIncludes('finance manager');
+  const isExecutive = roleIncludes('executive');
+  const isAdmin = roleIncludes('admin') || roleIncludes('super admin');
+  
+  // Debug logging
+  useEffect(() => {
+    console.log('Dashboard - User Role:', userRole);
+    console.log('Dashboard - User Roles:', userRoles);
+    console.log('Dashboard - isEmployee:', isEmployee);
+    console.log('Dashboard - isExecutive:', isExecutive);
+  }, [userRole, userRoles, isEmployee, isExecutive]);
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -42,6 +57,77 @@ export default function DashboardScreen({ navigation }: any) {
   const renderEmployeeDashboard = () => (
     <View style={styles.content}>
       <AttendanceCard />
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionIconContainer}>
+            <View style={[styles.sectionIcon, { backgroundColor: '#3b82f6' + '15' }]}>
+              <Text style={styles.sectionIconText}>📋</Text>
+            </View>
+          </View>
+          <Text style={styles.sectionTitle}>Leads</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('LeadsList')}
+        >
+          <LinearGradient
+            colors={['#3b82f6', '#2563eb']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.cardGradient}
+          >
+            <View style={styles.cardContent}>
+              <View style={styles.cardIconContainer}>
+                <Text style={styles.cardIcon}>📋</Text>
+              </View>
+              <View style={styles.cardTextContainer}>
+                <Text style={styles.cardTitle}>My Leads</Text>
+                <Text style={styles.cardSubtitle}>View and manage leads</Text>
+              </View>
+              <View style={styles.cardArrowContainer}>
+                <Text style={styles.cardArrow}>›</Text>
+              </View>
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('LeadAdd')}
+        >
+          <View style={[styles.cardContent, styles.cardContentWhite]}>
+            <View style={styles.cardIconContainer}>
+              <Text style={styles.cardIconWhite}>➕</Text>
+            </View>
+            <View style={styles.cardTextContainer}>
+              <Text style={styles.cardTitleWhite}>Add Lead</Text>
+              <Text style={styles.cardSubtitleWhite}>Create new lead</Text>
+            </View>
+            <View style={styles.cardArrowContainer}>
+              <Text style={styles.cardArrowWhite}>›</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('LeadFollowup')}
+        >
+          <View style={[styles.cardContent, styles.cardContentWhite]}>
+            <View style={styles.cardIconContainer}>
+              <Text style={styles.cardIconWhite}>📞</Text>
+            </View>
+            <View style={styles.cardTextContainer}>
+              <Text style={styles.cardTitleWhite}>Followup Leads</Text>
+              <Text style={styles.cardSubtitleWhite}>View follow-up leads</Text>
+            </View>
+            <View style={styles.cardArrowContainer}>
+              <Text style={styles.cardArrowWhite}>›</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </View>
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <View style={styles.sectionIconContainer}>
@@ -75,6 +161,24 @@ export default function DashboardScreen({ navigation }: any) {
               </View>
             </View>
           </LinearGradient>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('DCClosed')}
+        >
+          <View style={[styles.cardContent, styles.cardContentWhite]}>
+            <View style={styles.cardIconContainer}>
+              <Text style={styles.cardIconWhite}>✅</Text>
+            </View>
+            <View style={styles.cardTextContainer}>
+              <Text style={styles.cardTitleWhite}>Closed Sales</Text>
+              <Text style={styles.cardSubtitleWhite}>View closed sales and raise DC</Text>
+            </View>
+            <View style={styles.cardArrowContainer}>
+              <Text style={styles.cardArrowWhite}>›</Text>
+            </View>
+          </View>
         </TouchableOpacity>
       </View>
       <View style={styles.section}>
@@ -353,17 +457,422 @@ export default function DashboardScreen({ navigation }: any) {
     </View>
   );
 
+  // Admin Dashboard - Comprehensive with all features
+  const renderAdminDashboard = () => (
+    <View style={styles.content}>
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionIconContainer}>
+            <View style={[styles.sectionIcon, { backgroundColor: '#8B5CF6' + '15' }]}>
+              <Text style={styles.sectionIconText}>👥</Text>
+            </View>
+          </View>
+          <Text style={styles.sectionTitle}>Employees</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('EmployeesActive')}
+        >
+          <LinearGradient
+            colors={['#8B5CF6', '#7C3AED']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.cardGradient}
+          >
+            <View style={styles.cardContent}>
+              <View style={styles.cardIconContainer}>
+                <Text style={styles.cardIcon}>👥</Text>
+              </View>
+              <View style={styles.cardTextContainer}>
+                <Text style={styles.cardTitle}>Active Employees</Text>
+                <Text style={styles.cardSubtitle}>View and manage employees</Text>
+              </View>
+              <View style={styles.cardArrowContainer}>
+                <Text style={styles.cardArrow}>›</Text>
+              </View>
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('EmployeeNew')}
+        >
+          <View style={[styles.cardContent, styles.cardContentWhite]}>
+            <View style={styles.cardIconContainer}>
+              <Text style={styles.cardIconWhite}>➕</Text>
+            </View>
+            <View style={styles.cardTextContainer}>
+              <Text style={styles.cardTitleWhite}>Add Employee</Text>
+              <Text style={styles.cardSubtitleWhite}>Create new employee</Text>
+            </View>
+            <View style={styles.cardArrowContainer}>
+              <Text style={styles.cardArrowWhite}>›</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionIconContainer}>
+            <View style={[styles.sectionIcon, { backgroundColor: colors.primary + '15' }]}>
+              <Text style={styles.sectionIconText}>📦</Text>
+            </View>
+          </View>
+          <Text style={styles.sectionTitle}>DC Management</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('DCAdminMy')}
+        >
+          <LinearGradient
+            colors={[colors.primary, colors.primaryDark]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.cardGradient}
+          >
+            <View style={styles.cardContent}>
+              <View style={styles.cardIconContainer}>
+                <Text style={styles.cardIcon}>📋</Text>
+              </View>
+              <View style={styles.cardTextContainer}>
+                <Text style={styles.cardTitle}>All Created DCs</Text>
+                <Text style={styles.cardSubtitle}>View all employee DCs</Text>
+              </View>
+              <View style={styles.cardArrowContainer}>
+                <Text style={styles.cardArrow}>›</Text>
+              </View>
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('DCPending')}
+        >
+          <View style={[styles.cardContent, styles.cardContentWhite]}>
+            <View style={styles.cardIconContainer}>
+              <Text style={styles.cardIconWhite}>⏳</Text>
+            </View>
+            <View style={styles.cardTextContainer}>
+              <Text style={styles.cardTitleWhite}>Pending DCs</Text>
+              <Text style={styles.cardSubtitleWhite}>Review pending DCs</Text>
+            </View>
+            <View style={styles.cardArrowContainer}>
+              <Text style={styles.cardArrowWhite}>›</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('DCClosed')}
+        >
+          <View style={[styles.cardContent, styles.cardContentWhite]}>
+            <View style={styles.cardIconContainer}>
+              <Text style={styles.cardIconWhite}>✅</Text>
+            </View>
+            <View style={styles.cardTextContainer}>
+              <Text style={styles.cardTitleWhite}>Closed Sales</Text>
+              <Text style={styles.cardSubtitleWhite}>View closed sales</Text>
+            </View>
+            <View style={styles.cardArrowContainer}>
+              <Text style={styles.cardArrowWhite}>›</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionIconContainer}>
+            <View style={[styles.sectionIcon, { backgroundColor: '#10B981' + '15' }]}>
+              <Text style={styles.sectionIconText}>📦</Text>
+            </View>
+          </View>
+          <Text style={styles.sectionTitle}>Products</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('ProductsList')}
+        >
+          <LinearGradient
+            colors={['#10B981', '#059669']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.cardGradient}
+          >
+            <View style={styles.cardContent}>
+              <View style={styles.cardIconContainer}>
+                <Text style={styles.cardIcon}>📦</Text>
+              </View>
+              <View style={styles.cardTextContainer}>
+                <Text style={styles.cardTitle}>Products</Text>
+                <Text style={styles.cardSubtitle}>Manage products</Text>
+              </View>
+              <View style={styles.cardArrowContainer}>
+                <Text style={styles.cardArrow}>›</Text>
+              </View>
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('ProductNew')}
+        >
+          <View style={[styles.cardContent, styles.cardContentWhite]}>
+            <View style={styles.cardIconContainer}>
+              <Text style={styles.cardIconWhite}>➕</Text>
+            </View>
+            <View style={styles.cardTextContainer}>
+              <Text style={styles.cardTitleWhite}>Add Product</Text>
+              <Text style={styles.cardSubtitleWhite}>Create new product</Text>
+            </View>
+            <View style={styles.cardArrowContainer}>
+              <Text style={styles.cardArrowWhite}>›</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionIconContainer}>
+            <View style={[styles.sectionIcon, { backgroundColor: colors.warning + '15' }]}>
+              <Text style={styles.sectionIconText}>💳</Text>
+            </View>
+          </View>
+          <Text style={styles.sectionTitle}>Payments</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('PaymentApprovalPendingCash')}
+        >
+          <LinearGradient
+            colors={[colors.warning, '#D97706']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.cardGradient}
+          >
+            <View style={styles.cardContent}>
+              <View style={styles.cardIconContainer}>
+                <Text style={styles.cardIcon}>💰</Text>
+              </View>
+              <View style={styles.cardTextContainer}>
+                <Text style={styles.cardTitle}>Pending Cash</Text>
+                <Text style={styles.cardSubtitle}>Approve cash payments</Text>
+              </View>
+              <View style={styles.cardArrowContainer}>
+                <Text style={styles.cardArrow}>›</Text>
+              </View>
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('PaymentApprovalPendingCheques')}
+        >
+          <View style={[styles.cardContent, styles.cardContentWhite]}>
+            <View style={styles.cardIconContainer}>
+              <Text style={styles.cardIconWhite}>💳</Text>
+            </View>
+            <View style={styles.cardTextContainer}>
+              <Text style={styles.cardTitleWhite}>Pending Cheques</Text>
+              <Text style={styles.cardSubtitleWhite}>Approve cheque payments</Text>
+            </View>
+            <View style={styles.cardArrowContainer}>
+              <Text style={styles.cardArrowWhite}>›</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('PaymentTransactionReport')}
+        >
+          <View style={[styles.cardContent, styles.cardContentWhite]}>
+            <View style={styles.cardIconContainer}>
+              <Text style={styles.cardIconWhite}>📊</Text>
+            </View>
+            <View style={styles.cardTextContainer}>
+              <Text style={styles.cardTitleWhite}>Transaction Report</Text>
+              <Text style={styles.cardSubtitleWhite}>View payment reports</Text>
+            </View>
+            <View style={styles.cardArrowContainer}>
+              <Text style={styles.cardArrowWhite}>›</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionIconContainer}>
+            <View style={[styles.sectionIcon, { backgroundColor: colors.info + '15' }]}>
+              <Text style={styles.sectionIconText}>📊</Text>
+            </View>
+          </View>
+          <Text style={styles.sectionTitle}>Reports</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('ReportsLeads')}
+        >
+          <LinearGradient
+            colors={[colors.info, '#2563EB']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.cardGradient}
+          >
+            <View style={styles.cardContent}>
+              <View style={styles.cardIconContainer}>
+                <Text style={styles.cardIcon}>📊</Text>
+              </View>
+              <View style={styles.cardTextContainer}>
+                <Text style={styles.cardTitle}>Reports</Text>
+                <Text style={styles.cardSubtitle}>View all reports</Text>
+              </View>
+              <View style={styles.cardArrowContainer}>
+                <Text style={styles.cardArrow}>›</Text>
+              </View>
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionIconContainer}>
+            <View style={[styles.sectionIcon, { backgroundColor: '#F59E0B' + '15' }]}>
+              <Text style={styles.sectionIconText}>🏢</Text>
+            </View>
+          </View>
+          <Text style={styles.sectionTitle}>Warehouse</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('WarehouseDCAtWarehouse')}
+        >
+          <LinearGradient
+            colors={['#F59E0B', '#D97706']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.cardGradient}
+          >
+            <View style={styles.cardContent}>
+              <View style={styles.cardIconContainer}>
+                <Text style={styles.cardIcon}>📦</Text>
+              </View>
+              <View style={styles.cardTextContainer}>
+                <Text style={styles.cardTitle}>DC At Warehouse</Text>
+                <Text style={styles.cardSubtitle}>Process warehouse DCs</Text>
+              </View>
+              <View style={styles.cardArrowContainer}>
+                <Text style={styles.cardArrow}>›</Text>
+              </View>
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('WarehouseInventoryItems')}
+        >
+          <View style={[styles.cardContent, styles.cardContentWhite]}>
+            <View style={styles.cardIconContainer}>
+              <Text style={styles.cardIconWhite}>📋</Text>
+            </View>
+            <View style={styles.cardTextContainer}>
+              <Text style={styles.cardTitleWhite}>Inventory Items</Text>
+              <Text style={styles.cardSubtitleWhite}>Manage inventory</Text>
+            </View>
+            <View style={styles.cardArrowContainer}>
+              <Text style={styles.cardArrowWhite}>›</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionIconContainer}>
+            <View style={[styles.sectionIcon, { backgroundColor: '#EC4899' + '15' }]}>
+              <Text style={styles.sectionIconText}>📊</Text>
+            </View>
+          </View>
+          <Text style={styles.sectionTitle}>Sales & Inventory</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('Sales')}
+        >
+          <LinearGradient
+            colors={['#EC4899', '#DB2777']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.cardGradient}
+          >
+            <View style={styles.cardContent}>
+              <View style={styles.cardIconContainer}>
+                <Text style={styles.cardIcon}>💰</Text>
+              </View>
+              <View style={styles.cardTextContainer}>
+                <Text style={styles.cardTitle}>Sales</Text>
+                <Text style={styles.cardSubtitle}>View sales overview</Text>
+              </View>
+              <View style={styles.cardArrowContainer}>
+                <Text style={styles.cardArrow}>›</Text>
+              </View>
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('Inventory')}
+        >
+          <View style={[styles.cardContent, styles.cardContentWhite]}>
+            <View style={styles.cardIconContainer}>
+              <Text style={styles.cardIconWhite}>📦</Text>
+            </View>
+            <View style={styles.cardTextContainer}>
+              <Text style={styles.cardTitleWhite}>Stock Returns</Text>
+              <Text style={styles.cardSubtitleWhite}>Manage returns</Text>
+            </View>
+            <View style={styles.cardArrowContainer}>
+              <Text style={styles.cardArrowWhite}>›</Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
   // Determine which dashboard to show
   const renderDashboardContent = () => {
+    // Admin/Super Admin gets admin dashboard
+    if (isAdmin) {
+      return renderAdminDashboard();
+    }
     // Combined Sales BDE + Trainer gets special dashboard
-    if (isSalesBDE && isTrainer) {
+    else if (isSalesBDE && isTrainer) {
       return renderCombinedDashboard();
     } 
     // Trainer only gets trainer dashboard
     else if (isTrainer && !isSalesBDE) {
       return renderTrainerDashboard();
     } 
-    // Regular Employee role (not Sales BDE) gets employee dashboard with all features
+    // Regular Employee/Executive role (not Sales BDE) gets employee dashboard with all features
     else if (isEmployee && !isSalesBDE) {
       return renderEmployeeDashboard();
     } 
@@ -372,14 +881,22 @@ export default function DashboardScreen({ navigation }: any) {
       return renderSalesBDEDashboard();
     }
     // Manager, Coordinator, etc. get manager dashboard
-    else if (isManager || isCoordinator || isSeniorCoordinator || isFinanceManager || isExecutive) {
+    else if (isManager || isCoordinator || isSeniorCoordinator || isFinanceManager) {
       return renderManagerDashboard();
     } 
+    // Fallback: If user has Executive role but didn't match above, show employee dashboard
+    else if (isExecutive) {
+      return renderEmployeeDashboard();
+    }
     else {
+      // Debug: Show user role for troubleshooting
       return (
         <View style={styles.content}>
           <Text style={styles.sectionTitle}>Dashboard</Text>
-          <Text style={styles.cardSubtitle}>No specific dashboard available for your role.</Text>
+          <Text style={styles.cardSubtitle}>No specific dashboard available for your role: {userRole || 'Unknown'}</Text>
+          <Text style={[styles.cardSubtitle, { marginTop: 10, fontSize: 12 }]}>
+            Roles: {JSON.stringify(userRoles)}
+          </Text>
         </View>
       );
     }

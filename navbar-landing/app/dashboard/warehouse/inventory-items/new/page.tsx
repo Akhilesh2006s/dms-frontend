@@ -40,6 +40,13 @@ export default function InventoryNewItemPage() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
+    
+    // Validate subject is required for products with subjects
+    if (productName && hasProductSubjects(productName) && !subject) {
+      toast.error('Subject is required for this product')
+      return
+    }
+    
     setSaving(true)
     try {
       const qty = parseFloat(quantity) || 0
@@ -131,10 +138,10 @@ export default function InventoryNewItemPage() {
 
           {productName && hasProductSubjects(productName) && (
             <div className="space-y-2">
-              <div className="text-sm font-medium">Subject</div>
-              <Select onValueChange={setSubject} value={subject || undefined}>
+              <div className="text-sm font-medium">Subject *</div>
+              <Select onValueChange={setSubject} value={subject || undefined} required>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select Subject (Optional)" />
+                  <SelectValue placeholder="Select Subject *" />
                 </SelectTrigger>
                 <SelectContent>
                   {getProductSubjects(productName).map((subj) => (
@@ -151,7 +158,7 @@ export default function InventoryNewItemPage() {
           </div>
 
           <div className="md:col-span-2">
-            <Button type="submit" disabled={saving || !productName || !category || !quantity}>
+            <Button type="submit" disabled={saving || !productName || !category || !quantity || (hasProductSubjects(productName) && !subject)}>
               {saving ? 'Adding…' : 'Add Item'}
             </Button>
           </div>

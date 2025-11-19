@@ -77,6 +77,13 @@ export default function InventoryEditItemPage() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
+    
+    // Validate subject is required for products with subjects
+    if (productName && hasProductSubjects(productName) && !subject) {
+      toast.error('Subject is required for this product')
+      return
+    }
+    
     setSaving(true)
     try {
       const price = parseFloat(unitPrice)
@@ -123,6 +130,15 @@ export default function InventoryEditItemPage() {
                 const availableLevels = getProductLevels(value)
                 if (!availableLevels.includes(level)) {
                   setLevel(availableLevels.length > 0 ? availableLevels[0] : '')
+                }
+                // Reset specs and set to first available spec
+                const availableSpecs = getProductSpecs(value)
+                if (availableSpecs.length > 0 && !availableSpecs.includes(specs)) {
+                  setSpecs(availableSpecs[0])
+                }
+                // Clear subject if product doesn't have subjects
+                if (!hasProductSubjects(value)) {
+                  setSubject('')
                 }
               }} value={productName}>
                 <SelectTrigger>
@@ -171,10 +187,10 @@ export default function InventoryEditItemPage() {
 
             {productName && hasProductSubjects(productName) && (
               <div className="space-y-2">
-                <div className="text-sm font-medium">Subject</div>
-                <Select onValueChange={setSubject} value={subject || undefined}>
+                <div className="text-sm font-medium">Subject *</div>
+                <Select onValueChange={setSubject} value={subject || undefined} required>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select Subject (Optional)" />
+                    <SelectValue placeholder="Select Subject *" />
                   </SelectTrigger>
                   <SelectContent>
                     {getProductSubjects(productName).map((subj) => (
@@ -196,7 +212,7 @@ export default function InventoryEditItemPage() {
             </div>
 
             <div className="md:col-span-2">
-              <Button type="submit" disabled={saving || !productName || !category || !unitPrice || !updateQty}>
+              <Button type="submit" disabled={saving || !productName || !category || !unitPrice || !updateQty || (hasProductSubjects(productName) && !subject)}>
                 {saving ? 'Saving…' : 'Save Changes'}
               </Button>
             </div>
