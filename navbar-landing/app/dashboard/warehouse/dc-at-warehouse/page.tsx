@@ -747,16 +747,7 @@ export default function WarehouseDcAtWarehouse() {
                   <TableCell className="whitespace-nowrap">
                     {r.managerRequestedAt ? new Date(r.managerRequestedAt).toLocaleDateString() : '-'}
                   </TableCell>
-                  <TableCell className="truncate max-w-[160px]">
-                    <div className="flex items-center gap-2">
-                      <span>{r.customerName || r.saleId?.customerName || r.dcOrderId?.school_name || '-'}</span>
-                      {r.dcOrderId && typeof r.dcOrderId === 'object' && r.dcOrderId.status === 'dc_updated' && (
-                        <span className="px-2 py-0.5 text-xs font-semibold bg-orange-100 text-orange-700 rounded border border-orange-200 whitespace-nowrap">
-                          Edited PO
-                        </span>
-                      )}
-                    </div>
-                  </TableCell>
+                  <TableCell className="truncate max-w-[160px]">{r.customerName || r.saleId?.customerName || '-'}</TableCell>
                   <TableCell className="whitespace-nowrap">{r.customerPhone || '-'}</TableCell>
                   <TableCell className="truncate max-w-[160px]">{r.product || r.saleId?.product || '-'}</TableCell>
                   <TableCell className="whitespace-nowrap font-medium">
@@ -793,14 +784,7 @@ export default function WarehouseDcAtWarehouse() {
       <Dialog open={openDialog} onOpenChange={setOpenDialog}>
         <DialogContent className="sm:max-w-[95vw] lg:max-w-[1200px] max-h-[95vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-xl font-semibold flex items-center gap-2">
-              DC Form Update
-              {selectedDC?.dcOrderId && typeof selectedDC.dcOrderId === 'object' && selectedDC.dcOrderId.status === 'dc_updated' && (
-                <span className="px-2 py-0.5 text-xs font-semibold bg-orange-100 text-orange-700 rounded border border-orange-200">
-                  Edited PO
-                </span>
-              )}
-            </DialogTitle>
+            <DialogTitle className="text-xl font-semibold">DC Form Update</DialogTitle>
             <DialogDescription>
               Update DC information and product quantities
             </DialogDescription>

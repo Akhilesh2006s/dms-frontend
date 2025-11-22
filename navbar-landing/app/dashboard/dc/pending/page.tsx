@@ -407,14 +407,7 @@ export default function PendingDCPage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl md:text-3xl font-semibold text-gray-900">Viswam Edutech - Raise DC</h1>
-              {selectedDC?.dcOrderId && typeof selectedDC.dcOrderId === 'object' && selectedDC.dcOrderId.status === 'dc_updated' && (
-                <span className="px-2 py-1 text-xs font-semibold bg-orange-100 text-orange-700 rounded border border-orange-200">
-                  Edited PO
-                </span>
-              )}
-            </div>
+            <h1 className="text-2xl md:text-3xl font-semibold text-gray-900">Viswam Edutech - Raise DC</h1>
             <div className="flex items-center gap-4 mt-2 text-sm">
               <span className="text-blue-700 font-semibold">
                 Products: <strong>{getProductsSummary(selectedDC)}</strong>
@@ -888,19 +881,12 @@ export default function PendingDCPage() {
                   <td className="py-2 px-3">{idx + 1}</td>
                   <td className="py-2 px-3 font-medium">{getDCNumber(d)}</td>
                   <td className="py-2 px-3 font-medium">
-                    <div className="flex items-center gap-2">
-                      <button 
-                        className="text-blue-600 hover:underline"
-                        onClick={() => openDCForm(d)}
-                      >
-                        {d.customerName || d.saleId?.customerName || d.dcOrderId?.school_name || '-'}
-                      </button>
-                      {d.dcOrderId && typeof d.dcOrderId === 'object' && d.dcOrderId.status === 'dc_updated' && (
-                        <span className="px-2 py-0.5 text-xs font-semibold bg-orange-100 text-orange-700 rounded border border-orange-200 whitespace-nowrap">
-                          Edited PO
-                        </span>
-                      )}
-                    </div>
+                    <button 
+                      className="text-blue-600 hover:underline"
+                      onClick={() => openDCForm(d)}
+                    >
+                      {d.customerName || d.saleId?.customerName || '-'}
+                    </button>
                   </td>
                   <td className="py-2 px-3">{d.customerPhone || '-'}</td>
                   <td className="py-2 px-3">{getProductsSummary(d)}</td>

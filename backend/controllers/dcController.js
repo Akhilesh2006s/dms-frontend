@@ -81,7 +81,7 @@ const getDCs = async (req, res) => {
       try {
         const populatedPromise = DC.find({ _id: { $in: dcs.map(dc => dc._id) } })
           .populate('saleId', 'customerName product quantity status poDocument')
-          .populate('dcOrderId', 'school_name school_type contact_person contact_mobile email address location zone products dc_code status')
+          .populate('dcOrderId', 'school_name school_type contact_person contact_mobile email address location zone products dc_code')
           .populate('employeeId', 'name email')
           .populate('createdBy', 'name email')
           .populate('submittedBy', 'name email')
@@ -149,7 +149,7 @@ const getDC = async (req, res) => {
   try {
     const dc = await DC.findById(req.params.id)
       .populate('saleId', 'customerName product quantity status poDocument poSubmittedAt poSubmittedBy')
-      .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products due_amount due_percentage status')
+      .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products due_amount due_percentage')
       .populate('employeeId', 'name email')
       .populate('adminId', 'name email')
       .populate('managerId', 'name email')
@@ -346,7 +346,7 @@ const raiseDC = async (req, res) => {
     await dc.save();
 
     const populatedDC = await DC.findById(dc._id)
-      .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products status')
+      .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products')
       .populate('saleId', 'customerName product quantity status poDocument')
       .populate('employeeId', 'name email')
       .populate('createdBy', 'name email');
@@ -385,7 +385,7 @@ const submitDCToManager = async (req, res) => {
     await dc.save();
 
     const populatedDC = await DC.findById(dc._id)
-      .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products status')
+      .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products')
       .populate('saleId', 'customerName product quantity status poDocument')
       .populate('employeeId', 'name email')
       .populate('managerId', 'name email');
@@ -661,7 +661,7 @@ const getCompletedDCs = async (req, res) => {
       try {
         const populatedPromise = DC.find({ _id: { $in: dcs.map(dc => dc._id) }, status: 'completed' })
           .populate('saleId', 'customerName product quantity status')
-          .populate('dcOrderId', 'school_name school_type contact_person contact_mobile email address location zone products dc_code status')
+          .populate('dcOrderId', 'school_name school_type contact_person contact_mobile email address location zone products dc_code')
           .populate('employeeId', 'name email')
           .populate('completedBy', 'name email')
           .populate('warehouseProcessedBy', 'name email')
@@ -829,7 +829,7 @@ const submitPO = async (req, res) => {
 
     const populatedDC = await DC.findById(dc._id)
       .populate('saleId', 'customerName product quantity status poDocument')
-      .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products status')
+      .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products')
       .populate('employeeId', 'name email')
       .populate('poSubmittedBy', 'name email');
 
@@ -1101,7 +1101,7 @@ const getSentToManagerDCs = async (req, res) => {
   try {
     const dcs = await DC.find({ status: 'sent_to_manager' })
       .populate('saleId', 'customerName product quantity status poDocument')
-      .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products pod_proof_url status')
+      .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products pod_proof_url')
       .populate('employeeId', 'name email')
       .populate('adminId', 'name email')
       .populate('adminReviewedBy', 'name email')
@@ -1122,7 +1122,6 @@ const getPendingWarehouseDCs = async (req, res) => {
   try {
     const dcs = await DC.find({ status: 'pending_dc' })
       .populate('saleId', 'customerName product quantity status poDocument')
-      .populate('dcOrderId', 'school_name school_type contact_person contact_mobile email address location zone products dc_code status')
       .populate('employeeId', 'name email')
       .populate('managerId', 'name email')
       .populate('managerRequestedBy', 'name email')
@@ -1217,7 +1216,7 @@ const getMyDCs = async (req, res) => {
       try {
         const populatePromise = DC.find({ _id: { $in: dcs.map(dc => dc._id) } })
           .populate('saleId', 'customerName product quantity status poDocument')
-          .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products dc_code status school_type')
+          .populate('dcOrderId', 'school_name school_code contact_person contact_mobile email address location zone products dc_code status school_type')
           .populate('employeeId', 'name email')
           .maxTimeMS(8000) // Shorter timeout for populate
           .lean();
@@ -1267,7 +1266,7 @@ const getMyDCs = async (req, res) => {
           assigned_to: employeeId,
           status: 'saved'
         })
-          .select('_id school_name contact_person contact_mobile email address location zone products dc_code status school_type assigned_to created_by createdAt updatedAt pod_proof_url')
+          .select('_id school_name school_code contact_person contact_mobile email address location zone products dc_code status school_type assigned_to created_by createdAt updatedAt pod_proof_url')
           .maxTimeMS(5000) // 5 seconds for full
           .lean();
 
@@ -1512,7 +1511,7 @@ const updateDC = async (req, res) => {
 
     const populatedDC = await DC.findById(dc._id)
       .populate('saleId', 'customerName product quantity status poDocument')
-      .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products due_amount due_percentage status')
+      .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products due_amount due_percentage')
       .populate('employeeId', 'name email')
       .populate('adminId', 'name email')
       .populate('managerId', 'name email')
@@ -1657,23 +1656,8 @@ const uploadPO = async (req, res) => {
     // In production, you might want to use a cloud storage service like AWS S3, Cloudinary, etc.
     const fileUrl = `/uploads/po/${req.file.filename}`;
     
-    // Determine base URL based on environment
-    // Railway provides RAILWAY_PUBLIC_DOMAIN or use BASE_URL env var
-    // For Railway, use the public domain, otherwise fall back to BASE_URL or localhost
-    let baseUrl = process.env.BASE_URL;
-    
-    if (!baseUrl) {
-      // Railway provides RAILWAY_PUBLIC_DOMAIN environment variable
-      if (process.env.RAILWAY_PUBLIC_DOMAIN) {
-        baseUrl = `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
-      } else if (process.env.RAILWAY_STATIC_URL) {
-        baseUrl = process.env.RAILWAY_STATIC_URL;
-      } else {
-        // Fallback for local development
-        baseUrl = `http://localhost:${process.env.PORT || 5000}`;
-      }
-    }
-    
+    // For local development, return a full URL
+    const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
     const fullUrl = `${baseUrl}${fileUrl}`;
 
     res.json({

@@ -32,36 +32,7 @@ dotenv.config();
 const app = express();
 
 // Middleware
-// CORS configuration - allow Railway domain and common frontend origins
-const corsOptions = {
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    // List of allowed origins
-    const allowedOrigins = [
-      process.env.FRONTEND_URL,
-      process.env.NEXT_PUBLIC_FRONTEND_URL,
-      'https://crm-backend-production-2ffd.up.railway.app',
-      'http://localhost:3000',
-      'http://localhost:3001',
-    ].filter(Boolean); // Remove undefined values
-    
-    // Check if origin is allowed or if we're in development
-    if (allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
-      callback(null, true);
-    } else {
-      // In production, be more strict, but still allow if no specific origins set
-      if (allowedOrigins.length === 0) {
-        callback(null, true); // Allow all if no specific origins configured
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    }
-  },
-  credentials: true,
-};
-app.use(cors(corsOptions));
+app.use(cors());
 app.use(express.json({ limit: '50mb' })); // Increase limit for base64 image uploads
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -83,15 +54,9 @@ const startServer = async () => {
     console.log('✅ Database connection established. Starting server...');
     
     // Start server only after database is connected
-    // Railway automatically sets PORT environment variable
     const PORT = process.env.PORT || 5000;
-    // Railway requires binding to 0.0.0.0, not localhost
-    const HOST = process.env.RAILWAY_ENVIRONMENT ? '0.0.0.0' : 'localhost';
-    const server = app.listen(PORT, HOST, () => {
-      console.log(`Server running on ${HOST}:${PORT}`);
-      if (process.env.RAILWAY_PUBLIC_DOMAIN) {
-        console.log(`Public URL: https://${process.env.RAILWAY_PUBLIC_DOMAIN}`);
-      }
+    const server = app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
     });
 
     // Handle port conflicts gracefully

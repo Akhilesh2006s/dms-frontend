@@ -278,14 +278,7 @@ export default function DCListedPage() {
                      r.createdAt ? new Date(r.createdAt).toLocaleDateString() : '-'}
                   </TableCell>
                   <TableCell className="truncate max-w-[160px]">
-                    <div className="flex items-center gap-2">
-                      <span>{r.dcOrderId?.school_name || r.customerName || r.saleId?.customerName || '-'}</span>
-                      {r.dcOrderId && typeof r.dcOrderId === 'object' && r.dcOrderId.status === 'dc_updated' && (
-                        <span className="px-2 py-0.5 text-xs font-semibold bg-orange-100 text-orange-700 rounded border border-orange-200 whitespace-nowrap">
-                          Edited PO
-                        </span>
-                      )}
-                    </div>
+                    {r.dcOrderId?.school_name || r.customerName || r.saleId?.customerName || '-'}
                   </TableCell>
                   <TableCell className="whitespace-nowrap">{r.dcOrderId?.dc_code || '-'}</TableCell>
                   <TableCell className="whitespace-nowrap">{r.dcOrderId?.school_type || '-'}</TableCell>
@@ -311,14 +304,7 @@ export default function DCListedPage() {
       <Dialog open={openUpdateDialog} onOpenChange={setOpenUpdateDialog}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              Update DC Status
-              {selectedDC?.dcOrderId && typeof selectedDC.dcOrderId === 'object' && selectedDC.dcOrderId.status === 'dc_updated' && (
-                <span className="px-2 py-0.5 text-xs font-semibold bg-orange-100 text-orange-700 rounded border border-orange-200">
-                  Edited PO
-                </span>
-              )}
-            </DialogTitle>
+            <DialogTitle>Update DC Status</DialogTitle>
             <DialogDescription>
               Choose to complete this DC or put it on hold.
             </DialogDescription>

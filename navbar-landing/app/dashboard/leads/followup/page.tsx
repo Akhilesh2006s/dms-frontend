@@ -18,6 +18,7 @@ import { useRouter } from 'next/navigation'
 type Lead = { 
   _id: string
   school_name?: string
+  school_code?: string
   contact_person?: string
   contact_mobile?: string
   zone?: string
@@ -29,8 +30,6 @@ type Lead = {
   createdAt?: string
   remarks?: string
   school_type?: string
-  dc_code?: string
-  school_code?: string
 }
 
 export default function FollowupLeadsPage() {
@@ -110,10 +109,31 @@ export default function FollowupLeadsPage() {
       const allData = Array.isArray(leadsResponse) ? leadsResponse : (leadsResponse?.data || [])
       const dcOrders = Array.isArray(dcOrdersResponse) ? dcOrdersResponse : (dcOrdersResponse?.data || [])
       
-      // Filter out closed/saved/completed leads from allData
+      // Filter out closed/saved/completed leads from allData and ensure school_code is included
       const activeLeads = (Array.isArray(allData) ? allData : []).filter((lead: Lead) => {
         const status = lead.status?.toLowerCase()
         return status !== 'saved' && status !== 'completed' && status !== 'closed'
+      }).map((lead: any) => {
+        // First try to get school_code from the lead itself
+        let schoolCode = lead.school_code || lead.schoolCode
+        
+        // If lead doesn't have school_code, try to find matching DcOrder by school_name and contact_mobile
+        if (!schoolCode && dcOrders && dcOrders.length > 0) {
+          const matchingOrder = dcOrders.find((order: any) => {
+            const schoolMatch = (order.school_name || '').toLowerCase().trim() === (lead.school_name || '').toLowerCase().trim()
+            const mobileMatch = (order.contact_mobile || '').trim() === (lead.contact_mobile || '').trim()
+            return schoolMatch && mobileMatch && (order.school_code || order.dc_code)
+          })
+          
+          if (matchingOrder) {
+            schoolCode = matchingOrder.school_code || matchingOrder.dc_code
+          }
+        }
+        
+        return {
+          ...lead,
+          school_code: schoolCode, // Ensure school_code is preserved
+        }
       })
       
       // Convert dc-orders to lead format and exclude closed/saved leads
@@ -126,6 +146,7 @@ export default function FollowupLeadsPage() {
         .map((order: any) => ({
           _id: order._id,
           school_name: order.school_name,
+          school_code: order.school_code,
           contact_person: order.contact_person,
           contact_mobile: order.contact_mobile,
           zone: order.zone,
@@ -137,7 +158,6 @@ export default function FollowupLeadsPage() {
           remarks: order.remarks,
           school_type: order.school_type,
           priority: order.priority || order.lead_status || 'Hot',
-          dc_code: order.dc_code,
         }))
       
       // Combine and filter followup leads
@@ -534,15 +554,17 @@ export default function FollowupLeadsPage() {
                   {/* Header with School Name and Location */}
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <h3 className="text-lg font-bold text-orange-600">
                           {lead.school_name || 'Unnamed School'}
                         </h3>
-                        {(lead.dc_code || lead.school_code) && (
-                          <span className="px-2 py-0.5 text-xs font-semibold bg-blue-100 text-blue-700 rounded border border-blue-200">
-                            {lead.dc_code || lead.school_code}
-                          </span>
-                        )}
+                        <span className={`px-2 py-0.5 text-xs font-semibold rounded border ${
+                          lead.school_code 
+                            ? 'bg-blue-100 text-blue-700 border-blue-200' 
+                            : 'bg-gray-100 text-gray-500 border-gray-200'
+                        }`}>
+                          {lead.school_code || 'No Code'}
+                        </span>
                       </div>
                       {lead.location && (
                         <div className="flex items-center gap-1 text-sm text-neutral-600">
@@ -572,6 +594,12 @@ export default function FollowupLeadsPage() {
                     <div>
                       <span className="text-neutral-600">Mobile:</span>
                       <span className="ml-2 font-medium text-neutral-900">{lead.contact_mobile || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="text-neutral-600">School Code:</span>
+                      <span className={`ml-2 font-semibold ${lead.school_code ? 'text-blue-700' : 'text-gray-500'}`}>
+                        {lead.school_code || 'Not assigned'}
+                      </span>
                     </div>
                   </div>
 

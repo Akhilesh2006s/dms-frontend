@@ -18,6 +18,7 @@ type DcOrder = {
   _id: string
   dc_code?: string
   school_name?: string
+  school_code?: string
   school_type?: string
   contact_person?: string
   contact_mobile?: string
@@ -138,75 +139,72 @@ export default function ClosedSalesPage() {
       // First try 'completed', then try all statuses to see what we have
       let data: DcOrder[] = []
       try {
-        // Get all statuses in parallel for better performance
+        // Get all statuses in parallel for better performance with timeout
         // Note: API returns paginated response { data: [...], pagination: {...} }
-        const [completedRes, savedRes, dcRequestedRes, dcAcceptedRes, dcUpdatedRes] = await Promise.all([
-          apiRequest<any>(`/dc-orders?status=completed`),
-          apiRequest<any>(`/dc-orders?status=saved`),
-          apiRequest<any>(`/dc-orders?status=dc_requested`),
-          apiRequest<any>(`/dc-orders?status=dc_accepted`),
-          apiRequest<any>(`/dc-orders?status=dc_updated`)
+        const apiCallWithTimeout = (url: string, timeout = 15000) => {
+          return Promise.race([
+            apiRequest<any>(url),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Request timeout')), timeout)
+            )
+          ])
+        }
+        
+        const [completedRes, savedRes, dcRequestedRes, dcAcceptedRes] = await Promise.all([
+          apiCallWithTimeout(`/dc-orders?status=completed&limit=1000`),
+          apiCallWithTimeout(`/dc-orders?status=saved&limit=1000`),
+          apiCallWithTimeout(`/dc-orders?status=dc_requested&limit=1000`),
+          apiCallWithTimeout(`/dc-orders?status=dc_accepted&limit=1000`)
         ])
         // Extract data array from paginated response or use direct array
         const completedArray = Array.isArray(completedRes) ? completedRes : (completedRes?.data || [])
         const savedArray = Array.isArray(savedRes) ? savedRes : (savedRes?.data || [])
         const dcRequestedArray = Array.isArray(dcRequestedRes) ? dcRequestedRes : (dcRequestedRes?.data || [])
         const dcAcceptedArray = Array.isArray(dcAcceptedRes) ? dcAcceptedRes : (dcAcceptedRes?.data || [])
-        const dcUpdatedArray = Array.isArray(dcUpdatedRes) ? dcUpdatedRes : (dcUpdatedRes?.data || [])
-        data = [...completedArray, ...savedArray, ...dcRequestedArray, ...dcAcceptedArray, ...dcUpdatedArray].filter((d: any) => 
+        data = [...completedArray, ...savedArray, ...dcRequestedArray, ...dcAcceptedArray].filter((d: any) => 
           d.status !== 'dc_approved' && d.status !== 'dc_sent_to_senior'
         )
       } catch (e) {
         // If no completed deals, try getting all deals and filter client-side
         console.log('No completed deals found, trying all deals...')
-        const allDealsRes = await apiRequest<any>(`/dc-orders`)
-        // Extract data array from paginated response or use direct array
-        const dealsArray = Array.isArray(allDealsRes) ? allDealsRes : (allDealsRes?.data || [])
-        // Filter for deals that might be considered "closed" - including saved (converted leads)
-        data = dealsArray.filter((d: any) => 
-          (d.status === 'completed' || 
-          d.status === 'saved' || // Include saved status for converted leads
-          d.status === 'in_transit' || 
-          d.lead_status === 'Hot' ||
-          d.status === 'hold' ||
-          d.status === 'dc_requested' || // Include DC requests from employees
-          d.status === 'dc_accepted' || // Include accepted DC requests (can be updated later)
-          d.status === 'dc_updated') && // Include updated DC requests
-          d.status !== 'dc_approved' && // Exclude approved (already processed)
-          d.status !== 'dc_sent_to_senior' // Exclude sent to senior coordinator
-        )
+        try {
+          const allDealsRes = await Promise.race([
+            apiRequest<any>(`/dc-orders?limit=1000`),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Request timeout')), 15000)
+            )
+          ])
+          // Extract data array from paginated response or use direct array
+          const dealsArray = Array.isArray(allDealsRes) ? allDealsRes : (allDealsRes?.data || [])
+          // Filter for deals that might be considered "closed" - including saved (converted leads)
+          data = dealsArray.filter((d: any) => 
+            (d.status === 'completed' || 
+            d.status === 'saved' || // Include saved status for converted leads
+            d.status === 'in_transit' || 
+            d.lead_status === 'Hot' ||
+            d.status === 'hold' ||
+            d.status === 'dc_requested' || // Include DC requests from employees
+            d.status === 'dc_accepted') && // Include accepted DC requests (can be updated later)
+            d.status !== 'dc_approved' && // Exclude approved (already processed)
+            d.status !== 'dc_sent_to_senior' // Exclude sent to senior coordinator
+          )
+        } catch (timeoutError) {
+          console.warn('Timeout loading all deals, using empty array')
+          data = []
+        }
       }
       
       // Also fetch leads with status "Closed" and convert them to DcOrder format
       try {
-        const closedLeadsRes = await apiRequest<any>(`/leads?status=Closed&limit=1000`)
+        const closedLeadsRes = await Promise.race([
+          apiRequest<any>(`/leads?status=Closed&limit=1000`),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Request timeout')), 15000)
+          )
+        ])
         const closedLeadsArray = Array.isArray(closedLeadsRes) ? closedLeadsRes : (closedLeadsRes?.data || [])
         
         // Convert closed leads to DcOrder format for display
-        // First, try to find associated DC Orders for these leads to get dc_code
-        const leadIds = closedLeadsArray.map((l: any) => l._id)
-        const leadDcCodeMap: Record<string, string> = {}
-        
-        // Try to find DC Orders created from these leads
-        try {
-          const allDcOrdersRes = await apiRequest<any>(`/dc-orders`)
-          const allDcOrdersArray = Array.isArray(allDcOrdersRes) ? allDcOrdersRes : (allDcOrdersRes?.data || [])
-          
-          // Match leads to DC Orders by school_name and contact_mobile
-          closedLeadsArray.forEach((lead: any) => {
-            const matchingDcOrder = allDcOrdersArray.find((dco: any) => {
-              const schoolMatch = (dco.school_name || '').toLowerCase().trim() === (lead.school_name || '').toLowerCase().trim()
-              const mobileMatch = (dco.contact_mobile || '').trim() === (lead.contact_mobile || '').trim()
-              return schoolMatch && mobileMatch && dco.dc_code
-            })
-            if (matchingDcOrder?.dc_code) {
-              leadDcCodeMap[lead._id] = matchingDcOrder.dc_code
-            }
-          })
-        } catch (e) {
-          console.warn('Failed to fetch DC Orders for lead codes:', e)
-        }
-        
         const closedLeadsAsDeals: DcOrder[] = closedLeadsArray.map((lead: any) => ({
           _id: lead._id,
           school_name: lead.school_name || '',
@@ -223,26 +221,26 @@ export default function ClosedSalesPage() {
           createdAt: lead.createdAt,
           remarks: lead.remarks || '',
           status: 'Closed', // Mark as Closed to distinguish from DcOrders
-          dc_code: leadDcCodeMap[lead._id] || lead.school_code || lead.dc_code || undefined, // Try to get from associated DC Order or lead's school_code
+          dc_code: undefined, // Leads don't have DC codes
           pod_proof_url: undefined, // Leads might have PO in associated DC
           isLead: true, // Flag to identify this is a lead, not a DcOrder
         }))
         
-        // Filter out closed leads that have a corresponding DcOrder with status 'dc_requested', 'dc_accepted', or 'dc_updated'
+        // Filter out closed leads that have a corresponding DcOrder with status 'dc_requested' or 'dc_accepted'
         // This prevents duplicates where the same school appears twice (once as closed lead with "Raise DC" and once as DcOrder with "Review DC Request")
         const filteredClosedLeads = closedLeadsAsDeals.filter((lead: DcOrder) => {
-          // Check if there's a DcOrder with status 'dc_requested', 'dc_accepted', or 'dc_updated' for this lead
+          // Check if there's a DcOrder with status 'dc_requested' or 'dc_accepted' for this lead
           // Match by school_name and contact_mobile to identify duplicates
           const hasMatchingDcOrder = data.some((dcOrder: any) => {
             const schoolNameMatch = (dcOrder.school_name || '').toLowerCase().trim() === (lead.school_name || '').toLowerCase().trim()
             const mobileMatch = (dcOrder.contact_mobile || '').trim() === (lead.contact_mobile || '').trim()
-            const isDcRequested = dcOrder.status === 'dc_requested' || dcOrder.status === 'dc_accepted' || dcOrder.status === 'dc_updated'
+            const isDcRequested = dcOrder.status === 'dc_requested' || dcOrder.status === 'dc_accepted'
             
             // If school name and mobile match, and the DcOrder has dc_requested or dc_accepted status, exclude the closed lead
             return schoolNameMatch && mobileMatch && isDcRequested
           })
           
-          // Only include the closed lead if there's no matching DcOrder with dc_requested/dc_accepted/dc_updated status
+          // Only include the closed lead if there's no matching DcOrder with dc_requested/dc_accepted status
           return !hasMatchingDcOrder
         })
         
@@ -257,105 +255,56 @@ export default function ClosedSalesPage() {
       console.log('Loaded closed deals:', data)
       console.log('First deal sample:', data[0])
       
-      // Load existing DCs for all deals in parallel (much faster)
+      // Load existing DCs for all deals efficiently (fetch all DCs once instead of per deal)
       const dcMap: Record<string, DC> = {}
       try {
+        // Fetch all DCs once instead of making individual requests
+        const allDCsRes = await apiRequest<any>(`/dc?limit=10000`)
+        const allDCsArray = Array.isArray(allDCsRes) ? allDCsRes : (allDCsRes?.data || [])
+        
         // Filter out leads (they might have DCs associated via leadId, not dcOrderId)
         const dealIds = data.filter((d: any) => !d.isLead).map((d: any) => d._id)
         const leadIds = data.filter((d: any) => d.isLead).map((d: any) => d._id)
         
-        // Load DCs for DcOrders - get full DC with populated dcOrderId to access dc_code
-        const dcPromises = dealIds.map(async (dealId: string) => {
-          try {
-            const dcs = await apiRequest<DC[]>(`/dc?dcOrderId=${dealId}`)
-            if (dcs && dcs.length > 0) {
-              // Try to get full DC with populated dcOrderId
-              try {
-                const fullDC = await apiRequest<DC>(`/dc/${dcs[0]._id}`)
-                return { dealId, dc: fullDC }
-              } catch (e) {
-                // If full DC fetch fails, use the one from list
-                return { dealId, dc: dcs[0] }
-              }
-            }
-            return null
-          } catch (e) {
-            console.warn(`Failed to load DC for deal ${dealId}:`, e)
-            return null
+        // Build map for DcOrders
+        dealIds.forEach((dealId: string) => {
+          const relatedDC = allDCsArray.find((dc: any) => {
+            const dcOrderId = dc.dcOrderId?._id || dc.dcOrderId
+            return dcOrderId === dealId || (typeof dcOrderId === 'string' && dcOrderId === dealId)
+          })
+          if (relatedDC) {
+            dcMap[dealId] = relatedDC
           }
         })
         
-        // Load DCs for Leads (check by leadId or createdBy)
-        const leadDcPromises = leadIds.map(async (leadId: string) => {
-          try {
-            // Try to find DC associated with this lead
-            const dcs = await apiRequest<any>(`/dc`)
-            const dcArray = Array.isArray(dcs) ? dcs : ((dcs as any)?.data || [])
-            // Find DC that might be related to this lead (check if DC has leadId or if lead was converted)
-            const relatedDC = dcArray.find((dc: any) => 
-              dc.dcOrderId?._id === leadId || 
-              (typeof dc.dcOrderId === 'string' && dc.dcOrderId === leadId) ||
-              dc.saleId?._id === leadId ||
-              (typeof dc.saleId === 'string' && dc.saleId === leadId)
-            )
-            if (relatedDC) {
-              return { dealId: leadId, dc: relatedDC }
-            }
-            return null
-          } catch (e) {
-            console.warn(`Failed to load DC for lead ${leadId}:`, e)
-            return null
-          }
-        })
-        
-        // Wait for all promises to resolve
-        const [dcResults, leadDcResults] = await Promise.all([
-          Promise.all(dcPromises),
-          Promise.all(leadDcPromises)
-        ])
-        
-        // Build the map from results
-        const allResults = [...(dcResults || []), ...(leadDcResults || [])]
-        allResults.forEach((result) => {
-          if (result) {
-            dcMap[result.dealId] = result.dc
+        // Build map for Leads
+        leadIds.forEach((leadId: string) => {
+          const relatedDC = allDCsArray.find((dc: any) => {
+            const dcOrderId = dc.dcOrderId?._id || dc.dcOrderId
+            const saleId = dc.saleId?._id || dc.saleId
+            return dcOrderId === leadId || 
+                   (typeof dcOrderId === 'string' && dcOrderId === leadId) ||
+                   saleId === leadId ||
+                   (typeof saleId === 'string' && saleId === leadId)
+          })
+          if (relatedDC) {
+            dcMap[leadId] = relatedDC
           }
         })
         
         setDealDCs(dcMap)
-        console.log('Loaded DCs for deals:', dcMap)
+        console.log('Loaded DCs for deals:', Object.keys(dcMap).length, 'DCs found')
       } catch (e) {
         console.warn('Failed to load DCs:', e)
+        // Continue without DCs - they're optional
       }
       
-      // Ensure all deals have proper structure and get dc_code from associated DCs
+      // Ensure all deals have proper structure
       const normalizedData = data.map((deal: any) => {
         // Handle assigned_to - preserve populated object if it exists
         let assignedTo = deal.assigned_to || deal.assignedTo
         
-        // Get dc_code - first from deal itself, then from associated DC's dcOrderId
-        let dcCode = deal.dc_code || deal.school_code
-        if (!dcCode) {
-          const associatedDC = dcMap[deal._id]
-          if (associatedDC) {
-            // Check if DC has populated dcOrderId with dc_code
-            if (associatedDC.dcOrderId && typeof associatedDC.dcOrderId === 'object' && associatedDC.dcOrderId.dc_code) {
-              dcCode = associatedDC.dcOrderId.dc_code
-            } else if (typeof associatedDC.dcOrderId === 'string') {
-              // If dcOrderId is just an ID string, try to get from the original deal data
-              // The deal should have dc_code if it's a DcOrder
-              dcCode = deal.dc_code
-            }
-          }
-        }
-        
-        // Also check if this deal is in the data array and has dc_code there
-        if (!dcCode && !deal.isLead) {
-          // For DcOrders, dc_code should be in the deal object from API
-          dcCode = deal.dc_code
-        }
-        
-        console.log('Processing deal:', deal.school_name, 'dc_code:', dcCode)
+        console.log('Processing deal:', deal.school_name)
         console.log('  - assigned_to raw:', assignedTo)
         console.log('  - assigned_to type:', typeof assignedTo)
         
@@ -381,15 +330,16 @@ export default function ClosedSalesPage() {
         return {
           ...deal,
           school_name: deal.school_name || deal.schoolName || '',
+          school_code: deal.school_code || deal.schoolCode || '',
           contact_person: deal.contact_person || deal.contactPerson || '',
           contact_mobile: deal.contact_mobile || deal.contactMobile || deal.mobile || '',
           zone: deal.zone || '',
           location: deal.location || deal.address || '',
           address: deal.address || deal.location || '',
-          dc_code: dcCode || deal.dc_code || deal.dcCode || deal.school_code || undefined, // Include dc_code in normalized data
           products: deal.products || [],
           assigned_to: assignedTo,
           school_type: deal.school_type || deal.schoolType || '',
+          dc_code: deal.dc_code || deal.dcCode || '',
           remarks: deal.remarks || '',
           cluster: deal.cluster || '',
           pod_proof_url: deal.pod_proof_url || deal.podProofUrl || null,
@@ -403,7 +353,28 @@ export default function ClosedSalesPage() {
         return dateB - dateA // Most recent first
       })
       
-      setItems(sortedData)
+      // Remove duplicates based on school_name + contact_mobile
+      // Keep the most recent entry (already sorted, so first occurrence is most recent)
+      const seen = new Map<string, DcOrder>()
+      const uniqueData: DcOrder[] = []
+      
+      for (const item of sortedData) {
+        // Create a unique key from school_name and contact_mobile (case-insensitive)
+        const schoolName = (item.school_name || '').toLowerCase().trim()
+        const contactMobile = (item.contact_mobile || '').trim()
+        const uniqueKey = `${schoolName}|${contactMobile}`
+        
+        // Only add if we haven't seen this combination before
+        if (!seen.has(uniqueKey)) {
+          seen.set(uniqueKey, item)
+          uniqueData.push(item)
+        } else {
+          console.log(`Removing duplicate: ${item.school_name} - ${item.contact_mobile}`)
+        }
+      }
+      
+      console.log(`Removed ${sortedData.length - uniqueData.length} duplicate entries`)
+      setItems(uniqueData)
       console.log('Normalized deals:', sortedData)
       console.log('First deal assigned_to:', sortedData[0]?.assigned_to)
     } catch (e: any) {
@@ -520,8 +491,8 @@ export default function ClosedSalesPage() {
       } else {
         setSelectedEmployeeId('')
       }
-      // If deal has DC request data (status is 'dc_requested', 'dc_accepted', or 'dc_updated'), load it
-      if ((fullDeal.status === 'dc_requested' || fullDeal.status === 'dc_accepted' || fullDeal.status === 'dc_updated') && (fullDeal as any).dcRequestData) {
+      // If deal has DC request data (status is 'dc_requested' or 'dc_accepted'), load it
+      if ((fullDeal.status === 'dc_requested' || fullDeal.status === 'dc_accepted') && (fullDeal as any).dcRequestData) {
         const dcRequestData = (fullDeal as any).dcRequestData
         console.log('Loading DC request data:', dcRequestData)
         
@@ -1197,8 +1168,8 @@ export default function ClosedSalesPage() {
                 <th className="py-3 px-4 text-left font-semibold text-sm">School Type</th>
                 <th className="py-3 px-4 text-left font-semibold text-sm">Zone</th>
                 <th className="py-3 px-4 text-left font-semibold text-sm">Town</th>
-                <th className="py-3 px-4 text-left font-semibold text-sm">School Name</th>
                 <th className="py-3 px-4 text-left font-semibold text-sm">School Code</th>
+                <th className="py-3 px-4 text-left font-semibold text-sm">School Name</th>
                 <th className="py-3 px-4 text-left font-semibold text-sm">Executive</th>
                 <th className="py-3 px-4 text-left font-semibold text-sm">Mobile</th>
                 <th className="py-3 px-4 text-left font-semibold text-sm">Products</th>
@@ -1216,17 +1187,8 @@ export default function ClosedSalesPage() {
                   <td className="py-3 px-4 text-slate-700">{d.school_type || '-'}</td>
                   <td className="py-3 px-4 text-slate-700">{d.zone || '-'}</td>
                   <td className="py-3 px-4 text-slate-700">{d.location || d.address?.split(',')[0] || '-'}</td>
-                  <td className="py-3 px-4 text-slate-700 font-medium">
-                    <div className="flex items-center gap-2">
-                      <span>{d.school_name || '-'}</span>
-                      {d.status === 'dc_updated' && (
-                        <span className="px-2 py-0.5 text-xs font-semibold bg-orange-100 text-orange-700 rounded border border-orange-200">
-                          Updated PO
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 text-slate-700 font-medium">{d.dc_code || '-'}</td>
+                  <td className="py-3 px-4 text-slate-700 font-medium text-blue-700">{d.school_code || '-'}</td>
+                  <td className="py-3 px-4 text-slate-700 font-medium">{d.school_name || '-'}</td>
                   <td className="py-3 px-4 text-slate-700">{d.assigned_to?.name || '-'}</td>
                   <td className="py-3 px-4 text-slate-700">{d.contact_mobile || '-'}</td>
                   <td className="py-3 px-4 text-slate-700 text-xs">{getProductsDisplay(d)}</td>
@@ -1313,10 +1275,7 @@ export default function ClosedSalesPage() {
                           }
                           onClick={() => openRaiseDC(d)}
                         >
-                          {d.status === 'dc_requested' ? 'Raise DC' : 
-                           d.status === 'dc_accepted' ? 'Update DC' : 
-                           d.status === 'dc_updated' ? 'View Updated PO' : 
-                           'Raise DC'}
+                          {d.status === 'dc_requested' ? 'Raise DC' : d.status === 'dc_accepted' ? 'Update DC' : 'Raise DC'}
                         </Button>
                       )}
                       {!isManager && (
@@ -1349,7 +1308,6 @@ export default function ClosedSalesPage() {
               {selectedDeal?.school_name || 'Client'} - {
                 selectedDeal?.status === 'dc_requested' ? 'Raise DC' : 
                 selectedDeal?.status === 'dc_accepted' ? 'Update DC' : 
-                selectedDeal?.status === 'dc_updated' ? 'Updated PO' : 
                 'Raise DC'
               }
             </DialogTitle>
@@ -1358,8 +1316,6 @@ export default function ClosedSalesPage() {
                 ? 'Review DC request from employee. You can accept it (to update later) or send to Senior Coordinator.'
                 : selectedDeal?.status === 'dc_accepted'
                 ? 'Update DC details. You can save changes or submit to Senior Coordinator.'
-                : selectedDeal?.status === 'dc_updated'
-                ? 'Review updated PO request. Click "Approve" to accept the changes or "Send to Senior Coordinator" to forward it.'
                 : canRequestDC 
                   ? 'Fill in DC details and submit request for Coordinator/Admin approval'
                   : 'Fill in DC details and submit to Manager'}
@@ -1832,7 +1788,7 @@ export default function ClosedSalesPage() {
                 </div>
                 <div className="flex gap-2">
                   {/* Employee: Show "Raise DC" button to request DC */}
-                  {canRequestDC && selectedDeal?.status !== 'dc_requested' && selectedDeal?.status !== 'dc_accepted' && selectedDeal?.status !== 'dc_updated' && (
+                  {canRequestDC && selectedDeal?.status !== 'dc_requested' && selectedDeal?.status !== 'dc_accepted' && (
                   <Button
                       variant="destructive"
                       onClick={handleRequestDC}
@@ -1853,27 +1809,6 @@ export default function ClosedSalesPage() {
                       >
                         {saving ? 'Processing...' : 'Accept'}
                   </Button>
-                      <Button
-                        className="bg-slate-700 hover:bg-slate-800 text-white shadow-sm"
-                        onClick={handleSendToSeniorCoordinator}
-                        disabled={submitting || saving}
-                      >
-                        {submitting ? 'Sending...' : 'Send to Senior Coordinator'}
-                      </Button>
-                    </>
-                  )}
-                  
-                  {/* Coordinator/Admin: Show "Approve" button for updated DC requests */}
-                  {canApproveDC && selectedDeal?.status === 'dc_updated' && (
-                    <>
-                      <Button
-                        variant="outline"
-                        className="border-green-600 text-green-700 hover:bg-green-50 shadow-sm"
-                        onClick={handleAcceptDC}
-                        disabled={saving || submitting}
-                      >
-                        {saving ? 'Processing...' : 'Approve'}
-                      </Button>
                       <Button
                         className="bg-slate-700 hover:bg-slate-800 text-white shadow-sm"
                         onClick={handleSendToSeniorCoordinator}
@@ -1906,7 +1841,7 @@ export default function ClosedSalesPage() {
                   )}
                   
                   {/* Coordinator/Admin: Show "Accept" and "Send to Senior Coordinator" buttons for other deals (not requested yet) */}
-                  {canApproveDC && selectedDeal?.status !== 'dc_requested' && selectedDeal?.status !== 'dc_accepted' && selectedDeal?.status !== 'dc_updated' && (
+                  {canApproveDC && selectedDeal?.status !== 'dc_requested' && selectedDeal?.status !== 'dc_accepted' && (
                     <>
                   <Button
                     variant="outline"

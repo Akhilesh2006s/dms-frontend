@@ -135,7 +135,7 @@ export default function NewEmployeePage() {
           </div>
           <div>
             <Label>User Type *</Label>
-            <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v }))}>
+            <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v, cluster: v === 'Executive' ? f.cluster : '' }))}>
               <SelectTrigger className="bg-white text-neutral-900">
                 <SelectValue placeholder="Select Option" />
               </SelectTrigger>
