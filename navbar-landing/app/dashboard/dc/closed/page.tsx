@@ -140,7 +140,7 @@ export default function ClosedSalesPage() {
       try {
         // Get all statuses in parallel for better performance
         // Note: API returns paginated response { data: [...], pagination: {...} }
-        const [completedRes, savedRes, dcRequestedRes, dcAcceptedRes] = await Promise.all([
+        const [completedRes, savedRes, dcRequestedRes, dcAcceptedRes, dcUpdatedRes] = await Promise.all([
           apiRequest<any>(`/dc-orders?status=completed`),
           apiRequest<any>(`/dc-orders?status=saved`),
           apiRequest<any>(`/dc-orders?status=dc_requested`),
@@ -152,7 +152,8 @@ export default function ClosedSalesPage() {
         const savedArray = Array.isArray(savedRes) ? savedRes : (savedRes?.data || [])
         const dcRequestedArray = Array.isArray(dcRequestedRes) ? dcRequestedRes : (dcRequestedRes?.data || [])
         const dcAcceptedArray = Array.isArray(dcAcceptedRes) ? dcAcceptedRes : (dcAcceptedRes?.data || [])
-        data = [...completedArray, ...savedArray, ...dcRequestedArray, ...dcAcceptedArray].filter((d: any) => 
+        const dcUpdatedArray = Array.isArray(dcUpdatedRes) ? dcUpdatedRes : (dcUpdatedRes?.data || [])
+        data = [...completedArray, ...savedArray, ...dcRequestedArray, ...dcAcceptedArray, ...dcUpdatedArray].filter((d: any) => 
           d.status !== 'dc_approved' && d.status !== 'dc_sent_to_senior'
         )
       } catch (e) {
@@ -182,6 +183,30 @@ export default function ClosedSalesPage() {
         const closedLeadsArray = Array.isArray(closedLeadsRes) ? closedLeadsRes : (closedLeadsRes?.data || [])
         
         // Convert closed leads to DcOrder format for display
+        // First, try to find associated DC Orders for these leads to get dc_code
+        const leadIds = closedLeadsArray.map((l: any) => l._id)
+        const leadDcCodeMap: Record<string, string> = {}
+        
+        // Try to find DC Orders created from these leads
+        try {
+          const allDcOrdersRes = await apiRequest<any>(`/dc-orders`)
+          const allDcOrdersArray = Array.isArray(allDcOrdersRes) ? allDcOrdersRes : (allDcOrdersRes?.data || [])
+          
+          // Match leads to DC Orders by school_name and contact_mobile
+          closedLeadsArray.forEach((lead: any) => {
+            const matchingDcOrder = allDcOrdersArray.find((dco: any) => {
+              const schoolMatch = (dco.school_name || '').toLowerCase().trim() === (lead.school_name || '').toLowerCase().trim()
+              const mobileMatch = (dco.contact_mobile || '').trim() === (lead.contact_mobile || '').trim()
+              return schoolMatch && mobileMatch && dco.dc_code
+            })
+            if (matchingDcOrder?.dc_code) {
+              leadDcCodeMap[lead._id] = matchingDcOrder.dc_code
+            }
+          })
+        } catch (e) {
+          console.warn('Failed to fetch DC Orders for lead codes:', e)
+        }
+        
         const closedLeadsAsDeals: DcOrder[] = closedLeadsArray.map((lead: any) => ({
           _id: lead._id,
           school_name: lead.school_name || '',
@@ -198,7 +223,7 @@ export default function ClosedSalesPage() {
           createdAt: lead.createdAt,
           remarks: lead.remarks || '',
           status: 'Closed', // Mark as Closed to distinguish from DcOrders
-          dc_code: undefined, // Leads don't have DC codes
+          dc_code: leadDcCodeMap[lead._id] || lead.school_code || lead.dc_code || undefined, // Try to get from associated DC Order or lead's school_code
           pod_proof_url: undefined, // Leads might have PO in associated DC
           isLead: true, // Flag to identify this is a lead, not a DcOrder
         }))
@@ -239,12 +264,19 @@ export default function ClosedSalesPage() {
         const dealIds = data.filter((d: any) => !d.isLead).map((d: any) => d._id)
         const leadIds = data.filter((d: any) => d.isLead).map((d: any) => d._id)
         
-        // Load DCs for DcOrders
+        // Load DCs for DcOrders - get full DC with populated dcOrderId to access dc_code
         const dcPromises = dealIds.map(async (dealId: string) => {
           try {
             const dcs = await apiRequest<DC[]>(`/dc?dcOrderId=${dealId}`)
             if (dcs && dcs.length > 0) {
-              return { dealId, dc: dcs[0] }
+              // Try to get full DC with populated dcOrderId
+              try {
+                const fullDC = await apiRequest<DC>(`/dc/${dcs[0]._id}`)
+                return { dealId, dc: fullDC }
+              } catch (e) {
+                // If full DC fetch fails, use the one from list
+                return { dealId, dc: dcs[0] }
+              }
             }
             return null
           } catch (e) {
@@ -296,12 +328,34 @@ export default function ClosedSalesPage() {
         console.warn('Failed to load DCs:', e)
       }
       
-      // Ensure all deals have proper structure
+      // Ensure all deals have proper structure and get dc_code from associated DCs
       const normalizedData = data.map((deal: any) => {
         // Handle assigned_to - preserve populated object if it exists
         let assignedTo = deal.assigned_to || deal.assignedTo
         
-        console.log('Processing deal:', deal.school_name)
+        // Get dc_code - first from deal itself, then from associated DC's dcOrderId
+        let dcCode = deal.dc_code || deal.school_code
+        if (!dcCode) {
+          const associatedDC = dcMap[deal._id]
+          if (associatedDC) {
+            // Check if DC has populated dcOrderId with dc_code
+            if (associatedDC.dcOrderId && typeof associatedDC.dcOrderId === 'object' && associatedDC.dcOrderId.dc_code) {
+              dcCode = associatedDC.dcOrderId.dc_code
+            } else if (typeof associatedDC.dcOrderId === 'string') {
+              // If dcOrderId is just an ID string, try to get from the original deal data
+              // The deal should have dc_code if it's a DcOrder
+              dcCode = deal.dc_code
+            }
+          }
+        }
+        
+        // Also check if this deal is in the data array and has dc_code there
+        if (!dcCode && !deal.isLead) {
+          // For DcOrders, dc_code should be in the deal object from API
+          dcCode = deal.dc_code
+        }
+        
+        console.log('Processing deal:', deal.school_name, 'dc_code:', dcCode)
         console.log('  - assigned_to raw:', assignedTo)
         console.log('  - assigned_to type:', typeof assignedTo)
         
@@ -332,10 +386,10 @@ export default function ClosedSalesPage() {
           zone: deal.zone || '',
           location: deal.location || deal.address || '',
           address: deal.address || deal.location || '',
+          dc_code: dcCode || deal.dc_code || deal.dcCode || deal.school_code || undefined, // Include dc_code in normalized data
           products: deal.products || [],
           assigned_to: assignedTo,
           school_type: deal.school_type || deal.schoolType || '',
-          dc_code: deal.dc_code || deal.dcCode || '',
           remarks: deal.remarks || '',
           cluster: deal.cluster || '',
           pod_proof_url: deal.pod_proof_url || deal.podProofUrl || null,
@@ -1144,6 +1198,7 @@ export default function ClosedSalesPage() {
                 <th className="py-3 px-4 text-left font-semibold text-sm">Zone</th>
                 <th className="py-3 px-4 text-left font-semibold text-sm">Town</th>
                 <th className="py-3 px-4 text-left font-semibold text-sm">School Name</th>
+                <th className="py-3 px-4 text-left font-semibold text-sm">School Code</th>
                 <th className="py-3 px-4 text-left font-semibold text-sm">Executive</th>
                 <th className="py-3 px-4 text-left font-semibold text-sm">Mobile</th>
                 <th className="py-3 px-4 text-left font-semibold text-sm">Products</th>
@@ -1171,6 +1226,7 @@ export default function ClosedSalesPage() {
                       )}
                     </div>
                   </td>
+                  <td className="py-3 px-4 text-slate-700 font-medium">{d.dc_code || '-'}</td>
                   <td className="py-3 px-4 text-slate-700">{d.assigned_to?.name || '-'}</td>
                   <td className="py-3 px-4 text-slate-700">{d.contact_mobile || '-'}</td>
                   <td className="py-3 px-4 text-slate-700 text-xs">{getProductsDisplay(d)}</td>

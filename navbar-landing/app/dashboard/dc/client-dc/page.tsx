@@ -355,8 +355,36 @@ export default function ClientDCPage() {
         setDcProductRows([])
       }
       
-      // Load DC details
-      setDcDate(fullDC.dcDate ? new Date(fullDC.dcDate).toISOString().split('T')[0] : '')
+      // Load DC details - check dcDate from fullDC, then check populated dcOrderId, then check dc.dcOrderId
+      let deliveryDate = ''
+      if (fullDC.dcDate) {
+        deliveryDate = new Date(fullDC.dcDate).toISOString().split('T')[0]
+      } else if (fullDC.dcOrderId && typeof fullDC.dcOrderId === 'object' && fullDC.dcOrderId.estimated_delivery_date) {
+        // Check if fullDC has populated dcOrderId
+        deliveryDate = new Date(fullDC.dcOrderId.estimated_delivery_date).toISOString().split('T')[0]
+      } else if (dc.dcOrderId && typeof dc.dcOrderId === 'object' && dc.dcOrderId.estimated_delivery_date) {
+        // Check if dc has populated dcOrderId
+        deliveryDate = new Date(dc.dcOrderId.estimated_delivery_date).toISOString().split('T')[0]
+      } else if (dc.dcOrderId && typeof dc.dcOrderId === 'string') {
+        // If dcOrderId is just an ID string, try to fetch it
+        try {
+          const dcOrder = await apiRequest<any>(`/dc-orders/${dc.dcOrderId}`)
+          if (dcOrder?.estimated_delivery_date) {
+            deliveryDate = new Date(dcOrder.estimated_delivery_date).toISOString().split('T')[0]
+          }
+        } catch (e) {
+          // If dc-orders endpoint fails, try leads endpoint
+          try {
+            const lead = await apiRequest<any>(`/leads/${dc.dcOrderId}`)
+            if (lead?.estimated_delivery_date) {
+              deliveryDate = new Date(lead.estimated_delivery_date).toISOString().split('T')[0]
+            }
+          } catch (e2) {
+            console.error('Failed to fetch delivery date from dcOrderId:', e2)
+          }
+        }
+      }
+      setDcDate(deliveryDate)
       setDcRemarks(fullDC.dcRemarks || '')
       setDcCategory(fullDC.dcCategory || '')
       setDcNotes(fullDC.dcNotes || '')
@@ -732,31 +760,45 @@ export default function ClientDCPage() {
                           )}
                         </TableCell>
                         <TableCell className="text-center">
-                          <Button 
-                            size="sm" 
-                            onClick={() => openClientDCDialog(d)}
-                          >
-                            {(() => {
-                              // Check if DC request has been submitted (status indicates it's gone to admin)
-                              const dcOrderStatus = typeof d.dcOrderId === 'object' ? d.dcOrderId?.status : null
-                              const hasRequested = dcOrderStatus === 'dc_requested' || 
-                                                   dcOrderStatus === 'dc_accepted' || 
-                                                   dcOrderStatus === 'dc_approved' || 
-                                                   dcOrderStatus === 'dc_sent_to_senior'
-                              
-                              return hasRequested ? (
-                                <>
-                                  <Pencil className="w-4 h-4 mr-2" />
-                                  Edit Request
-                                </>
-                              ) : (
-                                <>
-                                  <Package className="w-4 h-4 mr-2" />
-                                  Request DC
-                                </>
-                              )
-                            })()}
-                          </Button>
+                          {(() => {
+                            // Check if DC has been submitted - hide both Edit Request and Request DC for submitted statuses
+                            const dcStatus = d.status
+                            const isSubmitted = dcStatus === 'sent_to_manager' || 
+                                                dcStatus === 'po_submitted' || 
+                                                dcStatus === 'completed' ||
+                                                dcStatus === 'warehouse_processing' ||
+                                                dcStatus === 'in_transit'
+                            
+                            // If submitted, don't show any action button
+                            if (isSubmitted) {
+                              return <span className="text-neutral-400 text-sm">Submitted</span>
+                            }
+                            
+                            // Check if DC has products
+                            const hasProducts = d.productDetails && 
+                                               Array.isArray(d.productDetails) && 
+                                               d.productDetails.length > 0
+                            
+                            // Show Edit Request if has products, otherwise show Request DC
+                            return (
+                              <Button 
+                                size="sm" 
+                                onClick={() => openClientDCDialog(d)}
+                              >
+                                {hasProducts ? (
+                                  <>
+                                    <Pencil className="w-4 h-4 mr-2" />
+                                    Edit Request
+                                  </>
+                                ) : (
+                                  <>
+                                    <Package className="w-4 h-4 mr-2" />
+                                    Request DC
+                                  </>
+                                )}
+                              </Button>
+                            )
+                          })()}
                         </TableCell>
                       </TableRow>
                     )
@@ -859,6 +901,18 @@ export default function ClientDCPage() {
           </DialogHeader>
           
           <div className="space-y-6 py-6">
+            {/* Delivery Date Display */}
+            <div className="border rounded-lg p-4 bg-neutral-50">
+              <div className="flex items-center gap-2">
+                <Label className="text-sm font-semibold text-neutral-700">Delivery Date:</Label>
+                <span className="text-sm text-neutral-900">
+                  {dcDate 
+                    ? new Date(dcDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                    : 'Not set'}
+                </span>
+              </div>
+            </div>
+            
             {/* PO Photo Section */}
             <div className="border rounded-lg p-6 space-y-4">
               <div className="flex items-center justify-between">
@@ -1042,8 +1096,6 @@ export default function ClientDCPage() {
                       <th className="py-3 px-4 text-left text-sm font-semibold border-r">Specs</th>
                       <th className="py-3 px-4 text-left text-sm font-semibold border-r">Subject</th>
                       <th className="py-3 px-4 text-left text-sm font-semibold border-r">Strength</th>
-                      <th className="py-3 px-4 text-left text-sm font-semibold border-r min-w-[120px]">Price</th>
-                      <th className="py-3 px-4 text-left text-sm font-semibold border-r">Total</th>
                       <th className="py-3 px-4 text-left text-sm font-semibold border-r">Level</th>
                       <th className="py-3 px-4 text-center text-sm font-semibold">Action</th>
                     </tr>
@@ -1144,31 +1196,11 @@ export default function ClientDCPage() {
                             onChange={(e) => {
                               const updated = [...dcProductRows]
                               updated[idx].strength = Number(e.target.value) || 0
-                              updated[idx].total = updated[idx].price * updated[idx].strength
                               setDcProductRows(updated)
                             }}
                             placeholder="0"
                             min="0"
                           />
-                        </td>
-                        <td className="py-3 px-4 border-r">
-                          <Input
-                            type="number"
-                            className="h-10 text-sm w-32"
-                            value={row.price || ''}
-                            onChange={(e) => {
-                              const updated = [...dcProductRows]
-                              updated[idx].price = Number(e.target.value) || 0
-                              updated[idx].total = updated[idx].price * updated[idx].strength
-                              setDcProductRows(updated)
-                            }}
-                            placeholder="0"
-                            min="0"
-                            step="0.01"
-                          />
-                        </td>
-                        <td className="py-3 px-4 border-r font-medium">
-                          {(row.total || 0).toFixed(2)}
                         </td>
                         <td className="py-3 px-4 border-r">
                           <Select value={row.level} onValueChange={(v) => {
@@ -1204,16 +1236,11 @@ export default function ClientDCPage() {
                     ))}
                     {/* Total Row */}
                     <tr className="border-t-2 border-neutral-300 bg-neutral-100 font-semibold">
-                      <td colSpan={4} className="px-3 py-3 text-right">
+                      <td colSpan={5} className="px-3 py-3 text-right">
                         <span className="text-neutral-700">Total:</span>
                       </td>
-                      <td className="px-3 py-3"></td>
                       <td className="px-3 py-3 text-right">
                         {dcProductRows.reduce((sum, row) => sum + (Number(row.strength) || 0), 0)}
-                      </td>
-                      <td className="px-3 py-3"></td>
-                      <td className="px-3 py-3 text-right font-bold text-lg">
-                        {dcProductRows.reduce((sum, row) => sum + (Number(row.total) || 0), 0).toFixed(2)}
                       </td>
                       <td colSpan={2} className="px-3 py-3"></td>
                     </tr>

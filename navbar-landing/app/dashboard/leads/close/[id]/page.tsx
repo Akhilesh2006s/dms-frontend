@@ -74,6 +74,7 @@ export default function CloseLeadPage() {
     isParentRow?: boolean // Flag to identify parent rows that generate child rows
     sameRateForAllClasses?: boolean // Flag to apply same rate to all classes for this spec/level
     selectedSubjects?: string[] // Selected subjects for parent row (multi-select)
+    selectedSpecs?: string[] // Selected specs for parent row (multi-select)
   }>>([])
   const [poPhoto, setPoPhoto] = useState<File | null>(null)
   const [poPhotoUrl, setPoPhotoUrl] = useState<string>('')
@@ -244,6 +245,7 @@ export default function CloseLeadPage() {
               isParentRow: true,
               sameRateForAllClasses: false,
               selectedSubjects: [],
+              selectedSpecs: getProductSpecs(product),
             }
           })
           setProductDetails(parentRows)
@@ -288,6 +290,7 @@ export default function CloseLeadPage() {
       isParentRow: true, // Mark as parent row
       sameRateForAllClasses: false, // Default: not enabled
       selectedSubjects: [], // Selected subjects (multi-select)
+      selectedSpecs: getProductSpecs(product), // Selected specs (multi-select)
     }
     
     setProductDetails([...productDetails, newRow])
@@ -306,8 +309,8 @@ export default function CloseLeadPage() {
       
       const from = parseInt(fromClass) || 1
       const to = parseInt(toClass) || 10
-      const productSpecs = getProductSpecs(parentRow.product)
-      const specsToUse = productSpecs.length > 0 ? productSpecs : ['Regular']
+      const selectedSpecs = parentRow.selectedSpecs || []
+      const specsToUse = selectedSpecs.length > 0 ? selectedSpecs : ['Regular']
       const selectedSubjects = parentRow.selectedSubjects || []
       const hasSubjects = hasProductSubjects(parentRow.product) && selectedSubjects.length > 0
       const subjectsToUse = hasSubjects ? selectedSubjects : [undefined] // Use undefined if no subjects
@@ -316,26 +319,29 @@ export default function CloseLeadPage() {
       const otherParentRows = currentDetails.filter(p => p.isParentRow && p.id !== parentId)
       const otherChildRows = currentDetails.filter(p => !p.isParentRow && !p.id.startsWith(parentId + '_'))
       
-      // Generate rows: for each class in range, create a row for each spec × subject combination
+      // Generate rows: for each class in range, create a row for each spec (one row per class × spec)
       const newRows: Array<typeof parentRow> = []
       for (let classNum = from; classNum <= to; classNum++) {
         specsToUse.forEach((spec, specIdx) => {
-          subjectsToUse.forEach((subject, subjectIdx) => {
-            newRows.push({
-              id: parentId + '_' + classNum + '_' + specIdx + '_' + (subject || 'nosubj') + '_' + subjectIdx,
-              product: parentRow.product,
-              class: classNum.toString(),
-              category: parentRow.category,
-              quantity: 1,
-              strength: 0,
-              price: 0,
-              total: 0,
-              level: parentRow.level,
-              specs: spec,
-              subject: subject, // Include subject if product has subjects
-              isParentRow: false,
-              sameRateForAllClasses: false,
-            })
+          // Create one row per class × spec combination
+          // Combine all selected subjects into a single string or use first subject
+          const subjectDisplay = hasSubjects && selectedSubjects.length > 0 
+            ? selectedSubjects.join(', ') 
+            : undefined
+          newRows.push({
+            id: parentId + '_' + classNum + '_' + specIdx,
+            product: parentRow.product,
+            class: classNum.toString(),
+            category: parentRow.category,
+            quantity: 1,
+            strength: 0,
+            price: 0,
+            total: 0,
+            level: parentRow.level,
+            specs: spec,
+            subject: subjectDisplay, // Combined subjects or undefined
+            isParentRow: false,
+            sameRateForAllClasses: false,
           })
         })
       }
@@ -358,8 +364,8 @@ export default function CloseLeadPage() {
         updated.total = (Number(updated.strength) || 0) * (Number(updated.price) || 0)
         
         // If this is a child row and sameRateForAllClasses is enabled for this product/spec/level combo
-        // Only apply to PRICE, not strength (strength remains independent per class)
-        if (!rowToUpdate.isParentRow && field === 'price') {
+        // Apply to both PRICE and STRENGTH for all classes
+        if (!rowToUpdate.isParentRow && (field === 'price' || field === 'strength')) {
           const parentRow = currentDetails.find(p => 
             p.isParentRow && 
             p.product === rowToUpdate.product &&
@@ -367,18 +373,20 @@ export default function CloseLeadPage() {
           )
           
           if (parentRow?.sameRateForAllClasses) {
-            // Update price for all rows with same product, spec, level, and subject
-            // But keep strength independent for each row
+            // Update price or strength for all rows with same product, class, and level
+            // This applies the same value across all specs for that class
             return currentDetails.map(p => {
               if (!p.isParentRow && 
                   p.product === updated.product && 
-                  p.specs === updated.specs && 
-                  p.level === updated.level &&
-                  p.subject === updated.subject) { // Also match subject
+                  p.class === updated.class && 
+                  p.level === updated.level) {
+                const newStrength = field === 'strength' ? value : p.strength
+                const newPrice = field === 'price' ? value : p.price
                 return {
                   ...p,
-                  price: value, // Apply same price
-                  total: (Number(p.strength) || 0) * (Number(value) || 0) // Recalculate total with existing strength
+                  strength: newStrength, // Apply same strength to all specs of this class
+                  price: newPrice, // Apply same price to all specs of this class
+                  total: (Number(newStrength) || 0) * (Number(newPrice) || 0) // Recalculate total
                 }
               }
               if (p.id === id) return updated
@@ -386,11 +394,10 @@ export default function CloseLeadPage() {
             })
           }
         }
-        // For strength, always update only the specific row (never apply to all)
       }
       
-      // If From/To class or selectedSubjects changes on a parent row, regenerate all child rows
-      if (rowToUpdate.isParentRow && (field === 'fromClass' || field === 'toClass' || field === 'selectedSubjects')) {
+      // If From/To class or selectedSubjects or selectedSpecs changes on a parent row, regenerate all child rows
+      if (rowToUpdate.isParentRow && (field === 'fromClass' || field === 'toClass' || field === 'selectedSubjects' || field === 'selectedSpecs')) {
         setTimeout(() => {
           generateRowsFromRange(id, updated.fromClass || '1', updated.toClass || '10')
         }, 0)
@@ -428,10 +435,10 @@ export default function CloseLeadPage() {
     const file = e.target.files?.[0]
     if (!file) return
     
-    // Validate file type - allow images and PDFs
-    const isValidType = file.type.startsWith('image/') || file.type === 'application/pdf'
+    // Validate file type - only allow PDFs
+    const isValidType = file.type === 'application/pdf'
     if (!isValidType) {
-      toast.error('Please upload an image file (JPG, PNG) or PDF')
+      toast.error('Please upload a PDF file only')
       return
     }
     
@@ -485,9 +492,21 @@ export default function CloseLeadPage() {
     }
     
     // Validate product details (excluding parent rows)
-    const invalidProducts = actualProductDetails.filter(p => !p.product || !p.strength || !p.price)
+    const invalidProducts = actualProductDetails.filter(p => !p.product || !p.strength)
     if (invalidProducts.length > 0) {
-      toast.error('Please fill in Product, Strength, and Price for all products')
+      toast.error('Please fill in Product and Strength for all products')
+      return
+    }
+    
+    // Validate delivery date is required
+    if (!form.delivery_date || form.delivery_date.trim() === '') {
+      toast.error('Delivery date is required')
+      return
+    }
+    
+    // Validate PO document is required
+    if (!poPhotoUrl || poPhotoUrl.trim() === '') {
+      toast.error('PO document is required. Please upload a PDF file.')
       return
     }
     
@@ -806,12 +825,13 @@ export default function CloseLeadPage() {
 
           {/* Delivery Date */}
           <div>
-            <Label className="text-sm font-semibold text-neutral-700">Delivery Date</Label>
+            <Label className="text-sm font-semibold text-neutral-700">Delivery Date *</Label>
             <Input
               type="date"
               value={form.delivery_date}
               onChange={(e) => setForm({ ...form, delivery_date: e.target.value })}
               className="mt-1"
+              required
             />
           </div>
 
@@ -833,17 +853,13 @@ export default function CloseLeadPage() {
 
           {/* PO Document Upload */}
           <div className="pt-4 border-t">
-            <Label className="text-sm font-semibold text-neutral-700">PO Document</Label>
+            <Label className="text-sm font-semibold text-neutral-700">PO Document *</Label>
             <div className="mt-1 space-y-2">
               {poPhotoUrl ? (
                 <div className="flex items-center gap-2">
-                  {poPhotoUrl.toLowerCase().endsWith('.pdf') ? (
-                    <div className="h-20 w-20 flex items-center justify-center bg-red-100 rounded border">
-                      <span className="text-xs font-semibold text-red-700">PDF</span>
-                    </div>
-                  ) : (
-                    <img src={poPhotoUrl} alt="PO" className="h-20 w-20 object-cover rounded border" />
-                  )}
+                  <div className="h-20 w-20 flex items-center justify-center bg-red-100 rounded border">
+                    <span className="text-xs font-semibold text-red-700">PDF</span>
+                  </div>
                   <div className="flex flex-col gap-2">
                     <a
                       href={poPhotoUrl}
@@ -871,12 +887,13 @@ export default function CloseLeadPage() {
                 <div>
                   <Input
                     type="file"
-                    accept="image/*,application/pdf"
+                    accept="application/pdf"
                     onChange={handlePOPhotoUpload}
                     disabled={uploadingPO}
                     className="mt-1"
+                    required
                   />
-                  <p className="text-xs text-neutral-500 mt-1">Accepted: JPG, PNG, PDF (max 5MB)</p>
+                  <p className="text-xs text-neutral-500 mt-1">Accepted: PDF only (max 5MB)</p>
                   {uploadingPO && <p className="text-xs text-neutral-500 mt-1">Uploading...</p>}
                 </div>
               )}
@@ -981,6 +998,8 @@ export default function CloseLeadPage() {
                       const productSubjects = getProductSubjects(pd.product)
                       const hasSubjects = hasProductSubjects(pd.product)
                       const selectedSubjects = pd.selectedSubjects || []
+                      const productSpecs = getProductSpecs(pd.product)
+                      const selectedSpecs = pd.selectedSpecs || productSpecs
                       
                       return (
                         <div key={pd.id} className="space-y-2 p-3 border rounded bg-neutral-50">
@@ -1025,7 +1044,7 @@ export default function CloseLeadPage() {
                                 onCheckedChange={(checked) => updateProductDetail(pd.id, 'sameRateForAllClasses', checked)}
                               />
                               <Label htmlFor={`same-rate-${pd.id}`} className="text-xs cursor-pointer">
-                                Same rate for all classes
+                                Same rate & strength for all classes
                               </Label>
                             </div>
                             <Button
@@ -1044,6 +1063,48 @@ export default function CloseLeadPage() {
                               <X className="w-4 h-4" />
                             </Button>
                           </div>
+                          
+                          {/* Specs Multi-Select */}
+                          {productSpecs.length > 0 && (
+                            <div className="mt-2 pt-2 border-t">
+                              <Label className="text-xs font-semibold mb-2 block">Select Specs:</Label>
+                              <div className="flex flex-wrap gap-2">
+                                {productSpecs.map((spec) => (
+                                  <div key={spec} className="flex items-center space-x-1">
+                                    <Checkbox
+                                      id={`spec-${pd.id}-${spec}`}
+                                      checked={selectedSpecs.includes(spec)}
+                                      onCheckedChange={(checked) => {
+                                        const newSpecs = checked
+                                          ? [...selectedSpecs, spec]
+                                          : selectedSpecs.filter(s => s !== spec)
+                                        // Update parent row with new specs
+                                        setProductDetails(currentDetails => {
+                                          const updated = currentDetails.map(p => 
+                                            p.id === pd.id ? { ...p, selectedSpecs: newSpecs } : p
+                                          )
+                                          // Regenerate rows after update
+                                          setTimeout(() => {
+                                            const updatedParent = updated.find(p => p.id === pd.id)
+                                            if (updatedParent) {
+                                              generateRowsFromRange(pd.id, updatedParent.fromClass || '1', updatedParent.toClass || '10')
+                                            }
+                                          }, 0)
+                                          return updated
+                                        })
+                                      }}
+                                    />
+                                    <Label 
+                                      htmlFor={`spec-${pd.id}-${spec}`} 
+                                      className="text-xs cursor-pointer"
+                                    >
+                                      {spec}
+                                    </Label>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                           
                           {/* Subjects Multi-Select (only if product has subjects) */}
                           {hasSubjects && productSubjects.length > 0 && (
@@ -1107,8 +1168,6 @@ export default function CloseLeadPage() {
                         <th className="px-3 py-2 text-left">Specs</th>
                         <th className="px-3 py-2 text-left">Subject</th>
                         <th className="px-3 py-2 text-left">Strength</th>
-                        <th className="px-3 py-2 text-left">Price</th>
-                        <th className="px-3 py-2 text-left">Total</th>
                         <th className="px-3 py-2 text-left">Level</th>
                         <th className="px-3 py-2 text-left">Action</th>
                       </tr>
@@ -1145,17 +1204,6 @@ export default function CloseLeadPage() {
                             />
                           </td>
                           <td className="px-3 py-2">
-                            <Input
-                              type="number"
-                              value={pd.price}
-                              onChange={(e) => updateProductDetail(pd.id, 'price', Number(e.target.value))}
-                              className="w-24 h-8"
-                              min="0"
-                              placeholder="0"
-                            />
-                          </td>
-                          <td className="px-3 py-2 font-medium">{pd.total.toFixed(2)}</td>
-                          <td className="px-3 py-2">
                             <Select value={pd.level} onValueChange={(v) => updateProductDetail(pd.id, 'level', v)}>
                               <SelectTrigger className="w-20 h-8">
                                 <SelectValue />
@@ -1181,20 +1229,13 @@ export default function CloseLeadPage() {
                       ))}
                       {/* Total Row */}
                       <tr className="border-t-2 border-neutral-300 bg-neutral-100 font-semibold">
-                        <td colSpan={4} className="px-3 py-3 text-right">
+                        <td colSpan={5} className="px-3 py-3 text-right">
                           <span className="text-neutral-700">Total:</span>
                         </td>
                         <td className="px-3 py-3 text-right">
                           {productDetails
                             .filter(pd => !pd.isParentRow)
                             .reduce((sum, pd) => sum + (Number(pd.strength) || 0), 0)}
-                        </td>
-                        <td className="px-3 py-3"></td>
-                        <td className="px-3 py-3 text-right font-bold text-lg">
-                          {productDetails
-                            .filter(pd => !pd.isParentRow)
-                            .reduce((sum, pd) => sum + (Number(pd.total) || 0), 0)
-                            .toFixed(2)}
                         </td>
                         <td colSpan={2} className="px-3 py-3"></td>
                       </tr>

@@ -14,6 +14,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { apiService } from '../../services/api';
@@ -36,6 +37,7 @@ type ProductDetail = {
   isParentRow?: boolean;
   sameRateForAllClasses?: boolean;
   selectedSubjects?: string[];
+  selectedSpecs?: string[];
 };
 
 export default function LeadCloseScreen({ navigation, route }: any) {
@@ -223,6 +225,7 @@ export default function LeadCloseScreen({ navigation, route }: any) {
     }
     
     const parentId = Date.now().toString() + Math.random().toString();
+    const productSpecs = getProductSpecs(product);
     const newRow: ProductDetail = {
       id: parentId,
       product: product,
@@ -239,6 +242,7 @@ export default function LeadCloseScreen({ navigation, route }: any) {
       isParentRow: true,
       sameRateForAllClasses: false,
       selectedSubjects: [],
+      selectedSpecs: productSpecs.length > 0 ? productSpecs : ['Regular'],
     };
     
     setProductDetails([...productDetails, newRow]);
@@ -255,8 +259,8 @@ export default function LeadCloseScreen({ navigation, route }: any) {
       
       const from = parseInt(fromClass) || 1;
       const to = parseInt(toClass) || 10;
-      const productSpecs = getProductSpecs(parentRow.product);
-      const specsToUse = productSpecs.length > 0 ? productSpecs : ['Regular'];
+      const selectedSpecs = parentRow.selectedSpecs || [];
+      const specsToUse = selectedSpecs.length > 0 ? selectedSpecs : ['Regular'];
       const selectedSubjects = parentRow.selectedSubjects || [];
       const hasSubjects = hasProductSubjects(parentRow.product) && selectedSubjects.length > 0;
       const subjectsToUse = hasSubjects ? selectedSubjects : [undefined];
@@ -267,22 +271,25 @@ export default function LeadCloseScreen({ navigation, route }: any) {
       const newRows: ProductDetail[] = [];
       for (let classNum = from; classNum <= to; classNum++) {
         specsToUse.forEach((spec, specIdx) => {
-          subjectsToUse.forEach((subject, subjectIdx) => {
-            newRows.push({
-              id: parentId + '_' + classNum + '_' + specIdx + '_' + (subject || 'nosubj') + '_' + subjectIdx,
-              product: parentRow.product,
-              class: classNum.toString(),
-              category: parentRow.category,
-              quantity: 1,
-              strength: 0,
-              price: 0,
-              total: 0,
-              level: parentRow.level,
-              specs: spec,
-              subject: subject,
-              isParentRow: false,
-              sameRateForAllClasses: false,
-            });
+          // Create one row per class × spec combination
+          // Combine all selected subjects into a single string or use first subject
+          const subjectDisplay = hasSubjects && selectedSubjects.length > 0 
+            ? selectedSubjects.join(', ') 
+            : undefined;
+          newRows.push({
+            id: parentId + '_' + classNum + '_' + specIdx,
+            product: parentRow.product,
+            class: classNum.toString(),
+            category: parentRow.category,
+            quantity: 1,
+            strength: 0,
+            price: 0,
+            total: 0,
+            level: parentRow.level,
+            specs: spec,
+            subject: subjectDisplay,
+            isParentRow: false,
+            sameRateForAllClasses: false,
           });
         });
       }
@@ -303,7 +310,7 @@ export default function LeadCloseScreen({ navigation, route }: any) {
       const updated = { ...rowToUpdate, [field]: value };
       
       // Handle From/To class changes on parent rows - regenerate rows immediately
-      if (rowToUpdate.isParentRow && (field === 'fromClass' || field === 'toClass' || field === 'selectedSubjects')) {
+      if (rowToUpdate.isParentRow && (field === 'fromClass' || field === 'toClass' || field === 'selectedSubjects' || field === 'selectedSpecs')) {
         // Update the parent row first
         const updatedDetails = currentDetails.map(p => p.id === id ? updated : p);
         
@@ -321,7 +328,9 @@ export default function LeadCloseScreen({ navigation, route }: any) {
       if (field === 'price' || field === 'strength') {
         updated.total = (Number(updated.strength) || 0) * (Number(updated.price) || 0);
         
-        if (!rowToUpdate.isParentRow && field === 'price') {
+        // If this is a child row and sameRateForAllClasses is enabled for this product/spec/level combo
+        // Apply to both PRICE and STRENGTH for all classes
+        if (!rowToUpdate.isParentRow && (field === 'price' || field === 'strength')) {
           const parentRow = currentDetails.find(p => 
             p.isParentRow && 
             p.product === rowToUpdate.product &&
@@ -329,16 +338,20 @@ export default function LeadCloseScreen({ navigation, route }: any) {
           );
           
           if (parentRow?.sameRateForAllClasses) {
+            // Update price or strength for all rows with same product, class, and level
+            // This applies the same value across all specs for that class
             return currentDetails.map(p => {
               if (!p.isParentRow && 
                   p.product === updated.product && 
-                  p.specs === updated.specs && 
-                  p.level === updated.level &&
-                  p.subject === updated.subject) {
+                  p.class === updated.class && 
+                  p.level === updated.level) {
+                const newStrength = field === 'strength' ? value : p.strength;
+                const newPrice = field === 'price' ? value : p.price;
                 return {
                   ...p,
-                  price: value,
-                  total: (Number(p.strength) || 0) * (Number(value) || 0)
+                  strength: newStrength, // Apply same strength to all specs of this class
+                  price: newPrice, // Apply same price to all specs of this class
+                  total: (Number(newStrength) || 0) * (Number(newPrice) || 0) // Recalculate total
                 };
               }
               if (p.id === id) return updated;
@@ -366,34 +379,48 @@ export default function LeadCloseScreen({ navigation, route }: any) {
   };
 
   const pickPOPhoto = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 1,
-      base64: true,
-    });
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/pdf',
+        copyToCacheDirectory: true,
+      });
 
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      setUploadingPO(true);
-      try {
-        const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
-        // Upload to backend
-        const formData = new FormData();
-        formData.append('poPhoto', {
-          uri: result.assets[0].uri,
-          type: 'image/jpeg',
-          name: 'po.jpg',
-        } as any);
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const file = result.assets[0];
         
-        // For now, store base64 - backend should handle upload
-        setPoPhotoUrl(base64Image);
-        Alert.alert('Success', 'PO photo selected');
-      } catch (err: any) {
-        Alert.alert('Error', err.message || 'Failed to process PO photo');
-      } finally {
-        setUploadingPO(false);
+        // Validate file type - only PDFs
+        if (!file.mimeType || file.mimeType !== 'application/pdf') {
+          Alert.alert('Error', 'Please upload a PDF file only');
+          return;
+        }
+        
+        // Validate file size (max 5MB)
+        if (file.size && file.size > 5 * 1024 * 1024) {
+          Alert.alert('Error', 'File size must be less than 5MB');
+          return;
+        }
+        
+        setUploadingPO(true);
+        try {
+          // Upload to backend
+          const formData = new FormData();
+          formData.append('poPhoto', {
+            uri: file.uri,
+            type: 'application/pdf',
+            name: file.name || 'po.pdf',
+          } as any);
+          
+          // Store the URI for display
+          setPoPhotoUrl(file.uri);
+          Alert.alert('Success', 'PO document selected');
+        } catch (err: any) {
+          Alert.alert('Error', err.message || 'Failed to process PO document');
+        } finally {
+          setUploadingPO(false);
+        }
       }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to pick document');
     }
   };
 
@@ -410,14 +437,19 @@ export default function LeadCloseScreen({ navigation, route }: any) {
       return;
     }
     
-    const invalidProducts = actualProductDetails.filter(p => !p.product || !p.strength || !p.price);
+    const invalidProducts = actualProductDetails.filter(p => !p.product || !p.strength);
     if (invalidProducts.length > 0) {
-      Alert.alert('Error', 'Please fill in Product, Strength, and Price for all products');
+      Alert.alert('Error', 'Please fill in Product and Strength for all products');
       return;
     }
     
     if (!form.delivery_date?.trim()) {
       Alert.alert('Error', 'Delivery date is required');
+      return;
+    }
+    
+    if (!poPhotoUrl || poPhotoUrl.trim() === '') {
+      Alert.alert('Error', 'PO document is required. Please upload a PDF file.');
       return;
     }
     
@@ -551,17 +583,19 @@ export default function LeadCloseScreen({ navigation, route }: any) {
         </View>
 
         <View style={styles.fieldContainer}>
-          <Text style={styles.label}>PO Document</Text>
+          <Text style={styles.label}>PO Document *</Text>
           {poPhotoUrl ? (
             <View style={styles.poPhotoContainer}>
-              <Image source={{ uri: poPhotoUrl }} style={styles.poPhoto} />
+              <View style={[styles.poPhoto, { backgroundColor: colors.errorLight, justifyContent: 'center', alignItems: 'center' }]}>
+                <Text style={{ fontSize: 24, fontWeight: 'bold', color: colors.error }}>PDF</Text>
+              </View>
               <TouchableOpacity style={styles.removePhotoButton} onPress={() => setPoPhotoUrl('')}>
                 <Text style={styles.removePhotoText}>Remove</Text>
               </TouchableOpacity>
             </View>
           ) : (
             <TouchableOpacity style={styles.uploadButton} onPress={pickPOPhoto} disabled={uploadingPO}>
-              <Text style={styles.uploadButtonText}>{uploadingPO ? 'Uploading...' : '📷 Upload PO Photo'}</Text>
+              <Text style={styles.uploadButtonText}>{uploadingPO ? 'Uploading...' : '📄 Upload PO Document (PDF)'}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -643,6 +677,8 @@ export default function LeadCloseScreen({ navigation, route }: any) {
                       const productSubjects = getProductSubjects(pd.product);
                       const hasSubjects = hasProductSubjects(pd.product);
                       const selectedSubjects = pd.selectedSubjects || [];
+                      const productSpecs = getProductSpecs(pd.product);
+                      const selectedSpecs = pd.selectedSpecs || productSpecs;
                       
                       return (
                         <View key={pd.id} style={styles.parentRowContainer}>
@@ -680,6 +716,42 @@ export default function LeadCloseScreen({ navigation, route }: any) {
                                 <Text style={styles.dropdownButtonText}>{pd.toClass || '10'}</Text>
                                 <Text style={styles.dropdownArrow}>▼</Text>
                               </TouchableOpacity>
+                            </View>
+                          </View>
+
+                          <View style={styles.subjectsContainer}>
+                            <Text style={styles.subjectsLabel}>Select Specs:</Text>
+                            <View style={styles.checkboxList}>
+                              {productSpecs && productSpecs.length > 0 ? (
+                                productSpecs.map((spec) => {
+                                  const isSelected = selectedSpecs.includes(spec);
+                                  return (
+                                    <TouchableOpacity
+                                      key={spec}
+                                      style={styles.checkboxItem}
+                                      onPress={() => {
+                                        const newSpecs = isSelected
+                                          ? selectedSpecs.filter(s => s !== spec)
+                                          : [...selectedSpecs, spec];
+                                        updateProductDetail(pd.id, 'selectedSpecs', newSpecs);
+                                      }}
+                                      activeOpacity={0.7}
+                                    >
+                                      <View style={[
+                                        styles.checkbox,
+                                        isSelected && styles.checkboxSelected
+                                      ]}>
+                                        {isSelected && (
+                                          <Text style={styles.checkboxCheck}>✓</Text>
+                                        )}
+                                      </View>
+                                      <Text style={styles.checkboxLabel}>{spec}</Text>
+                                    </TouchableOpacity>
+                                  );
+                                })
+                              ) : (
+                                <Text style={styles.emptyText}>No specs available</Text>
+                              )}
                             </View>
                           </View>
 
@@ -731,8 +803,6 @@ export default function LeadCloseScreen({ navigation, route }: any) {
                         <Text style={[styles.tableHeaderText, styles.colSpecs]}>Specs</Text>
                         <Text style={[styles.tableHeaderText, styles.colSubject]}>Subject</Text>
                         <Text style={[styles.tableHeaderText, styles.colStrength]}>Strength</Text>
-                        <Text style={[styles.tableHeaderText, styles.colPrice]}>Price</Text>
-                        <Text style={[styles.tableHeaderText, styles.colTotal]}>Total</Text>
                         <Text style={[styles.tableHeaderText, styles.colLevel]}>Level</Text>
                         <Text style={[styles.tableHeaderText, styles.colAction]}>Action</Text>
                       </View>
@@ -760,14 +830,6 @@ export default function LeadCloseScreen({ navigation, route }: any) {
                             keyboardType="numeric"
                             placeholder="0"
                           />
-                          <TextInput
-                            style={[styles.tableInput, styles.colPrice]}
-                            value={pd.price.toString()}
-                            onChangeText={(text) => updateProductDetail(pd.id, 'price', Number(text) || 0)}
-                            keyboardType="numeric"
-                            placeholder="0"
-                          />
-                          <Text style={[styles.tableCell, styles.colTotal]}>{pd.total.toFixed(2)}</Text>
                           <View style={[styles.tableCell, styles.colLevel]}>
                             <Picker
                               selectedValue={pd.level}
@@ -791,12 +853,6 @@ export default function LeadCloseScreen({ navigation, route }: any) {
                           <Text style={styles.tableFooterLabel}>Total Strength:</Text>
                           <Text style={styles.tableFooterValue}>
                             {actualProductDetails.reduce((sum, pd) => sum + (Number(pd.strength) || 0), 0)}
-                          </Text>
-                        </View>
-                        <View style={styles.tableFooterRow}>
-                          <Text style={styles.tableFooterLabel}>Total Amount:</Text>
-                          <Text style={styles.tableFooterValue}>
-                            ₹{actualProductDetails.reduce((sum, pd) => sum + (Number(pd.total) || 0), 0).toFixed(2)}
                           </Text>
                         </View>
                       </View>
@@ -986,6 +1042,39 @@ const styles = StyleSheet.create({
   subjectChipSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
   subjectChipText: { ...typography.body.small, color: colors.textPrimary },
   subjectChipTextSelected: { color: colors.textLight },
+  checkboxList: { flexDirection: 'column', marginTop: 8, paddingVertical: 4 },
+  checkboxItem: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    marginBottom: 12, 
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+  },
+  checkbox: { 
+    width: 24, 
+    height: 24, 
+    borderWidth: 2, 
+    borderColor: '#6B7280', 
+    borderRadius: 4, 
+    backgroundColor: '#FFFFFF', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginRight: 12,
+  },
+  checkboxSelected: { 
+    backgroundColor: colors.primary, 
+    borderColor: colors.primary,
+  },
+  checkboxCheck: { 
+    fontSize: 14, 
+    color: colors.textLight, 
+    fontWeight: 'bold',
+  },
+  checkboxLabel: { 
+    ...typography.body.medium, 
+    color: colors.textPrimary, 
+    flex: 1,
+  },
   detailsTableContainer: { marginBottom: 20 },
   tableWrapper: { minWidth: 1000 },
   tableHeader: { flexDirection: 'row', backgroundColor: colors.background, padding: 8, borderBottomWidth: 2, borderBottomColor: colors.border, alignItems: 'center' },

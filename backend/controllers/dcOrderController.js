@@ -359,6 +359,60 @@ const update = async (req, res) => {
       }
     });
     
+    // Generate dc_code if it doesn't exist (pre-save hook doesn't run with findByIdAndUpdate)
+    if (!item.dc_code) {
+      try {
+        const mongoose = require('mongoose');
+        const User = mongoose.model('User');
+        let creator = null;
+        
+        // Get the creator (executive) to fetch their cluster
+        if (item.created_by && typeof item.created_by === 'object' && item.created_by.cluster) {
+          creator = item.created_by;
+        } else if (item.created_by) {
+          creator = await User.findById(item.created_by).select('cluster role');
+        }
+        
+        // Only generate cluster-based code for Executive role
+        if (creator && creator.role === 'Executive' && creator.cluster && creator.cluster.trim()) {
+          const cluster = creator.cluster.trim();
+          
+          if (cluster.length < 2) {
+            updateData.dc_code = `DC-${Date.now().toString().slice(-6)}`;
+          } else {
+            const prefix = cluster.substring(0, 2).toLowerCase();
+            const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const prefixPattern = new RegExp(`^${escapedPrefix}\\d{3}$`, 'i');
+            const existingOrders = await DcOrder.find({
+              dc_code: prefixPattern
+            }).select('dc_code').sort({ dc_code: -1 }).limit(1);
+            
+            let nextNumber = 1;
+            if (existingOrders.length > 0 && existingOrders[0].dc_code) {
+              const lastCode = existingOrders[0].dc_code;
+              const lastNumber = parseInt(lastCode.substring(2), 10);
+              if (!isNaN(lastNumber) && lastNumber < 999) {
+                nextNumber = lastNumber + 1;
+              } else {
+                updateData.dc_code = `DC-${Date.now().toString().slice(-6)}`;
+              }
+            }
+            
+            if (!updateData.dc_code) {
+              updateData.dc_code = `${prefix}${String(nextNumber).padStart(3, '0')}`;
+            }
+          }
+        } else {
+          updateData.dc_code = `DC-${Date.now().toString().slice(-6)}`;
+        }
+        
+        console.log('✅ Generated dc_code for DcOrder:', updateData.dc_code);
+      } catch (codeError) {
+        console.error('Error generating dc_code:', codeError);
+        updateData.dc_code = `DC-${Date.now().toString().slice(-6)}`;
+      }
+    }
+    
     // Build the MongoDB update query
     const mongoUpdate = {};
     
