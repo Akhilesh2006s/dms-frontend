@@ -29,6 +29,8 @@ type Lead = {
   createdAt?: string
   remarks?: string
   school_type?: string
+  dc_code?: string
+  school_code?: string
 }
 
 export default function FollowupLeadsPage() {
@@ -135,6 +137,7 @@ export default function FollowupLeadsPage() {
           remarks: order.remarks,
           school_type: order.school_type,
           priority: order.priority || order.lead_status || 'Hot',
+          dc_code: order.dc_code,
         }))
       
       // Combine and filter followup leads
@@ -531,9 +534,16 @@ export default function FollowupLeadsPage() {
                   {/* Header with School Name and Location */}
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <h3 className="text-lg font-bold text-orange-600 mb-1">
-                        {lead.school_name || 'Unnamed School'}
-                      </h3>
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="text-lg font-bold text-orange-600">
+                          {lead.school_name || 'Unnamed School'}
+                        </h3>
+                        {(lead.dc_code || lead.school_code) && (
+                          <span className="px-2 py-0.5 text-xs font-semibold bg-blue-100 text-blue-700 rounded border border-blue-200">
+                            {lead.dc_code || lead.school_code}
+                          </span>
+                        )}
+                      </div>
                       {lead.location && (
                         <div className="flex items-center gap-1 text-sm text-neutral-600">
                           <MapPin className="w-4 h-4 text-orange-500" />

@@ -498,13 +498,22 @@ export default function ClientDCPage() {
           
           const currentUser = getCurrentUser()
           
-          console.log('🔄 Updating DcOrder status to dc_requested with request data:', dcOrderId)
+          // Check if this is an edit (request already submitted before)
+          const dcOrderStatus = typeof selectedDC.dcOrderId === 'object' 
+            ? selectedDC.dcOrderId?.status 
+            : null
+          const isEdit = dcOrderStatus === 'dc_requested' || 
+                        dcOrderStatus === 'dc_accepted' || 
+                        dcOrderStatus === 'dc_approved' || 
+                        dcOrderStatus === 'dc_sent_to_senior'
+          
+          console.log('🔄 Updating DcOrder status:', { dcOrderId, isEdit, currentStatus: dcOrderStatus })
           
           // Store the request data in DcOrder so Admin/Coordinator can see it in Closed Sales
           const updateResult = await apiRequest(`/dc-orders/${dcOrderId}`, {
             method: 'PUT',
             body: JSON.stringify({ 
-              status: 'dc_requested',
+              status: isEdit ? 'dc_updated' : 'dc_requested', // Use 'dc_updated' status for edits
               dcRequestData: {
                 // Store product details from the request
                 productDetails: productDetails,
@@ -515,6 +524,9 @@ export default function ClientDCPage() {
                 poPhotoUrl: dcPoPhotoUrl || undefined,
                 // Store timestamp
                 requestedAt: new Date().toISOString(),
+                // Mark as updated if it's an edit
+                isUpdated: isEdit,
+                updatedAt: isEdit ? new Date().toISOString() : undefined,
               }
             }),
           })
@@ -724,8 +736,26 @@ export default function ClientDCPage() {
                             size="sm" 
                             onClick={() => openClientDCDialog(d)}
                           >
-                            <Package className="w-4 h-4 mr-2" />
-                            Request DC
+                            {(() => {
+                              // Check if DC request has been submitted (status indicates it's gone to admin)
+                              const dcOrderStatus = typeof d.dcOrderId === 'object' ? d.dcOrderId?.status : null
+                              const hasRequested = dcOrderStatus === 'dc_requested' || 
+                                                   dcOrderStatus === 'dc_accepted' || 
+                                                   dcOrderStatus === 'dc_approved' || 
+                                                   dcOrderStatus === 'dc_sent_to_senior'
+                              
+                              return hasRequested ? (
+                                <>
+                                  <Pencil className="w-4 h-4 mr-2" />
+                                  Edit Request
+                                </>
+                              ) : (
+                                <>
+                                  <Package className="w-4 h-4 mr-2" />
+                                  Request DC
+                                </>
+                              )
+                            })()}
                           </Button>
                         </TableCell>
                       </TableRow>

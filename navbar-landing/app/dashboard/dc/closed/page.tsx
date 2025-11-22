@@ -144,7 +144,8 @@ export default function ClosedSalesPage() {
           apiRequest<any>(`/dc-orders?status=completed`),
           apiRequest<any>(`/dc-orders?status=saved`),
           apiRequest<any>(`/dc-orders?status=dc_requested`),
-          apiRequest<any>(`/dc-orders?status=dc_accepted`)
+          apiRequest<any>(`/dc-orders?status=dc_accepted`),
+          apiRequest<any>(`/dc-orders?status=dc_updated`)
         ])
         // Extract data array from paginated response or use direct array
         const completedArray = Array.isArray(completedRes) ? completedRes : (completedRes?.data || [])
@@ -168,7 +169,8 @@ export default function ClosedSalesPage() {
           d.lead_status === 'Hot' ||
           d.status === 'hold' ||
           d.status === 'dc_requested' || // Include DC requests from employees
-          d.status === 'dc_accepted') && // Include accepted DC requests (can be updated later)
+          d.status === 'dc_accepted' || // Include accepted DC requests (can be updated later)
+          d.status === 'dc_updated') && // Include updated DC requests
           d.status !== 'dc_approved' && // Exclude approved (already processed)
           d.status !== 'dc_sent_to_senior' // Exclude sent to senior coordinator
         )
@@ -201,21 +203,21 @@ export default function ClosedSalesPage() {
           isLead: true, // Flag to identify this is a lead, not a DcOrder
         }))
         
-        // Filter out closed leads that have a corresponding DcOrder with status 'dc_requested' or 'dc_accepted'
+        // Filter out closed leads that have a corresponding DcOrder with status 'dc_requested', 'dc_accepted', or 'dc_updated'
         // This prevents duplicates where the same school appears twice (once as closed lead with "Raise DC" and once as DcOrder with "Review DC Request")
         const filteredClosedLeads = closedLeadsAsDeals.filter((lead: DcOrder) => {
-          // Check if there's a DcOrder with status 'dc_requested' or 'dc_accepted' for this lead
+          // Check if there's a DcOrder with status 'dc_requested', 'dc_accepted', or 'dc_updated' for this lead
           // Match by school_name and contact_mobile to identify duplicates
           const hasMatchingDcOrder = data.some((dcOrder: any) => {
             const schoolNameMatch = (dcOrder.school_name || '').toLowerCase().trim() === (lead.school_name || '').toLowerCase().trim()
             const mobileMatch = (dcOrder.contact_mobile || '').trim() === (lead.contact_mobile || '').trim()
-            const isDcRequested = dcOrder.status === 'dc_requested' || dcOrder.status === 'dc_accepted'
+            const isDcRequested = dcOrder.status === 'dc_requested' || dcOrder.status === 'dc_accepted' || dcOrder.status === 'dc_updated'
             
             // If school name and mobile match, and the DcOrder has dc_requested or dc_accepted status, exclude the closed lead
             return schoolNameMatch && mobileMatch && isDcRequested
           })
           
-          // Only include the closed lead if there's no matching DcOrder with dc_requested/dc_accepted status
+          // Only include the closed lead if there's no matching DcOrder with dc_requested/dc_accepted/dc_updated status
           return !hasMatchingDcOrder
         })
         
@@ -464,8 +466,8 @@ export default function ClosedSalesPage() {
       } else {
         setSelectedEmployeeId('')
       }
-      // If deal has DC request data (status is 'dc_requested' or 'dc_accepted'), load it
-      if ((fullDeal.status === 'dc_requested' || fullDeal.status === 'dc_accepted') && (fullDeal as any).dcRequestData) {
+      // If deal has DC request data (status is 'dc_requested', 'dc_accepted', or 'dc_updated'), load it
+      if ((fullDeal.status === 'dc_requested' || fullDeal.status === 'dc_accepted' || fullDeal.status === 'dc_updated') && (fullDeal as any).dcRequestData) {
         const dcRequestData = (fullDeal as any).dcRequestData
         console.log('Loading DC request data:', dcRequestData)
         
@@ -1159,7 +1161,16 @@ export default function ClosedSalesPage() {
                   <td className="py-3 px-4 text-slate-700">{d.school_type || '-'}</td>
                   <td className="py-3 px-4 text-slate-700">{d.zone || '-'}</td>
                   <td className="py-3 px-4 text-slate-700">{d.location || d.address?.split(',')[0] || '-'}</td>
-                  <td className="py-3 px-4 text-slate-700 font-medium">{d.school_name || '-'}</td>
+                  <td className="py-3 px-4 text-slate-700 font-medium">
+                    <div className="flex items-center gap-2">
+                      <span>{d.school_name || '-'}</span>
+                      {d.status === 'dc_updated' && (
+                        <span className="px-2 py-0.5 text-xs font-semibold bg-orange-100 text-orange-700 rounded border border-orange-200">
+                          Updated PO
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td className="py-3 px-4 text-slate-700">{d.assigned_to?.name || '-'}</td>
                   <td className="py-3 px-4 text-slate-700">{d.contact_mobile || '-'}</td>
                   <td className="py-3 px-4 text-slate-700 text-xs">{getProductsDisplay(d)}</td>
@@ -1246,7 +1257,10 @@ export default function ClosedSalesPage() {
                           }
                           onClick={() => openRaiseDC(d)}
                         >
-                          {d.status === 'dc_requested' ? 'Raise DC' : d.status === 'dc_accepted' ? 'Update DC' : 'Raise DC'}
+                          {d.status === 'dc_requested' ? 'Raise DC' : 
+                           d.status === 'dc_accepted' ? 'Update DC' : 
+                           d.status === 'dc_updated' ? 'View Updated PO' : 
+                           'Raise DC'}
                         </Button>
                       )}
                       {!isManager && (
@@ -1279,6 +1293,7 @@ export default function ClosedSalesPage() {
               {selectedDeal?.school_name || 'Client'} - {
                 selectedDeal?.status === 'dc_requested' ? 'Raise DC' : 
                 selectedDeal?.status === 'dc_accepted' ? 'Update DC' : 
+                selectedDeal?.status === 'dc_updated' ? 'Updated PO' : 
                 'Raise DC'
               }
             </DialogTitle>
@@ -1287,6 +1302,8 @@ export default function ClosedSalesPage() {
                 ? 'Review DC request from employee. You can accept it (to update later) or send to Senior Coordinator.'
                 : selectedDeal?.status === 'dc_accepted'
                 ? 'Update DC details. You can save changes or submit to Senior Coordinator.'
+                : selectedDeal?.status === 'dc_updated'
+                ? 'Review updated PO request. Click "Approve" to accept the changes or "Send to Senior Coordinator" to forward it.'
                 : canRequestDC 
                   ? 'Fill in DC details and submit request for Coordinator/Admin approval'
                   : 'Fill in DC details and submit to Manager'}
@@ -1759,7 +1776,7 @@ export default function ClosedSalesPage() {
                 </div>
                 <div className="flex gap-2">
                   {/* Employee: Show "Raise DC" button to request DC */}
-                  {canRequestDC && selectedDeal?.status !== 'dc_requested' && selectedDeal?.status !== 'dc_accepted' && (
+                  {canRequestDC && selectedDeal?.status !== 'dc_requested' && selectedDeal?.status !== 'dc_accepted' && selectedDeal?.status !== 'dc_updated' && (
                   <Button
                       variant="destructive"
                       onClick={handleRequestDC}
@@ -1780,6 +1797,27 @@ export default function ClosedSalesPage() {
                       >
                         {saving ? 'Processing...' : 'Accept'}
                   </Button>
+                      <Button
+                        className="bg-slate-700 hover:bg-slate-800 text-white shadow-sm"
+                        onClick={handleSendToSeniorCoordinator}
+                        disabled={submitting || saving}
+                      >
+                        {submitting ? 'Sending...' : 'Send to Senior Coordinator'}
+                      </Button>
+                    </>
+                  )}
+                  
+                  {/* Coordinator/Admin: Show "Approve" button for updated DC requests */}
+                  {canApproveDC && selectedDeal?.status === 'dc_updated' && (
+                    <>
+                      <Button
+                        variant="outline"
+                        className="border-green-600 text-green-700 hover:bg-green-50 shadow-sm"
+                        onClick={handleAcceptDC}
+                        disabled={saving || submitting}
+                      >
+                        {saving ? 'Processing...' : 'Approve'}
+                      </Button>
                       <Button
                         className="bg-slate-700 hover:bg-slate-800 text-white shadow-sm"
                         onClick={handleSendToSeniorCoordinator}
@@ -1812,7 +1850,7 @@ export default function ClosedSalesPage() {
                   )}
                   
                   {/* Coordinator/Admin: Show "Accept" and "Send to Senior Coordinator" buttons for other deals (not requested yet) */}
-                  {canApproveDC && selectedDeal?.status !== 'dc_requested' && selectedDeal?.status !== 'dc_accepted' && (
+                  {canApproveDC && selectedDeal?.status !== 'dc_requested' && selectedDeal?.status !== 'dc_accepted' && selectedDeal?.status !== 'dc_updated' && (
                     <>
                   <Button
                     variant="outline"

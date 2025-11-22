@@ -42,9 +42,20 @@ export default function NewEmployeePage() {
     setSubmitting(true)
     setError(null)
     try {
+      // Validate cluster for Executive role
+      if (form.role === 'Executive' && !form.cluster?.trim()) {
+        setError('Cluster is required for Executive role')
+        setSubmitting(false)
+        return
+      }
+      
       const payload: any = {
         ...form,
         name: `${form.firstName} ${form.lastName}`.trim() || form.firstName || form.lastName || 'Executive',
+      }
+      // Only include cluster if role is Executive
+      if (form.role !== 'Executive') {
+        delete payload.cluster
       }
       await apiRequest('/employees/create', {
         method: 'POST',
@@ -104,10 +115,12 @@ export default function NewEmployeePage() {
             <Label>Zone *</Label>
             <Input className="bg-white text-neutral-900" name="zone" value={form.zone} onChange={onChange} placeholder="Enter Employee Zone" required />
           </div>
-          <div>
-            <Label>Cluster *</Label>
-            <Input className="bg-white text-neutral-900" name="cluster" value={form.cluster} onChange={onChange} placeholder="Enter Employee Cluster" required />
-          </div>
+          {form.role === 'Executive' && (
+            <div>
+              <Label>Cluster *</Label>
+              <Input className="bg-white text-neutral-900" name="cluster" value={form.cluster} onChange={onChange} placeholder="Enter Employee Cluster" required />
+            </div>
+          )}
           <div>
             <Label>District</Label>
             <Input className="bg-white text-neutral-900" name="district" value={form.district} onChange={onChange} placeholder="Enter Employee District" />
