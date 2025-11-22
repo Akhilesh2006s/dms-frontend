@@ -68,7 +68,7 @@ const list = async (req, res) => {
     // Query with pagination - optimized for performance
     // Only populate essential fields, skip updateHistory populate for list view
     const query = DcOrder.find(filter)
-      .select('school_name contact_person contact_mobile zone status follow_up_date location strength createdAt remarks school_type priority lead_status assigned_to created_by') // Only select needed fields
+      .select('school_name contact_person contact_mobile zone status follow_up_date location strength createdAt remarks school_type priority lead_status assigned_to created_by dc_code') // Only select needed fields
       .populate('assigned_to', 'name email') // Only populate assigned_to for list view
       .sort({ createdAt: -1 })
       .skip(skip)

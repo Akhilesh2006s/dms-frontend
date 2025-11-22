@@ -55,6 +55,23 @@ const createEmployee = async (req, res) => {
     if (!body.name && body.firstName) {
       body.name = `${body.firstName} ${body.lastName || ''}`.trim();
     }
+    
+    // Validate cluster for Executive role
+    if (body.role === 'Executive') {
+      if (!body.cluster || !body.cluster.trim()) {
+        return res.status(400).json({ message: 'Cluster is required for Executive role' });
+      }
+      // Check cluster uniqueness
+      const existingEmployee = await User.findOne({ 
+        cluster: body.cluster.trim(),
+        role: 'Executive',
+        isActive: true 
+      });
+      if (existingEmployee) {
+        return res.status(400).json({ message: 'Cluster value must be unique. This cluster is already assigned to another Executive.' });
+      }
+    }
+    
     const employee = await User.create(body);
     const employeeData = await User.findById(employee._id).select('-password');
     res.status(201).json(employeeData);
@@ -72,6 +89,25 @@ const updateEmployee = async (req, res) => {
 
     if (!employee) {
       return res.status(404).json({ message: 'Employee not found' });
+    }
+
+    // Validate cluster for Executive role if role is Executive or being changed to Executive
+    const willBeExecutive = req.body.role === 'Executive' || (employee.role === 'Executive' && req.body.role !== undefined);
+    if (willBeExecutive) {
+      const clusterValue = req.body.cluster || employee.cluster;
+      if (!clusterValue || !clusterValue.trim()) {
+        return res.status(400).json({ message: 'Cluster is required for Executive role' });
+      }
+      // Check cluster uniqueness (excluding current employee)
+      const existingEmployee = await User.findOne({ 
+        cluster: clusterValue.trim(),
+        role: 'Executive',
+        isActive: true,
+        _id: { $ne: employee._id }
+      });
+      if (existingEmployee) {
+        return res.status(400).json({ message: 'Cluster value must be unique. This cluster is already assigned to another Executive.' });
+      }
     }
 
     // Update fields

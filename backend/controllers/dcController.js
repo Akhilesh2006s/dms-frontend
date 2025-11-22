@@ -81,7 +81,7 @@ const getDCs = async (req, res) => {
       try {
         const populatedPromise = DC.find({ _id: { $in: dcs.map(dc => dc._id) } })
           .populate('saleId', 'customerName product quantity status poDocument')
-          .populate('dcOrderId', 'school_name school_type contact_person contact_mobile email address location zone products dc_code')
+          .populate('dcOrderId', 'school_name school_type contact_person contact_mobile email address location zone products dc_code status')
           .populate('employeeId', 'name email')
           .populate('createdBy', 'name email')
           .populate('submittedBy', 'name email')
@@ -149,7 +149,7 @@ const getDC = async (req, res) => {
   try {
     const dc = await DC.findById(req.params.id)
       .populate('saleId', 'customerName product quantity status poDocument poSubmittedAt poSubmittedBy')
-      .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products due_amount due_percentage')
+      .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products due_amount due_percentage status')
       .populate('employeeId', 'name email')
       .populate('adminId', 'name email')
       .populate('managerId', 'name email')
@@ -346,7 +346,7 @@ const raiseDC = async (req, res) => {
     await dc.save();
 
     const populatedDC = await DC.findById(dc._id)
-      .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products')
+      .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products status')
       .populate('saleId', 'customerName product quantity status poDocument')
       .populate('employeeId', 'name email')
       .populate('createdBy', 'name email');
@@ -385,7 +385,7 @@ const submitDCToManager = async (req, res) => {
     await dc.save();
 
     const populatedDC = await DC.findById(dc._id)
-      .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products')
+      .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products status')
       .populate('saleId', 'customerName product quantity status poDocument')
       .populate('employeeId', 'name email')
       .populate('managerId', 'name email');
@@ -661,7 +661,7 @@ const getCompletedDCs = async (req, res) => {
       try {
         const populatedPromise = DC.find({ _id: { $in: dcs.map(dc => dc._id) }, status: 'completed' })
           .populate('saleId', 'customerName product quantity status')
-          .populate('dcOrderId', 'school_name school_type contact_person contact_mobile email address location zone products dc_code')
+          .populate('dcOrderId', 'school_name school_type contact_person contact_mobile email address location zone products dc_code status')
           .populate('employeeId', 'name email')
           .populate('completedBy', 'name email')
           .populate('warehouseProcessedBy', 'name email')
@@ -829,7 +829,7 @@ const submitPO = async (req, res) => {
 
     const populatedDC = await DC.findById(dc._id)
       .populate('saleId', 'customerName product quantity status poDocument')
-      .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products')
+      .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products status')
       .populate('employeeId', 'name email')
       .populate('poSubmittedBy', 'name email');
 
@@ -1101,7 +1101,7 @@ const getSentToManagerDCs = async (req, res) => {
   try {
     const dcs = await DC.find({ status: 'sent_to_manager' })
       .populate('saleId', 'customerName product quantity status poDocument')
-      .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products pod_proof_url')
+      .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products pod_proof_url status')
       .populate('employeeId', 'name email')
       .populate('adminId', 'name email')
       .populate('adminReviewedBy', 'name email')
@@ -1122,6 +1122,7 @@ const getPendingWarehouseDCs = async (req, res) => {
   try {
     const dcs = await DC.find({ status: 'pending_dc' })
       .populate('saleId', 'customerName product quantity status poDocument')
+      .populate('dcOrderId', 'school_name school_type contact_person contact_mobile email address location zone products dc_code status')
       .populate('employeeId', 'name email')
       .populate('managerId', 'name email')
       .populate('managerRequestedBy', 'name email')
@@ -1511,7 +1512,7 @@ const updateDC = async (req, res) => {
 
     const populatedDC = await DC.findById(dc._id)
       .populate('saleId', 'customerName product quantity status poDocument')
-      .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products due_amount due_percentage')
+      .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products due_amount due_percentage status')
       .populate('employeeId', 'name email')
       .populate('adminId', 'name email')
       .populate('managerId', 'name email')

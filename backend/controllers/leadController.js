@@ -104,7 +104,7 @@ const getLeads = async (req, res) => {
     // Query with pagination - optimized for performance
     // Only populate essential fields for list view
     let query = Lead.find(filter)
-      .select('school_name contact_person contact_mobile zone status follow_up_date location strength createdAt remarks priority managed_by assigned_by createdBy') // Only select needed fields
+      .select('school_name contact_person contact_mobile zone status follow_up_date location strength createdAt remarks priority managed_by assigned_by createdBy school_code') // Only select needed fields
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
