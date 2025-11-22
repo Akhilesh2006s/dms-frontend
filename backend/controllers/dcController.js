@@ -1657,8 +1657,23 @@ const uploadPO = async (req, res) => {
     // In production, you might want to use a cloud storage service like AWS S3, Cloudinary, etc.
     const fileUrl = `/uploads/po/${req.file.filename}`;
     
-    // For local development, return a full URL
-    const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
+    // Determine base URL based on environment
+    // Railway provides RAILWAY_PUBLIC_DOMAIN or use BASE_URL env var
+    // For Railway, use the public domain, otherwise fall back to BASE_URL or localhost
+    let baseUrl = process.env.BASE_URL;
+    
+    if (!baseUrl) {
+      // Railway provides RAILWAY_PUBLIC_DOMAIN environment variable
+      if (process.env.RAILWAY_PUBLIC_DOMAIN) {
+        baseUrl = `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
+      } else if (process.env.RAILWAY_STATIC_URL) {
+        baseUrl = process.env.RAILWAY_STATIC_URL;
+      } else {
+        // Fallback for local development
+        baseUrl = `http://localhost:${process.env.PORT || 5000}`;
+      }
+    }
+    
     const fullUrl = `${baseUrl}${fileUrl}`;
 
     res.json({
