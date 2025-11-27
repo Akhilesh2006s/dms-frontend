@@ -14,7 +14,7 @@ type Expense = {
   title: string
   amount: number
   category: string
-  status: 'Pending' | 'Manager Approved' | 'Approved' | 'Rejected'
+  status: 'Pending' | 'Executive Manager Approved' | 'Manager Approved' | 'Approved' | 'Rejected'
   date: string
   createdAt: string
   employeeRemarks?: string
@@ -60,6 +60,8 @@ export default function MyExpensesPage() {
         return 'bg-green-100 text-green-700'
       case 'Manager Approved':
         return 'bg-blue-100 text-blue-700'
+      case 'Executive Manager Approved':
+        return 'bg-purple-100 text-purple-700'
       case 'Pending':
         return 'bg-amber-100 text-amber-700'
       case 'Rejected':
@@ -70,8 +72,9 @@ export default function MyExpensesPage() {
   }
 
   const getStatusDisplay = (status: string) => {
-    if (status === 'Pending') return 'Pending at Manager'
-    if (status === 'Manager Approved') return 'Pending at Finance'
+    if (status === 'Pending') return 'Pending at Executive Manager'
+    if (status === 'Executive Manager Approved') return 'Approved by Executive Manager, Pending at Manager'
+    if (status === 'Approved') return 'Approved'
     return status
   }
 
@@ -103,7 +106,7 @@ export default function MyExpensesPage() {
                 <TableHead className="font-semibold">Date</TableHead>
                 <TableHead className="font-semibold text-right">Amount</TableHead>
                 <TableHead className="font-semibold text-right">Approved Amount</TableHead>
-                <TableHead className="font-semibold">Status</TableHead>
+                <TableHead className="font-semibold">Approval Status</TableHead>
                 <TableHead className="font-semibold">Action</TableHead>
               </TableRow>
             </TableHeader>

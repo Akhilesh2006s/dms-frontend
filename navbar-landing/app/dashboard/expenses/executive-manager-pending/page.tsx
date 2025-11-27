@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Card } from '@/components/ui/card'
 import { apiRequest } from '@/lib/api'
+import { getCurrentUser } from '@/lib/auth'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -35,53 +36,56 @@ type Employee = {
   name: string
 }
 
-type Trainer = {
-  _id: string
-  name: string
-}
-
-export default function ManagerPendingExpensesPage() {
+export default function ExecutiveManagerPendingExpensesPage() {
   const router = useRouter()
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [loading, setLoading] = useState(true)
   const [employees, setEmployees] = useState<Employee[]>([])
-  const [trainers, setTrainers] = useState<Trainer[]>([])
+  const [approving, setApproving] = useState<string | null>(null)
   const [filters, setFilters] = useState({
     employeeId: 'all',
-    trainerId: 'all',
   })
-  const [approving, setApproving] = useState<string | null>(null)
 
   useEffect(() => {
-    // Load employees and trainers
+    // Load employees assigned to this Executive Manager
     ;(async () => {
       try {
-        const [empData, trainerData] = await Promise.all([
-          apiRequest<Employee[]>('/employees?isActive=true').catch(() => []),
-          apiRequest<Trainer[]>('/trainers?status=active').catch(() => []),
-        ])
-        setEmployees(empData || [])
-        setTrainers(trainerData || [])
+        // Get current user to find their assigned employees
+        const currentUser = getCurrentUser()
+        if (currentUser?._id) {
+          const empData = await apiRequest<Employee[]>(`/executive-managers/${currentUser._id}/employees`).catch(() => [])
+          setEmployees(empData || [])
+        }
       } catch (error) {
-        console.error('Failed to load employees/trainers:', error)
+        console.error('Failed to load employees:', error)
       }
     })()
   }, [])
 
   useEffect(() => {
     loadExpenses()
-  }, [])
+  }, [filters])
 
   const loadExpenses = async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
-      if (filters.employeeId && filters.employeeId !== 'all') params.append('employeeId', filters.employeeId)
-      if (filters.trainerId && filters.trainerId !== 'all') params.append('trainerId', filters.trainerId)
+      if (filters.employeeId && filters.employeeId !== 'all') {
+        params.append('employeeId', filters.employeeId)
+      }
 
-      const data = await apiRequest<Expense[]>(`/expenses/manager-pending${params.toString() ? `?${params.toString()}` : ''}`)
+      const data = await apiRequest<Expense[]>(
+        `/expenses/executive-manager-pending${params.toString() ? `?${params.toString()}` : ''}`
+      )
+      console.log('Loaded expenses:', data)
       setExpenses(data || [])
+      
+      // Show info if no expenses found
+      if (!data || data.length === 0) {
+        console.log('No expenses found. Employees assigned:', employees.length)
+      }
     } catch (error: any) {
+      console.error('Error loading expenses:', error)
       toast.error(error?.message || 'Failed to load expenses')
       setExpenses([])
     } finally {
@@ -93,22 +97,13 @@ export default function ManagerPendingExpensesPage() {
     loadExpenses()
   }
 
-  const handleEdit = (expenseId: string, employeeId?: string) => {
-    // Navigate to manager expense update page for the employee
-    if (employeeId) {
-      router.push(`/dashboard/expenses/manager-update/${employeeId}`)
-    } else {
-      router.push(`/dashboard/expenses/edit/${expenseId}`)
-    }
-  }
-
   const handleApprove = async (expenseId: string) => {
     setApproving(expenseId)
     try {
       await apiRequest(`/expenses/${expenseId}/approve`, {
         method: 'PUT',
         body: JSON.stringify({
-          status: 'Approved',
+          status: 'Executive Manager Approved',
         }),
       })
       toast.success('Expense approved successfully')
@@ -117,6 +112,15 @@ export default function ManagerPendingExpensesPage() {
       toast.error(error?.message || 'Failed to approve expense')
     } finally {
       setApproving(null)
+    }
+  }
+
+  const handleEdit = (expenseId: string, employeeId?: string) => {
+    // Navigate to manager expense update page for the employee
+    if (employeeId) {
+      router.push(`/dashboard/expenses/manager-update/${employeeId}`)
+    } else {
+      router.push(`/dashboard/expenses/edit/${expenseId}`)
     }
   }
 
@@ -136,6 +140,10 @@ export default function ManagerPendingExpensesPage() {
   const getExpenseType = (category: string) => {
     // Map categories to display format
     if (category === 'Other') return 'Others'
+    if (category === 'travel') return 'Travel'
+    if (category === 'food') return 'Food'
+    if (category === 'accommodation') return 'Accommodation'
+    if (category === 'others') return 'Others'
     return category
   }
 
@@ -146,34 +154,10 @@ export default function ManagerPendingExpensesPage() {
     return date.toLocaleString('en-US', { month: 'long' })
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Approved':
-        return 'bg-green-100 text-green-700'
-      case 'Manager Approved':
-        return 'bg-blue-100 text-blue-700'
-      case 'Executive Manager Approved':
-        return 'bg-purple-100 text-purple-700'
-      case 'Pending':
-        return 'bg-amber-100 text-amber-700'
-      case 'Rejected':
-        return 'bg-red-100 text-red-700'
-      default:
-        return 'bg-gray-100 text-gray-700'
-    }
-  }
-
-  const getStatusDisplay = (status: string) => {
-    if (status === 'Pending') return 'Pending at Executive Manager'
-    if (status === 'Executive Manager Approved') return 'Approved by Executive Manager, Pending at Manager'
-    if (status === 'Approved') return 'Approved'
-    return status
-  }
-
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl md:text-3xl font-semibold text-neutral-900">Manager Pending Expenses List</h1>
+        <h1 className="text-2xl md:text-3xl font-semibold text-neutral-900">Pending Expenses List</h1>
       </div>
 
       {/* Filter Section */}
@@ -197,28 +181,20 @@ export default function ManagerPendingExpensesPage() {
               </SelectContent>
             </Select>
           </div>
-          <div className="flex-1 min-w-[200px]">
-            <Select
-              value={filters.trainerId}
-              onValueChange={(value) => setFilters({ ...filters, trainerId: value })}
-            >
-              <SelectTrigger className="bg-white">
-                <SelectValue placeholder="Select Trainer" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Trainers</SelectItem>
-                {trainers.map((trainer) => (
-                  <SelectItem key={trainer._id} value={trainer._id}>
-                    {trainer.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
           <Button onClick={handleSearch} className="bg-blue-600 hover:bg-blue-700 text-white">
             Search
           </Button>
         </div>
+        {employees.length === 0 && (
+          <p className="text-sm text-amber-600 mt-2">
+            No employees assigned to you. Please contact an administrator to assign employees.
+          </p>
+        )}
+        {employees.length > 0 && (
+          <p className="text-sm text-neutral-500 mt-2">
+            Showing expenses for {employees.length} assigned employee{employees.length !== 1 ? 's' : ''}
+          </p>
+        )}
       </Card>
 
       {/* Expenses Table */}
@@ -232,8 +208,8 @@ export default function ManagerPendingExpensesPage() {
                 <TableHead className="font-semibold">Raised Date</TableHead>
                 <TableHead className="font-semibold">Exp Type</TableHead>
                 <TableHead className="font-semibold text-right">Amount</TableHead>
-                <TableHead className="font-semibold">Approval Status</TableHead>
                 <TableHead className="font-semibold">Action</TableHead>
+                <TableHead className="font-semibold">Approve</TableHead>
                 <TableHead className="font-semibold">Pending Months</TableHead>
               </TableRow>
             </TableHeader>
@@ -247,7 +223,9 @@ export default function ManagerPendingExpensesPage() {
               ) : expenses.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-8 text-neutral-500">
-                    No pending expenses found
+                    {employees.length === 0 
+                      ? 'No employees assigned to you. Please contact an administrator.' 
+                      : 'No pending expenses found for your assigned employees'}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -266,35 +244,30 @@ export default function ManagerPendingExpensesPage() {
                       {expense.amount.toFixed(2)}
                     </TableCell>
                     <TableCell>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(expense.status)}`}>
-                        {getStatusDisplay(expense.status)}
-                      </span>
+                      <button
+                        onClick={() => handleEdit(expense._id, expense.employeeId?._id || expense.trainerId?._id)}
+                        className="text-orange-600 hover:text-orange-700 transition-colors"
+                        aria-label="Update expense"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleEdit(expense._id, expense.employeeId?._id || expense.trainerId?._id)}
-                          className="text-orange-600 hover:text-orange-700 transition-colors"
-                          aria-label="Update expense"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                        <Button
-                          onClick={() => handleApprove(expense._id)}
-                          disabled={approving === expense._id}
-                          size="sm"
-                          className="bg-green-600 hover:bg-green-700 text-white h-7 px-2 text-xs"
-                        >
-                          {approving === expense._id ? (
-                            'Approving...'
-                          ) : (
-                            <>
-                              <CheckCircle className="h-3 w-3 mr-1" />
-                              Approve
-                            </>
-                          )}
-                        </Button>
-                      </div>
+                      <Button
+                        onClick={() => handleApprove(expense._id)}
+                        disabled={approving === expense._id}
+                        size="sm"
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                      >
+                        {approving === expense._id ? (
+                          'Approving...'
+                        ) : (
+                          <>
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            Approve
+                          </>
+                        )}
+                      </Button>
                     </TableCell>
                     <TableCell>{getPendingMonth(expense)}</TableCell>
                   </TableRow>

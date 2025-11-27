@@ -146,6 +146,7 @@ export default function NewEmployeePage() {
                 <SelectItem value="Coordinator">Coordinator</SelectItem>
                 <SelectItem value="Senior Coordinator">Senior Coordinator</SelectItem>
                 <SelectItem value="Manager">Manager</SelectItem>
+                <SelectItem value="Executive Manager">Executive Manager</SelectItem>
                 <SelectItem value="Admin">Admin</SelectItem>
                 <SelectItem value="Super Admin">Super Admin</SelectItem>
               </SelectContent>

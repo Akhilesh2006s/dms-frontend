@@ -505,6 +505,13 @@ export function Sidebar() {
         href: `/dashboard/executive-managers/${user?._id || ''}/dashboard`,
       },
       {
+        label: 'Expenses',
+        icon: Calculator,
+        children: [
+          { label: 'Pending Expenses', href: '/dashboard/expenses/executive-manager-pending', icon: Clock },
+        ],
+      },
+      {
         label: 'Leave Management',
         icon: CalendarCheck2,
         href: `/dashboard/executive-managers/${user?._id || ''}/leaves`,
