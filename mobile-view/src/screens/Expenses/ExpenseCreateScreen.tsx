@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import ApiService from '../../services/api';
-
-const apiService = new ApiService('https://crm-backend-production-2ffd.up.railway.app/api');
+import { apiService } from '../../services/api';
 
 interface DcItem {
   _id: string;
@@ -13,25 +13,28 @@ interface DcItem {
   dcOrderId?: { school_name?: string; school_code?: string; zone?: string };
 }
 
-const categories = ['Travel', 'Food', 'Office Supplies', 'Marketing', 'Utilities', 'Salary', 'Rent', 'Other'];
-const paymentMethods = ['Cash', 'Bank Transfer', 'Credit Card', 'Debit Card', 'Other'];
-const pendingMonths = ['none', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const expenseTypes = ['travel', 'food', 'accommodation', 'others'];
+const transportTypes = ['Auto', 'Bike', 'Bus', 'Car', 'Flight', 'Train'];
 
 export default function ExpenseCreateScreen({ navigation }: any) {
   const [form, setForm] = useState({
-    title: '',
-    amount: '',
-    category: '',
-    description: '',
+    type: '',
     date: new Date().toISOString().split('T')[0],
-    employeeRemarks: '',
-    paymentMethod: '',
-    pendingMonth: 'none',
+    amount: '',
+    receiptNumber: '',
+    remarks: '',
+    // Travel-specific fields
+    transportType: '',
+    travelFrom: '',
+    travelTo: '',
+    approxKms: '',
     dcId: '',
   });
   const [dcs, setDcs] = useState<DcItem[]>([]);
   const [loadingDcs, setLoadingDcs] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [billUri, setBillUri] = useState<string | null>(null);
+  const [uploadingBill, setUploadingBill] = useState(false);
 
   useEffect(() => {
     const fetchDcs = async () => {
@@ -48,11 +51,82 @@ export default function ExpenseCreateScreen({ navigation }: any) {
     fetchDcs();
   }, []);
 
+  const handleBillUpload = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'We need permission to access your photos to upload bills.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setBillUri(result.assets[0].uri);
+      }
+    } catch (error: any) {
+      Alert.alert('Error', 'Failed to pick image: ' + (error.message || 'Unknown error'));
+    }
+  };
+
+  const uploadBillFile = async (uri: string): Promise<string | null> => {
+    try {
+      setUploadingBill(true);
+      const formData = new FormData();
+      const filename = uri.split('/').pop() || 'bill.jpg';
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : 'image/jpeg';
+
+      formData.append('bill', {
+        uri,
+        name: filename,
+        type,
+      } as any);
+
+      const token = await AsyncStorage.getItem('authToken');
+      const baseURL = 'http://localhost:5000/api';
+      const response = await fetch(`${baseURL}/expenses/upload-bill`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to upload bill');
+      }
+
+      const data = await response.json();
+      return data.fileUrl || null;
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to upload bill');
+      return null;
+    } finally {
+      setUploadingBill(false);
+    }
+  };
+
   const handleSubmit = async () => {
-    if (!form.title.trim() || !form.amount.trim() || !form.category.trim() || !form.date.trim()) {
-      Alert.alert('Error', 'Please fill in all required fields.');
+    // Validate required fields
+    if (!form.type || !form.amount || !form.date) {
+      Alert.alert('Error', 'Please fill in all required fields (Type, Date, Amount).');
       return;
     }
+
+    // Validate travel-specific fields if type is travel
+    if (form.type === 'travel') {
+      if (!form.transportType || !form.travelFrom || !form.travelTo) {
+        Alert.alert('Error', 'Please fill in all required travel fields (Transport Type, From, To).');
+        return;
+      }
+    }
+
     if (dcs.length > 0 && !form.dcId) {
       Alert.alert('Error', 'Please select a School/DC for this expense.');
       return;
@@ -60,18 +134,42 @@ export default function ExpenseCreateScreen({ navigation }: any) {
 
     setSubmitting(true);
     try {
-      const payload = {
-        title: form.title,
+      // Upload bill first if present
+      let receiptUrl: string | null = null;
+      if (billUri) {
+        receiptUrl = await uploadBillFile(billUri);
+        if (!receiptUrl) {
+          setSubmitting(false);
+          return;
+        }
+      }
+
+      const payload: any = {
+        title: `${form.type.charAt(0).toUpperCase() + form.type.slice(1)} Expense`,
+        category: form.type,
         amount: parseFloat(form.amount),
-        category: form.category,
-        description: form.description || undefined,
         date: form.date,
-        employeeRemarks: form.employeeRemarks || undefined,
-        paymentMethod: form.paymentMethod || undefined,
-        pendingMonth: form.pendingMonth !== 'none' ? form.pendingMonth : undefined,
+        receiptNumber: form.receiptNumber || undefined,
+        employeeRemarks: form.remarks || undefined,
         dcId: form.dcId || undefined,
         status: 'Pending',
       };
+
+      // Add travel-specific fields
+      if (form.type === 'travel') {
+        payload.transportType = form.transportType;
+        payload.travelFrom = form.travelFrom;
+        payload.travelTo = form.travelTo;
+        if (form.approxKms) {
+          payload.approxKms = parseFloat(form.approxKms);
+        }
+      }
+
+      // Add receipt URL if uploaded
+      if (receiptUrl) {
+        payload.receipt = receiptUrl;
+      }
+
       await apiService.post('/expenses/create', payload);
       Alert.alert('Success', 'Expense created successfully', [
         { text: 'OK', onPress: () => navigation.navigate('ExpenseMy') },
@@ -82,6 +180,8 @@ export default function ExpenseCreateScreen({ navigation }: any) {
       setSubmitting(false);
     }
   };
+
+  const isTravelType = form.type === 'travel';
 
   return (
     <View style={styles.container}>
@@ -95,54 +195,142 @@ export default function ExpenseCreateScreen({ navigation }: any) {
         </View>
       </LinearGradient>
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-        <FormField label="Title *" value={form.title} onChangeText={(text) => setForm((f) => ({ ...f, title: text }))} placeholder="Enter expense title" />
-        <FormField label="Amount *" value={form.amount} onChangeText={(text) => setForm((f) => ({ ...f, amount: text }))} placeholder="0.00" keyboardType="decimal-pad" />
+        {/* Type Dropdown */}
         <DropdownField
-          label="Category *"
-          options={categories}
-          selected={form.category}
-          onSelect={(value) => setForm((f) => ({ ...f, category: value }))}
+          label="Type *"
+          options={expenseTypes}
+          selected={form.type}
+          onSelect={(value) => setForm((f) => ({ ...f, type: value, transportType: '', travelFrom: '', travelTo: '', approxKms: '' }))}
         />
-        <FormField label="Date *" value={form.date} onChangeText={(text) => setForm((f) => ({ ...f, date: text }))} placeholder="YYYY-MM-DD" />
-        <DropdownField
-          label="Payment Method"
-          options={['', ...paymentMethods]}
-          selected={form.paymentMethod}
-          onSelect={(value) => setForm((f) => ({ ...f, paymentMethod: value }))}
+
+        {/* Date */}
+        <FormField 
+          label="Date *" 
+          value={form.date} 
+          onChangeText={(text) => setForm((f) => ({ ...f, date: text }))} 
+          placeholder="YYYY-MM-DD" 
         />
-        <DropdownField
-          label="Pending Month"
-          options={pendingMonths}
-          selected={form.pendingMonth}
-          onSelect={(value) => setForm((f) => ({ ...f, pendingMonth: value }))}
+
+        {/* Amount */}
+        <FormField 
+          label="Amount *" 
+          value={form.amount} 
+          onChangeText={(text) => setForm((f) => ({ ...f, amount: text }))} 
+          placeholder="0.00" 
+          keyboardType="decimal-pad" 
         />
-        <TextAreaField label="Description" value={form.description} onChangeText={(text) => setForm((f) => ({ ...f, description: text }))} placeholder="Enter description" />
-        <TextAreaField label="Employee Remarks" value={form.employeeRemarks} onChangeText={(text) => setForm((f) => ({ ...f, employeeRemarks: text }))} placeholder="Enter remarks" />
+
+        {/* Receipt Number */}
+        <FormField 
+          label="Receipt No." 
+          value={form.receiptNumber} 
+          onChangeText={(text) => setForm((f) => ({ ...f, receiptNumber: text }))} 
+          placeholder="Enter receipt number" 
+        />
+
+        {/* Remarks */}
+        <TextAreaField 
+          label="Remarks" 
+          value={form.remarks} 
+          onChangeText={(text) => setForm((f) => ({ ...f, remarks: text }))} 
+          placeholder="Enter remarks" 
+        />
+
+        {/* Bill Upload */}
         <View style={styles.fieldContainer}>
-          <Text style={styles.label}>Select School/DC *</Text>
-          {loadingDcs ? (
-            <Text style={styles.helperText}>Loading schools…</Text>
-          ) : dcs.length === 0 ? (
-            <Text style={styles.helperText}>No DCs assigned</Text>
-          ) : (
-            dcs.map((dc) => {
-              const display = dc.dcOrderId?.school_name || dc.saleId?.customerName || 'School';
-              return (
-                <TouchableOpacity
-                  key={dc._id}
-                  style={[styles.option, form.dcId === dc._id && styles.optionSelected]}
-                  onPress={() => setForm((f) => ({ ...f, dcId: dc._id }))}
-                >
-                  <Text style={[styles.optionText, form.dcId === dc._id && styles.optionTextSelected]}>{display}</Text>
-                  {dc.dcOrderId?.school_code && <Text style={styles.helperText}>{dc.dcOrderId.school_code}</Text>}
-                </TouchableOpacity>
-              );
-            })
+          <Text style={styles.label}>Upload Bill</Text>
+          <TouchableOpacity 
+            style={styles.uploadButton} 
+            onPress={handleBillUpload}
+            disabled={submitting || uploadingBill}
+          >
+            <Text style={styles.uploadButtonText}>
+              {billUri ? 'Bill Selected (Tap to change)' : 'Select Bill Image'}
+            </Text>
+          </TouchableOpacity>
+          {billUri && (
+            <Text style={styles.helperText}>Bill ready to upload</Text>
+          )}
+          {uploadingBill && (
+            <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 8 }} />
           )}
         </View>
-        <TouchableOpacity style={[styles.submitButton, submitting && styles.submitButtonDisabled]} onPress={handleSubmit} disabled={submitting}>
+
+        {/* Travel-specific fields - shown conditionally */}
+        {isTravelType && (
+          <View style={styles.travelSection}>
+            <Text style={[styles.label, { fontSize: 16, fontWeight: '600', marginBottom: 12 }]}>Travel Details</Text>
+            
+            {/* Transport Type */}
+            <DropdownField
+              label="Transport Type *"
+              options={transportTypes}
+              selected={form.transportType}
+              onSelect={(value) => setForm((f) => ({ ...f, transportType: value }))}
+            />
+
+            {/* From */}
+            <FormField 
+              label="From *" 
+              value={form.travelFrom} 
+              onChangeText={(text) => setForm((f) => ({ ...f, travelFrom: text }))} 
+              placeholder="Enter origin location" 
+            />
+
+            {/* To */}
+            <FormField 
+              label="To *" 
+              value={form.travelTo} 
+              onChangeText={(text) => setForm((f) => ({ ...f, travelTo: text }))} 
+              placeholder="Enter destination location" 
+            />
+
+            {/* Approx Kms */}
+            <FormField 
+              label="Approx Kms" 
+              value={form.approxKms} 
+              onChangeText={(text) => setForm((f) => ({ ...f, approxKms: text }))} 
+              placeholder="Enter approximate kilometers" 
+              keyboardType="decimal-pad" 
+            />
+          </View>
+        )}
+
+        {/* School/DC Selection */}
+        {dcs.length > 0 && (
+          <View style={styles.fieldContainer}>
+            <Text style={styles.label}>Select School/DC *</Text>
+            {loadingDcs ? (
+              <Text style={styles.helperText}>Loading schools…</Text>
+            ) : (
+              dcs.map((dc) => {
+                const display = dc.dcOrderId?.school_name || dc.saleId?.customerName || 'School';
+                return (
+                  <TouchableOpacity
+                    key={dc._id}
+                    style={[styles.option, form.dcId === dc._id && styles.optionSelected]}
+                    onPress={() => setForm((f) => ({ ...f, dcId: dc._id }))}
+                  >
+                    <Text style={[styles.optionText, form.dcId === dc._id && styles.optionTextSelected]}>{display}</Text>
+                    {dc.dcOrderId?.school_code && <Text style={styles.helperText}>{dc.dcOrderId.school_code}</Text>}
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </View>
+        )}
+
+        <TouchableOpacity 
+          style={[styles.submitButton, (submitting || uploadingBill) && styles.submitButtonDisabled]} 
+          onPress={handleSubmit} 
+          disabled={submitting || uploadingBill}
+        >
           <LinearGradient colors={[colors.primary, colors.primaryDark]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.submitButtonGradient}>
-            {submitting ? <ActivityIndicator color={colors.textLight} /> : <Text style={styles.submitButtonText}>Submit Expense</Text>}
+            {(submitting || uploadingBill) ? (
+              <ActivityIndicator color={colors.textLight} />
+            ) : (
+              <Text style={styles.submitButtonText}>Submit Expense</Text>
+            )}
           </LinearGradient>
         </TouchableOpacity>
       </ScrollView>
@@ -154,7 +342,14 @@ function FormField({ label, value, onChangeText, placeholder, keyboardType }: an
   return (
     <View style={styles.fieldContainer}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput style={styles.input} value={value} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor={colors.textSecondary} keyboardType={keyboardType} />
+      <TextInput 
+        style={styles.input} 
+        value={value} 
+        onChangeText={onChangeText} 
+        placeholder={placeholder} 
+        placeholderTextColor={colors.textSecondary} 
+        keyboardType={keyboardType} 
+      />
     </View>
   );
 }
@@ -186,7 +381,9 @@ function DropdownField({ label, options, selected, onSelect }: { label: string; 
             style={[styles.horizontalOption, selected === option && styles.horizontalOptionSelected]}
             onPress={() => onSelect(option)}
           >
-            <Text style={[styles.horizontalOptionText, selected === option && styles.horizontalOptionTextSelected]}>{option || 'None'}</Text>
+            <Text style={[styles.horizontalOptionText, selected === option && styles.horizontalOptionTextSelected]}>
+              {option.charAt(0).toUpperCase() + option.slice(1)}
+            </Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -221,6 +418,7 @@ const styles = StyleSheet.create({
   submitButtonDisabled: { opacity: 0.6 },
   submitButtonGradient: { paddingVertical: 16, alignItems: 'center' },
   submitButtonText: { ...typography.label.large, color: colors.textLight, fontWeight: '600' },
+  uploadButton: { backgroundColor: colors.backgroundLight, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 14, alignItems: 'center' },
+  uploadButtonText: { ...typography.body.medium, color: colors.primary },
+  travelSection: { marginTop: 8, marginBottom: 16, padding: 16, backgroundColor: colors.primary + '10', borderRadius: 12, borderWidth: 1, borderColor: colors.primary + '30' },
 });
-
-

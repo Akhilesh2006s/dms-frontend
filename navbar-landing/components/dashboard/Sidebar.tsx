@@ -505,6 +505,18 @@ export function Sidebar() {
         href: `/dashboard/executive-managers/${user?._id || ''}/dashboard`,
       },
       {
+        label: 'Executives',
+        icon: Users,
+        href: '/dashboard/executive-managers/executives',
+      },
+      {
+        label: 'Clients',
+        icon: Truck,
+        children: [
+          { label: 'PO Edit Request', href: '/dashboard/clients/closed-sales', icon: CheckCircle2 },
+        ],
+      },
+      {
         label: 'Expenses',
         icon: Calculator,
         children: [

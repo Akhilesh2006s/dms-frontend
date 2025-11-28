@@ -76,6 +76,33 @@ export default function ClientDCPage() {
   const [dcPoPhotoUrl, setDcPoPhotoUrl] = useState('')
   const [savingClientDC, setSavingClientDC] = useState(false)
   
+  // Edit PO Dialog state
+  const [editPODialogOpen, setEditPODialogOpen] = useState(false)
+  const [selectedDcOrder, setSelectedDcOrder] = useState<any>(null)
+  const [editFormData, setEditFormData] = useState({
+    school_name: '',
+    contact_person: '',
+    contact_mobile: '',
+    contact_person2: '',
+    contact_mobile2: '',
+    email: '',
+    address: '',
+    school_type: '',
+    zone: '',
+    location: '',
+    products: [] as any[],
+    pod_proof_url: '',
+    remarks: '',
+    total_amount: 0,
+  })
+  const [submittingEdit, setSubmittingEdit] = useState(false)
+  const [editProductRows, setEditProductRows] = useState<Array<{
+    id: string
+    product_name: string
+    quantity: number
+    unit_price: number
+  }>>([])
+  
   const { productNames: availableProducts, getProductLevels, getDefaultLevel, getProductSpecs, getProductSubjects } = useProducts()
   
   // Get available levels for a specific product, default to L1 if product not found
@@ -565,6 +592,89 @@ export default function ClientDCPage() {
     }
   }
 
+  const openEditPODialog = async (dc: DC) => {
+    // Get the DcOrder ID from the DC
+    const dcOrderId = typeof dc.dcOrderId === 'object' ? dc.dcOrderId._id : dc.dcOrderId
+    
+    if (!dcOrderId) {
+      toast.error('Cannot edit: DC Order not found')
+      return
+    }
+
+    try {
+      // Fetch the full DcOrder details
+      const dcOrder = await apiRequest<any>(`/dc-orders/${dcOrderId}`)
+      setSelectedDcOrder(dcOrder)
+      
+      // Populate form with current data
+      setEditFormData({
+        school_name: dcOrder.school_name || '',
+        contact_person: dcOrder.contact_person || '',
+        contact_mobile: dcOrder.contact_mobile || '',
+        contact_person2: dcOrder.contact_person2 || '',
+        contact_mobile2: dcOrder.contact_mobile2 || '',
+        email: dcOrder.email || '',
+        address: dcOrder.address || '',
+        school_type: dcOrder.school_type || '',
+        zone: dcOrder.zone || '',
+        location: dcOrder.location || '',
+        products: dcOrder.products || [],
+        pod_proof_url: dcOrder.pod_proof_url || dc.poPhotoUrl || '',
+        remarks: dcOrder.remarks || '',
+        total_amount: dcOrder.total_amount || 0,
+      })
+      
+      // Set product rows
+      setEditProductRows(
+        (dcOrder.products || []).map((p: any, idx: number) => ({
+          id: String(idx + 1),
+          product_name: p.product_name || '',
+          quantity: p.quantity || 0,
+          unit_price: p.unit_price || 0,
+        }))
+      )
+      
+      setEditPODialogOpen(true)
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to load DC Order details')
+    }
+  }
+
+  const submitEditRequest = async () => {
+    if (!selectedDcOrder) return
+
+    setSubmittingEdit(true)
+    try {
+      // Prepare products array
+      const products = editProductRows.map(row => ({
+        product_name: row.product_name,
+        quantity: row.quantity,
+        unit_price: row.unit_price,
+      }))
+
+      // Calculate total amount
+      const totalAmount = products.reduce((sum, p) => sum + (p.quantity * p.unit_price), 0)
+
+      // Submit edit request
+      await apiRequest(`/dc-orders/${selectedDcOrder._id}/submit-edit`, {
+        method: 'POST',
+        body: JSON.stringify({
+          ...editFormData,
+          products,
+          total_amount: totalAmount,
+        }),
+      })
+
+      toast.success('Edit request submitted successfully! It will be reviewed by Executive Manager.')
+      setEditPODialogOpen(false)
+      load()
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to submit edit request')
+    } finally {
+      setSubmittingEdit(false)
+    }
+  }
+
   // Filter and sort items based on search query
   const filteredItems = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
@@ -727,13 +837,25 @@ export default function ClientDCPage() {
                           )}
                         </TableCell>
                         <TableCell className="text-center">
-                          <Button 
-                            size="sm" 
-                            onClick={() => openClientDCDialog(d)}
-                          >
-                            <Package className="w-4 h-4 mr-2" />
-                            Request DC
-                          </Button>
+                          <div className="flex items-center gap-2 justify-center">
+                            {d.poPhotoUrl && (
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => openEditPODialog(d)}
+                              >
+                                <Pencil className="w-4 h-4 mr-2" />
+                                Edit PO
+                              </Button>
+                            )}
+                            <Button 
+                              size="sm" 
+                              onClick={() => openClientDCDialog(d)}
+                            >
+                              <Package className="w-4 h-4 mr-2" />
+                              Request DC
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     )
@@ -1209,6 +1331,251 @@ export default function ClientDCPage() {
             </Button>
             <Button onClick={requestClientDC} disabled={savingClientDC}>
               {savingClientDC ? 'Submitting...' : 'Request'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit PO Dialog */}
+      <Dialog open={editPODialogOpen} onOpenChange={setEditPODialogOpen}>
+        <DialogContent className="sm:max-w-[95vw] lg:max-w-[1000px] max-h-[95vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit PO - {editFormData.school_name || 'Client'}</DialogTitle>
+            <DialogDescription>
+              Make changes to the PO. These changes will be sent to Executive Manager for approval.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedDcOrder && (
+            <div className="space-y-6 py-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label>School Name</Label>
+                  <Input
+                    value={editFormData.school_name}
+                    onChange={(e) => setEditFormData({ ...editFormData, school_name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>School Type</Label>
+                  <Input
+                    value={editFormData.school_type}
+                    onChange={(e) => setEditFormData({ ...editFormData, school_type: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Contact Person</Label>
+                  <Input
+                    value={editFormData.contact_person}
+                    onChange={(e) => setEditFormData({ ...editFormData, contact_person: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Contact Mobile</Label>
+                  <Input
+                    value={editFormData.contact_mobile}
+                    onChange={(e) => setEditFormData({ ...editFormData, contact_mobile: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Contact Person 2</Label>
+                  <Input
+                    value={editFormData.contact_person2}
+                    onChange={(e) => setEditFormData({ ...editFormData, contact_person2: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Contact Mobile 2</Label>
+                  <Input
+                    value={editFormData.contact_mobile2}
+                    onChange={(e) => setEditFormData({ ...editFormData, contact_mobile2: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Email</Label>
+                  <Input
+                    type="email"
+                    value={editFormData.email}
+                    onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Zone</Label>
+                  <Input
+                    value={editFormData.zone}
+                    onChange={(e) => setEditFormData({ ...editFormData, zone: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label>Location</Label>
+                  <Input
+                    value={editFormData.location}
+                    onChange={(e) => setEditFormData({ ...editFormData, location: e.target.value })}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <Label>Address</Label>
+                  <Textarea
+                    value={editFormData.address}
+                    onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
+                    rows={3}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <Label>Remarks</Label>
+                  <Textarea
+                    value={editFormData.remarks}
+                    onChange={(e) => setEditFormData({ ...editFormData, remarks: e.target.value })}
+                    rows={3}
+                  />
+                </div>
+                <div>
+                  <Label>PO Photo URL</Label>
+                  <Input
+                    value={editFormData.pod_proof_url}
+                    onChange={(e) => setEditFormData({ ...editFormData, pod_proof_url: e.target.value })}
+                    placeholder="Enter PO photo URL"
+                  />
+                </div>
+                <div>
+                  <Label>Total Amount</Label>
+                  <Input
+                    type="number"
+                    value={editFormData.total_amount}
+                    onChange={(e) => setEditFormData({ ...editFormData, total_amount: Number(e.target.value) || 0 })}
+                    readOnly
+                  />
+                </div>
+              </div>
+
+              {/* Products Section */}
+              <div className="border-t pt-4">
+                <div className="flex items-center justify-between mb-4">
+                  <Label className="text-lg font-semibold">Products</Label>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setEditProductRows([...editProductRows, {
+                        id: Date.now().toString(),
+                        product_name: '',
+                        quantity: 0,
+                        unit_price: 0,
+                      }])
+                    }}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Product
+                  </Button>
+                </div>
+                
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Product Name</TableHead>
+                        <TableHead>Quantity</TableHead>
+                        <TableHead>Unit Price</TableHead>
+                        <TableHead>Total</TableHead>
+                        <TableHead>Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {editProductRows.map((row, idx) => (
+                        <TableRow key={row.id}>
+                          <TableCell>
+                            <Input
+                              value={row.product_name}
+                              onChange={(e) => {
+                                const updated = [...editProductRows]
+                                updated[idx].product_name = e.target.value
+                                setEditProductRows(updated)
+                              }}
+                              placeholder="Product name"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              value={row.quantity}
+                              onChange={(e) => {
+                                const updated = [...editProductRows]
+                                updated[idx].quantity = Number(e.target.value) || 0
+                                setEditProductRows(updated)
+                                // Update total amount
+                                const total = editProductRows.reduce((sum, p, i) => {
+                                  if (i === idx) {
+                                    return sum + (updated[idx].quantity * updated[idx].unit_price)
+                                  }
+                                  return sum + (p.quantity * p.unit_price)
+                                }, 0)
+                                setEditFormData({ ...editFormData, total_amount: total })
+                              }}
+                              min="0"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              value={row.unit_price}
+                              onChange={(e) => {
+                                const updated = [...editProductRows]
+                                updated[idx].unit_price = Number(e.target.value) || 0
+                                setEditProductRows(updated)
+                                // Update total amount
+                                const total = editProductRows.reduce((sum, p, i) => {
+                                  if (i === idx) {
+                                    return sum + (updated[idx].quantity * updated[idx].unit_price)
+                                  }
+                                  return sum + (p.quantity * p.unit_price)
+                                }, 0)
+                                setEditFormData({ ...editFormData, total_amount: total })
+                              }}
+                              min="0"
+                              step="0.01"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            {(row.quantity * row.unit_price).toFixed(2)}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                const updated = editProductRows.filter((_, i) => i !== idx)
+                                setEditProductRows(updated)
+                                // Recalculate total
+                                const total = updated.reduce((sum, p) => sum + (p.quantity * p.unit_price), 0)
+                                setEditFormData({ ...editFormData, total_amount: total })
+                              }}
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditPODialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={submitEditRequest}
+              disabled={submittingEdit}
+            >
+              {submittingEdit ? 'Submitting...' : 'Submit Edit Request'}
             </Button>
           </DialogFooter>
         </DialogContent>

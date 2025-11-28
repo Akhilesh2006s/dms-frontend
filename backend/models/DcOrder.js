@@ -85,6 +85,34 @@ const dcOrderSchema = new mongoose.Schema(
       },
       default: null,
     },
+    // Pending edit request (when Executive edits a PO in closed sales)
+    pendingEdit: {
+      type: {
+        // Store all editable fields
+        school_name: { type: String },
+        contact_person: { type: String },
+        contact_mobile: { type: String },
+        contact_person2: { type: String },
+        contact_mobile2: { type: String },
+        email: { type: String },
+        address: { type: String },
+        school_type: { type: String },
+        zone: { type: String },
+        location: { type: String },
+        products: { type: [productSchema], default: [] },
+        pod_proof_url: { type: String },
+        remarks: { type: String },
+        total_amount: { type: Number },
+        // Metadata
+        requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        requestedAt: { type: Date, default: Date.now },
+        status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+        approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        approvedAt: { type: Date },
+        rejectionReason: { type: String },
+      },
+      default: null,
+    },
   },
   { timestamps: true }
 );
