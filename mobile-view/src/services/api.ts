@@ -16,8 +16,8 @@ const DEV_API_URL = Platform.OS === 'web'
 // Production API URL (Railway backend)
 const PROD_API_URL = 'https://crm-backend-production-2ffd.up.railway.app/api';
 
-// Use local development URL
-const API_BASE_URL = DEV_API_URL;
+// Use Railway production URL
+const API_BASE_URL = PROD_API_URL;
 
 class ApiService {
   private baseURL: string;
