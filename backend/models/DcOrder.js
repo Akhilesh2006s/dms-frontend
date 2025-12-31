@@ -29,6 +29,11 @@ const dcOrderSchema = new mongoose.Schema(
     city: { type: String },
     region: { type: String },
     area: { type: String },
+    // Delivery and Address fields
+    property_number: { type: String },
+    floor: { type: String },
+    tower_block: { type: String },
+    nearby_landmark: { type: String },
     average_fee: { type: Number },
     strength: { type: Number, default: 0, min: 0 },
     products: { type: [productSchema], default: [] },
@@ -103,6 +108,14 @@ const dcOrderSchema = new mongoose.Schema(
         pod_proof_url: { type: String },
         remarks: { type: String },
         total_amount: { type: Number },
+        // Delivery and Address fields
+        property_number: { type: String },
+        floor: { type: String },
+        tower_block: { type: String },
+        nearby_landmark: { type: String },
+        area: { type: String },
+        city: { type: String },
+        pincode: { type: String },
         // Metadata
         requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
         requestedAt: { type: Date, default: Date.now },
