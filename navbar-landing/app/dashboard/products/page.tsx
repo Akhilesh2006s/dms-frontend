@@ -24,6 +24,8 @@ type Product = {
   subjects: string[]
   hasSpecs: boolean
   specs?: string | string[] // Support both old (string) and new (array) format for backward compatibility
+  hasCategory?: boolean
+  categories?: string[]
   prodStatus: number
   createdAt: string
   createdBy?: {
@@ -53,6 +55,9 @@ export default function ProductsPage() {
     hasSpecs: false,
     specs: [] as string[],
     newSpec: '',
+    hasCategory: false,
+    categories: [] as string[],
+    newCategory: '',
     prodStatus: 1,
   })
   const [saving, setSaving] = useState(false)
@@ -94,6 +99,9 @@ export default function ProductsPage() {
       hasSpecs: product.hasSpecs || false,
       specs: Array.isArray(product.specs) ? product.specs : (product.specs ? [product.specs] : []),
       newSpec: '',
+      hasCategory: product.hasCategory || false,
+      categories: product.categories || [],
+      newCategory: '',
       prodStatus: product.prodStatus,
     })
     setEditModalOpen(true)
@@ -112,6 +120,9 @@ export default function ProductsPage() {
       hasSpecs: false,
       specs: [],
       newSpec: '',
+      hasCategory: false,
+      categories: [],
+      newCategory: '',
       prodStatus: 1,
     })
   }
@@ -167,6 +178,23 @@ export default function ProductsPage() {
     })
   }
 
+  const addCategory = () => {
+    if (editForm.newCategory.trim() && !editForm.categories.includes(editForm.newCategory.trim())) {
+      setEditForm({
+        ...editForm,
+        categories: [...editForm.categories, editForm.newCategory.trim()],
+        newCategory: '',
+      })
+    }
+  }
+
+  const removeCategory = (index: number) => {
+    setEditForm({
+      ...editForm,
+      categories: editForm.categories.filter((_, i) => i !== index),
+    })
+  }
+
   const handleSaveEdit = async () => {
     if (!editingProduct) return
 
@@ -183,6 +211,10 @@ export default function ProductsPage() {
       toast.error('At least one spec is required when specs are enabled')
       return
     }
+    if (editForm.hasCategory && editForm.categories.length === 0) {
+      toast.error('At least one product category is required when product categories are enabled')
+      return
+    }
 
     setSaving(true)
     try {
@@ -193,6 +225,8 @@ export default function ProductsPage() {
         subjects: editForm.hasSubjects ? editForm.subjects : [],
         hasSpecs: editForm.hasSpecs,
         specs: editForm.hasSpecs ? editForm.specs : [],
+        hasCategory: editForm.hasCategory,
+        categories: editForm.hasCategory ? editForm.categories : [],
         prodStatus: editForm.prodStatus,
       }
 
@@ -485,6 +519,53 @@ export default function ProductsPage() {
                         <button
                           type="button"
                           onClick={() => removeSpec(idx)}
+                          className="ml-1 hover:text-red-600"
+                        >
+                          ×
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="hasCategory"
+                checked={editForm.hasCategory}
+                onCheckedChange={(checked) =>
+                  setEditForm({ ...editForm, hasCategory: checked as boolean })
+                }
+              />
+              <Label htmlFor="hasCategory" className="cursor-pointer">
+                Has Product Category
+              </Label>
+            </div>
+
+            {editForm.hasCategory && (
+              <div>
+                <Label>Product Categories *</Label>
+                <p className="text-xs text-neutral-500 mb-2">Add one or multiple product categories</p>
+                <div className="flex gap-2 mb-2">
+                  <Input
+                    placeholder="Enter product category name"
+                    value={editForm.newCategory}
+                    onChange={(e) => setEditForm({ ...editForm, newCategory: e.target.value })}
+                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addCategory())}
+                  />
+                  <Button type="button" onClick={addCategory} variant="outline">
+                    Add Product Category
+                  </Button>
+                </div>
+                {editForm.categories.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {editForm.categories.map((category, idx) => (
+                      <Badge key={idx} variant="secondary" className="flex items-center gap-1">
+                        {category}
+                        <button
+                          type="button"
+                          onClick={() => removeCategory(idx)}
                           className="ml-1 hover:text-red-600"
                         >
                           ×

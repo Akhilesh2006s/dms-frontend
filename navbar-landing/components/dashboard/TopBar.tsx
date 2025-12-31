@@ -3,12 +3,13 @@
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
+import { useSidebar } from '@/contexts/SidebarContext'
 
 export function TopBar() {
   const router = useRouter()
   const [company] = useState('C‑FORGIA')
   const [visible, setVisible] = useState(true)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const { sidebarOpen } = useSidebar()
   const lastY = useRef(0)
 
   const handleLogout = () => {
@@ -31,39 +32,14 @@ export function TopBar() {
     }
     window.addEventListener('scroll', onScroll, { passive: true })
     
-    // Check sidebar collapsed state from localStorage
-    // Note: sidebarCollapsed stores !sidebarOpen, so when sidebarOpen is false, sidebarCollapsed is true
-    const checkSidebarState = () => {
-      if (typeof window !== 'undefined') {
-        const saved = localStorage.getItem('sidebarCollapsed')
-        const isCollapsed = saved ? JSON.parse(saved) : false
-        setSidebarCollapsed(isCollapsed)
-      }
-    }
-    checkSidebarState()
-    
-    // Listen for sidebar state changes
-    const handleStorageChange = () => checkSidebarState()
-    window.addEventListener('storage', handleStorageChange)
-    
-    // Also check periodically (in case of same-tab updates)
-    const interval = setInterval(checkSidebarState, 100)
-    
-    // Listen for custom event dispatched by sidebar
-    const handleSidebarToggle = () => checkSidebarState()
-    window.addEventListener('sidebarToggle', handleSidebarToggle)
-    
     return () => {
       window.removeEventListener('scroll', onScroll)
-      window.removeEventListener('storage', handleStorageChange)
-      window.removeEventListener('sidebarToggle', handleSidebarToggle)
-      clearInterval(interval)
     }
   }, [])
 
   // Calculate left offset based on sidebar state
   // Collapsed: 64px (w-16), Expanded: 256px (w-64) on desktop, always 64px on mobile
-  const leftOffset = sidebarCollapsed ? 'md:left-16' : 'md:left-64'
+  const leftOffset = sidebarOpen ? 'md:left-64' : 'md:left-16'
   
   return (
     <div className={`fixed top-0 left-16 ${leftOffset} right-0 z-40 transition-all duration-300 ease-out ${

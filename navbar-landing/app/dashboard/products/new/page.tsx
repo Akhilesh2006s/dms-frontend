@@ -31,6 +31,9 @@ export default function NewProductPage() {
     hasSpecs: false,
     specs: [] as string[],
     newSpec: '',
+    hasCategory: false,
+    categories: [] as string[],
+    newCategory: '',
     prodStatus: 1,
   })
 
@@ -85,6 +88,23 @@ export default function NewProductPage() {
     })
   }
 
+  const addCategory = () => {
+    if (form.newCategory.trim() && !form.categories.includes(form.newCategory.trim())) {
+      setForm({
+        ...form,
+        categories: [...form.categories, form.newCategory.trim()],
+        newCategory: '',
+      })
+    }
+  }
+
+  const removeCategory = (index: number) => {
+    setForm({
+      ...form,
+      categories: form.categories.filter((_, i) => i !== index),
+    })
+  }
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSubmitting(true)
@@ -106,6 +126,11 @@ export default function NewProductPage() {
       setSubmitting(false)
       return
     }
+    if (form.hasCategory && form.categories.length === 0) {
+      setError('At least one product category is required when product categories are enabled')
+      setSubmitting(false)
+      return
+    }
 
     try {
       const payload: any = {
@@ -115,6 +140,8 @@ export default function NewProductPage() {
         subjects: form.hasSubjects ? form.subjects : [],
         hasSpecs: form.hasSpecs,
         specs: form.hasSpecs ? form.specs : [],
+        hasCategory: form.hasCategory,
+        categories: form.hasCategory ? form.categories : [],
         prodStatus: form.prodStatus,
       }
 
@@ -287,6 +314,54 @@ export default function NewProductPage() {
                       <button
                         type="button"
                         onClick={() => removeSpec(idx)}
+                        className="ml-1 hover:text-red-600 font-bold"
+                      >
+                        ×
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="hasCategory"
+              checked={form.hasCategory}
+              onCheckedChange={(checked) =>
+                setForm({ ...form, hasCategory: checked as boolean })
+              }
+            />
+            <Label htmlFor="hasCategory" className="cursor-pointer font-medium">
+              Has Product Category
+            </Label>
+          </div>
+
+          {form.hasCategory && (
+            <div>
+              <Label>Product Categories *</Label>
+              <p className="text-xs text-neutral-500 mb-2">Add one or multiple product categories</p>
+              <div className="flex gap-2 mb-2">
+                <Input
+                  className="bg-white text-neutral-900"
+                  placeholder="Enter product category name"
+                  value={form.newCategory}
+                  onChange={(e) => setForm({ ...form, newCategory: e.target.value })}
+                  onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addCategory())}
+                />
+                <Button type="button" onClick={addCategory} variant="outline">
+                    Add Product Category
+                </Button>
+              </div>
+              {form.categories.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {form.categories.map((category, idx) => (
+                    <Badge key={idx} variant="secondary" className="flex items-center gap-1 text-sm py-1 px-3">
+                      {category}
+                      <button
+                        type="button"
+                        onClick={() => removeCategory(idx)}
                         className="ml-1 hover:text-red-600 font-bold"
                       >
                         ×

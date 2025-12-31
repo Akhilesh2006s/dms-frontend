@@ -558,13 +558,6 @@ export default function FollowupLeadsPage() {
                         <h3 className="text-lg font-bold text-orange-600">
                           {lead.school_name || 'Unnamed School'}
                         </h3>
-                        <span className={`px-2 py-0.5 text-xs font-semibold rounded border ${
-                          lead.school_code 
-                            ? 'bg-blue-100 text-blue-700 border-blue-200' 
-                            : 'bg-gray-100 text-gray-500 border-gray-200'
-                        }`}>
-                          {lead.school_code || 'No Code'}
-                        </span>
                       </div>
                       {lead.location && (
                         <div className="flex items-center gap-1 text-sm text-neutral-600">
@@ -594,12 +587,6 @@ export default function FollowupLeadsPage() {
                     <div>
                       <span className="text-neutral-600">Mobile:</span>
                       <span className="ml-2 font-medium text-neutral-900">{lead.contact_mobile || '-'}</span>
-                    </div>
-                    <div>
-                      <span className="text-neutral-600">School Code:</span>
-                      <span className={`ml-2 font-semibold ${lead.school_code ? 'text-blue-700' : 'text-gray-500'}`}>
-                        {lead.school_code || 'Not assigned'}
-                      </span>
                     </div>
                   </div>
 

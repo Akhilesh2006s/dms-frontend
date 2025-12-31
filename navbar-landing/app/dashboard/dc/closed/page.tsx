@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { X } from 'lucide-react'
+import { X, PlusCircle } from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -115,17 +115,15 @@ export default function ClosedSalesPage() {
     specs: string
     subject?: string
     strength: number
-    price: number
-    total: number
     level: string
   }
   const [productRows, setProductRows] = useState<ProductRow[]>([
-    { id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, price: 0, total: 0, level: 'L1' }
+    { id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1' }
   ])
   
   const availableClasses = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']
-  const availableCategories = ['New Students', 'Existing Students', 'Both']
-  const { productNames: availableProducts, getProductLevels, getDefaultLevel, getProductSpecs, getProductSubjects } = useProducts()
+  const defaultCategories = ['New Students', 'Existing Students', 'Both']
+  const { productNames: availableProducts, getProductLevels, getDefaultLevel, getProductSpecs, getProductSubjects, getProductCategories, hasProductCategories } = useProducts()
   
   // Get available levels for a specific product, default to L1 if product not found
   const getAvailableLevels = (product: string): string[] => {
@@ -139,9 +137,9 @@ export default function ClosedSalesPage() {
       // First try 'completed', then try all statuses to see what we have
       let data: DcOrder[] = []
       try {
-        // Get all statuses in parallel for better performance with timeout
+        // Get all statuses in parallel for better performance with reduced timeout
         // Note: API returns paginated response { data: [...], pagination: {...} }
-        const apiCallWithTimeout = (url: string, timeout = 15000) => {
+        const apiCallWithTimeout = (url: string, timeout = 8000) => {
           return Promise.race([
             apiRequest<any>(url),
             new Promise((_, reject) => 
@@ -150,11 +148,12 @@ export default function ClosedSalesPage() {
           ])
         }
         
+        // Reduced limit for faster initial load - can be increased if needed
         const [completedRes, savedRes, dcRequestedRes, dcAcceptedRes] = await Promise.all([
-          apiCallWithTimeout(`/dc-orders?status=completed&limit=1000`),
-          apiCallWithTimeout(`/dc-orders?status=saved&limit=1000`),
-          apiCallWithTimeout(`/dc-orders?status=dc_requested&limit=1000`),
-          apiCallWithTimeout(`/dc-orders?status=dc_accepted&limit=1000`)
+          apiCallWithTimeout(`/dc-orders?status=completed&limit=500`),
+          apiCallWithTimeout(`/dc-orders?status=saved&limit=500`),
+          apiCallWithTimeout(`/dc-orders?status=dc_requested&limit=500`),
+          apiCallWithTimeout(`/dc-orders?status=dc_accepted&limit=500`)
         ])
         // Extract data array from paginated response or use direct array
         const completedArray = Array.isArray(completedRes) ? completedRes : (completedRes?.data || [])
@@ -169,9 +168,9 @@ export default function ClosedSalesPage() {
         console.log('No completed deals found, trying all deals...')
         try {
           const allDealsRes = await Promise.race([
-            apiRequest<any>(`/dc-orders?limit=1000`),
+            apiRequest<any>(`/dc-orders?limit=500`),
             new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Request timeout')), 15000)
+              setTimeout(() => reject(new Error('Request timeout')), 8000)
             )
           ])
           // Extract data array from paginated response or use direct array
@@ -197,9 +196,9 @@ export default function ClosedSalesPage() {
       // Also fetch leads with status "Closed" and convert them to DcOrder format
       try {
         const closedLeadsRes = await Promise.race([
-          apiRequest<any>(`/leads?status=Closed&limit=1000`),
+          apiRequest<any>(`/leads?status=Closed&limit=500`),
           new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Request timeout')), 15000)
+            setTimeout(() => reject(new Error('Request timeout')), 8000)
           )
         ])
         const closedLeadsArray = Array.isArray(closedLeadsRes) ? closedLeadsRes : (closedLeadsRes?.data || [])
@@ -255,42 +254,51 @@ export default function ClosedSalesPage() {
       console.log('Loaded closed deals:', data)
       console.log('First deal sample:', data[0])
       
-      // Load existing DCs for all deals efficiently (fetch all DCs once instead of per deal)
+      // Load existing DCs for all deals efficiently (fetch only DCs for deals we have)
       const dcMap: Record<string, DC> = {}
       try {
-        // Fetch all DCs once instead of making individual requests
-        const allDCsRes = await apiRequest<any>(`/dc?limit=10000`)
-        const allDCsArray = Array.isArray(allDCsRes) ? allDCsRes : (allDCsRes?.data || [])
+        // Only fetch DCs if we have deals to check
+        if (data.length > 0) {
+          // Fetch DCs with a reasonable limit - only for deals we actually have
+          // This is much more efficient than fetching 10000 DCs
+          const dealIds = data.filter((d: any) => !d.isLead).map((d: any) => d._id)
+          const leadIds = data.filter((d: any) => d.isLead).map((d: any) => d._id)
+          
+          // Fetch DCs with timeout and reasonable limit
+          const allDCsRes = await Promise.race([
+            apiRequest<any>(`/dc?limit=2000`),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Request timeout')), 8000)
+            )
+          ])
+          const allDCsArray = Array.isArray(allDCsRes) ? allDCsRes : (allDCsRes?.data || [])
         
-        // Filter out leads (they might have DCs associated via leadId, not dcOrderId)
-        const dealIds = data.filter((d: any) => !d.isLead).map((d: any) => d._id)
-        const leadIds = data.filter((d: any) => d.isLead).map((d: any) => d._id)
-        
-        // Build map for DcOrders
-        dealIds.forEach((dealId: string) => {
-          const relatedDC = allDCsArray.find((dc: any) => {
-            const dcOrderId = dc.dcOrderId?._id || dc.dcOrderId
-            return dcOrderId === dealId || (typeof dcOrderId === 'string' && dcOrderId === dealId)
+          // Build map for DcOrders
+          dealIds.forEach((dealId: string) => {
+            const relatedDC = allDCsArray.find((dc: any) => {
+              const dcOrderId = dc.dcOrderId?._id || dc.dcOrderId
+              return dcOrderId === dealId || (typeof dcOrderId === 'string' && dcOrderId === dealId)
+            })
+            if (relatedDC) {
+              dcMap[dealId] = relatedDC
+            }
           })
-          if (relatedDC) {
-            dcMap[dealId] = relatedDC
-          }
-        })
-        
-        // Build map for Leads
-        leadIds.forEach((leadId: string) => {
-          const relatedDC = allDCsArray.find((dc: any) => {
-            const dcOrderId = dc.dcOrderId?._id || dc.dcOrderId
-            const saleId = dc.saleId?._id || dc.saleId
-            return dcOrderId === leadId || 
-                   (typeof dcOrderId === 'string' && dcOrderId === leadId) ||
-                   saleId === leadId ||
-                   (typeof saleId === 'string' && saleId === leadId)
+          
+          // Build map for Leads
+          leadIds.forEach((leadId: string) => {
+            const relatedDC = allDCsArray.find((dc: any) => {
+              const dcOrderId = dc.dcOrderId?._id || dc.dcOrderId
+              const saleId = dc.saleId?._id || dc.saleId
+              return dcOrderId === leadId || 
+                     (typeof dcOrderId === 'string' && dcOrderId === leadId) ||
+                     saleId === leadId ||
+                     (typeof saleId === 'string' && saleId === leadId)
+            })
+            if (relatedDC) {
+              dcMap[leadId] = relatedDC
+            }
           })
-          if (relatedDC) {
-            dcMap[leadId] = relatedDC
-          }
-        })
+        }
         
         setDealDCs(dcMap)
         console.log('Loaded DCs for deals:', Object.keys(dcMap).length, 'DCs found')
@@ -512,12 +520,10 @@ export default function ClosedSalesPage() {
             specs: p.specs || 'Regular',
             subject: p.subject || undefined,
             strength: Number(p.strength) || 0,
-            price: Number(p.price) || 0,
-            total: Number(p.total) || (Number(p.price) || 0) * (Number(p.strength) || 0),
             level: p.level || getDefaultLevel(p.product || 'Abacus'),
           })))
         } else {
-          setProductRows([{ id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, price: 0, total: 0, level: 'L1' }])
+          setProductRows([{ id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1' }])
         }
       } else if (existingDCForDeal) {
         // Load full DC details to get all fields
@@ -558,26 +564,12 @@ export default function ClosedSalesPage() {
             console.log('Full productDetails from DC:', JSON.stringify(fullDC.productDetails, null, 2))
             setProductRows(fullDC.productDetails.map((p: any, idx) => {
               // Read all fields directly from the product object
-              // The productDetails array items should have price, total, strength, level directly on them
-              const rawPrice = p.price !== undefined && p.price !== null ? p.price : 0
-              const rawTotal = p.total !== undefined && p.total !== null ? p.total : 0
+              // The productDetails array items should have strength, level directly on them
               const rawLevel = p.level || getDefaultLevel(p.product || 'Abacus')
               const rawStrength = p.strength !== undefined && p.strength !== null ? p.strength : 0
-              const rawQuantity = p.quantity !== undefined && p.quantity !== null ? p.quantity : rawStrength
               
               // Convert to numbers - preserve 0 values, only default to 0 if null/undefined
-              const priceNum = rawPrice !== null && rawPrice !== undefined ? Number(rawPrice) : 0
               const strengthNum = rawStrength !== null && rawStrength !== undefined ? Number(rawStrength) : 0
-              const quantityNum = rawQuantity !== null && rawQuantity !== undefined ? Number(rawQuantity) : strengthNum
-              // Calculate total if not provided, or use provided total
-              const totalNum = rawTotal !== null && rawTotal !== undefined && rawTotal !== 0 
-                ? Number(rawTotal) 
-                : (priceNum * strengthNum)
-              
-              // Get product name - prioritize productName, then product, then default
-              const productNameValue = p.productName 
-                ? String(p.productName).trim() 
-                : (p.product ? String(p.product).trim() : '')
               
               // Normalize product value to match dropdown options (case-insensitive matching)
               const rawProduct = p.product ? String(p.product).trim() : ''
@@ -597,8 +589,6 @@ export default function ClosedSalesPage() {
                 specs: p.specs || 'Regular',
                 subject: p.subject || undefined,
                 strength: strengthNum,
-                price: priceNum,
-                total: totalNum,
                 level: rawLevel,
               }
               
@@ -615,19 +605,12 @@ export default function ClosedSalesPage() {
                 'final product': productRow.product,
               })
               console.log(`Product ${idx + 1} RAW VALUES:`, {
-                'p.price': p.price,
-                'p.total': p.total,
                 'p.strength': p.strength,
                 'p.quantity': p.quantity,
                 'p.level': p.level,
-                'price type': typeof p.price,
-                'total type': typeof p.total,
               })
               console.log(`Product ${idx + 1} CONVERTED:`, {
-                priceNum,
-                totalNum,
                 strengthNum,
-                quantityNum,
                 level: rawLevel,
               })
               console.log(`Product ${idx + 1} FINAL ROW:`, JSON.stringify(productRow, null, 2))
@@ -651,13 +634,11 @@ export default function ClosedSalesPage() {
                 specs: 'Regular',
                 subject: undefined,
               strength: p.strength || 0,
-                price: p.price || 0,
-                total: (p.price || 0) * (p.strength || 0),
                 level: p.level || getDefaultLevel(p.product || 'Abacus'),
               }
             }))
           } else {
-            setProductRows([{ id: '1', product: 'ABACUS', class: '1', category: 'New Students', specs: 'Regular', strength: 0, price: 0, total: 0, level: 'L1' }])
+            setProductRows([{ id: '1', product: 'ABACUS', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1' }])
           }
         } catch (e) {
           console.error('Failed to load existing DC:', e)
@@ -675,12 +656,10 @@ export default function ClosedSalesPage() {
               specs: 'Regular',
               subject: undefined,
               strength: p.strength || 0,
-              price: p.price || 0,
-              total: (p.price || 0) * (p.strength || 0),
               level: p.level || 'L2',
             })))
           } else {
-            setProductRows([{ id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, price: 0, total: 0, level: 'L1' }])
+            setProductRows([{ id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1' }])
           }
         }
       } else {
@@ -699,12 +678,10 @@ export default function ClosedSalesPage() {
             specs: 'Regular',
             subject: undefined,
             strength: p.strength || 0,
-            price: p.price || 0,
-            total: (p.price || 0) * (p.strength || 0),
             level: p.level || 'L2',
           })))
         } else {
-          setProductRows([{ id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, price: 0, total: 0, level: 'L1' }])
+          setProductRows([{ id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1' }])
         }
       }
       setOpenRaiseDCDialog(true)
@@ -731,17 +708,15 @@ export default function ClosedSalesPage() {
           specs: 'Regular',
           subject: undefined,
           strength: p.strength || 0,
-          price: p.price || 0,
-          total: (p.price || 0) * (p.strength || 0),
           level: p.level || 'L2',
         })))
       } else {
-        setProductRows([{ id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, price: 0, total: 0, level: 'L1' }])
+        setProductRows([{ id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1' }])
       }
       
       const errorMessage = e?.message || 'Unknown error'
       if (errorMessage.includes('Cannot connect to backend')) {
-        toast.error('Backend server is not running. Please start the backend server on port 5000.')
+        toast.error('Cannot connect to backend server. Please check your connection or contact support.')
       } else if (errorMessage.includes('not found') || errorMessage.includes('DC not found')) {
         // Don't show warning for "not found" errors - this is expected for some deals
         console.log('Deal not found in API, using list data (this is normal for some deals)')
@@ -810,8 +785,6 @@ export default function ClosedSalesPage() {
         subject: row.subject || undefined,
         strength: Number(row.strength) || 0,
         quantity: Number(row.strength) || 0, // Quantity should match strength
-        price: Number(row.price) || 0,
-        total: Number(row.total) || (Number(row.price) || 0) * (Number(row.strength) || 0),
         level: row.level || 'L2',
       }))
 
@@ -910,8 +883,6 @@ export default function ClosedSalesPage() {
           subject: row.subject || undefined,
           strength: Number(row.strength) || 0,
           quantity: Number(row.strength) || 0, // Quantity should match strength
-          price: Number(row.price) || 0,
-          total: Number(row.total) || (Number(row.price) || 0) * (Number(row.strength) || 0),
           level: row.level || getDefaultLevel(row.product || 'Abacus'),
         })),
         employeeId: employeeId,
@@ -963,8 +934,6 @@ export default function ClosedSalesPage() {
         subject: row.subject || undefined,
           strength: Number(row.strength) || 0,
           quantity: Number(row.strength) || 0, // Quantity should match strength
-          price: Number(row.price) || 0,
-          total: Number(row.total) || (Number(row.price) || 0) * (Number(row.strength) || 0),
           level: row.level || getDefaultLevel(row.product || 'Abacus'),
         }))
       } else if (dcRequestData.productDetails && Array.isArray(dcRequestData.productDetails) && dcRequestData.productDetails.length > 0) {
@@ -978,8 +947,6 @@ export default function ClosedSalesPage() {
           productName: p.product_name || 'Abacus',
           quantity: p.quantity || 1,
           strength: 0,
-          price: 0,
-          total: 0,
           level: getDefaultLevel(p.product_name || 'Abacus'),
         }))
       }
@@ -1082,8 +1049,6 @@ export default function ClosedSalesPage() {
           subject: row.subject || undefined,
           strength: Number(row.strength) || 0,
           quantity: Number(row.strength) || 0, // Quantity should match strength
-          price: Number(row.price) || 0,
-          total: Number(row.total) || (Number(row.price) || 0) * (Number(row.strength) || 0),
           level: row.level || getDefaultLevel(row.product || 'Abacus'),
         })),
       }
@@ -1333,7 +1298,10 @@ export default function ClosedSalesPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 {/* Lead Information */}
                 <div className="space-y-5">
-                  <h3 className="font-semibold text-slate-900 text-lg border-b border-slate-200 pb-3">Lead Information</h3>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-xl mb-2">Lead Information</h3>
+                    <p className="text-sm text-slate-500">Client and contact details</p>
+                  </div>
                   <div>
                     <Label className="text-sm font-medium mb-2 block">School Type</Label>
                     <Input 
@@ -1452,7 +1420,10 @@ export default function ClosedSalesPage() {
 
                 {/* More Information */}
                 <div className="space-y-5">
-                  <h3 className="font-semibold text-slate-900 text-lg border-b border-slate-200 pb-3">More Information</h3>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-xl mb-2">More Information</h3>
+                    <p className="text-sm text-slate-500">Additional location and details</p>
+                  </div>
                   <div>
                     <Label className="text-sm font-medium mb-2 block">Town</Label>
                     <Input 
@@ -1504,62 +1475,70 @@ export default function ClosedSalesPage() {
               </div>
 
               {/* Products Table - Where quantities are added */}
-              <div className="border-t border-slate-200 pt-6 mt-6">
-                <div className="flex items-center justify-between mb-5">
-                  <Label className="text-lg font-semibold text-slate-900">Products & Quantities</Label>
+              <div className="border-t border-slate-200 pt-8 mt-8">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <Label className="text-xl font-bold text-slate-900">Products & Quantities</Label>
+                    <p className="text-sm text-slate-500 mt-1">Add products and specify quantities and other details</p>
+                  </div>
                   <Button
                     type="button"
                     size="sm"
-                    variant="outline"
-                    className="border-slate-300 hover:bg-slate-50 text-slate-700 shadow-sm"
+                    className="bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg transition-all duration-200 flex items-center gap-2"
                     onClick={() => {
+                      const defaultProduct = 'ABACUS'
+                      const defaultCat = hasProductCategories(defaultProduct) 
+                        ? (getProductCategories(defaultProduct)[0] || defaultCategories[0])
+                        : defaultCategories[0]
                       setProductRows([...productRows, {
                         id: Date.now().toString(),
-                        product: 'ABACUS',
+                        product: defaultProduct,
                         class: '1',
-                        category: 'New Students',
+                        category: defaultCat,
                         specs: 'Regular',
                         subject: undefined,
                         strength: 0,
-                        price: 0,
-                        total: 0,
-                        level: 'L2'
+                        level: getDefaultLevel(defaultProduct)
                       }])
                     }}
                   >
-                    (+) Add Row
+                    <PlusCircle className="w-4 h-4" />
+                    Add Row
                   </Button>
                 </div>
                 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm border-collapse">
+                <div className="overflow-x-auto rounded-lg border border-slate-200 shadow-sm bg-white">
+                  <table className="w-full text-sm">
                     <thead>
-                      <tr className="bg-slate-100 border-b border-slate-200">
-                        <th className="py-3 px-4 text-left border-r border-slate-200 text-slate-800 font-semibold text-sm">Product</th>
-                        <th className="py-3 px-4 text-left border-r border-slate-200 text-slate-800 font-semibold text-sm">Class</th>
-                        <th className="py-3 px-4 text-left border-r border-slate-200 text-slate-800 font-semibold text-sm">Category</th>
-                        <th className="py-3 px-4 text-left border-r border-slate-200 text-slate-800 font-semibold text-sm">Specs</th>
-                        <th className="py-3 px-4 text-left border-r border-slate-200 text-slate-800 font-semibold text-sm">Subject</th>
-                        <th className="py-3 px-4 text-left border-r border-slate-200 text-slate-800 font-semibold text-sm">Quantity</th>
-                        <th className="py-3 px-4 text-left border-r border-slate-200 text-slate-800 font-semibold text-sm">Price</th>
-                        <th className="py-3 px-4 text-left border-r border-slate-200 text-slate-800 font-semibold text-sm">Total</th>
-                        <th className="py-3 px-4 text-left border-r border-slate-200 text-slate-800 font-semibold text-sm">Level</th>
-                        <th className="py-3 px-4 text-center text-slate-800 font-semibold text-sm">Action</th>
+                      <tr className="bg-gradient-to-r from-slate-50 to-slate-100 border-b-2 border-slate-300">
+                        <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Product</th>
+                        <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Class</th>
+                        <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Category</th>
+                        <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Specs</th>
+                        <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Subject</th>
+                        <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Quantity</th>
+                        <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Level</th>
+                        <th className="py-4 px-5 text-center text-slate-700 font-bold text-xs uppercase tracking-wider">Action</th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-slate-100">
                       {productRows.map((row, idx) => (
-                        <tr key={row.id} className="border-b border-slate-100 bg-white hover:bg-slate-50/50 transition-colors">
-                          <td className="py-3 px-4 border-r">
+                        <tr key={row.id} className="bg-white hover:bg-blue-50/30 transition-all duration-150 border-b border-slate-100">
+                          <td className="py-4 px-5">
                             <Select value={row.product} onValueChange={(v) => {
                               const updated = [...productRows]
                               updated[idx].product = v
-                              // ALWAYS auto-fill product name when product changes
-                              // Update level to default for the selected product
                               updated[idx].level = getDefaultLevel(v)
+                              // Set default category: use first product category if available, otherwise first default category
+                              if (hasProductCategories(v)) {
+                                const productCats = getProductCategories(v)
+                                updated[idx].category = productCats[0] || defaultCategories[0]
+                              } else {
+                                updated[idx].category = defaultCategories[0]
+                              }
                               setProductRows(updated)
                             }}>
-                              <SelectTrigger className="h-10 text-sm">
+                              <SelectTrigger className="h-9 text-sm border-slate-200 hover:border-blue-400 focus:border-blue-500 focus:ring-blue-500">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -1569,13 +1548,13 @@ export default function ClosedSalesPage() {
                               </SelectContent>
                             </Select>
                           </td>
-                          <td className="py-3 px-4 border-r">
+                          <td className="py-4 px-5">
                             <Select value={row.class} onValueChange={(v) => {
                               const updated = [...productRows]
                               updated[idx].class = v
                               setProductRows(updated)
                             }}>
-                              <SelectTrigger className="h-10 text-sm">
+                              <SelectTrigger className="h-9 text-sm border-slate-200 hover:border-blue-400 focus:border-blue-500 focus:ring-blue-500 w-20">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -1585,29 +1564,35 @@ export default function ClosedSalesPage() {
                               </SelectContent>
                             </Select>
                           </td>
-                          <td className="py-3 px-4 border-r">
+                          <td className="py-4 px-5">
                             <Select value={row.category} onValueChange={(v) => {
                               const updated = [...productRows]
                               updated[idx].category = v
                               setProductRows(updated)
                             }}>
-                              <SelectTrigger className="h-10 text-sm">
+                              <SelectTrigger className="h-9 text-sm border-slate-200 hover:border-blue-400 focus:border-blue-500 focus:ring-blue-500">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                {availableCategories.map(cat => (
-                                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                                ))}
+                                {hasProductCategories(row.product) ? (
+                                  getProductCategories(row.product).map(cat => (
+                                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                  ))
+                                ) : (
+                                  defaultCategories.map(cat => (
+                                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                  ))
+                                )}
                               </SelectContent>
                             </Select>
                           </td>
-                          <td className="py-3 px-4 border-r">
+                          <td className="py-4 px-5">
                             <Select value={row.specs || 'Regular'} onValueChange={(v) => {
                               const updated = [...productRows]
                               updated[idx].specs = v
                               setProductRows(updated)
                             }}>
-                              <SelectTrigger className="h-10 text-sm">
+                              <SelectTrigger className="h-9 text-sm border-slate-200 hover:border-blue-400 focus:border-blue-500 focus:ring-blue-500">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -1617,14 +1602,14 @@ export default function ClosedSalesPage() {
                               </SelectContent>
                             </Select>
                           </td>
-                          <td className="py-3 px-4 border-r">
+                          <td className="py-4 px-5">
                             {getProductSubjects(row.product).length > 0 ? (
                               <Select value={row.subject || ''} onValueChange={(v) => {
                                 const updated = [...productRows]
                                 updated[idx].subject = v
                                 setProductRows(updated)
                               }}>
-                                <SelectTrigger className="h-10 text-sm">
+                                <SelectTrigger className="h-9 text-sm border-slate-200 hover:border-blue-400 focus:border-blue-500 focus:ring-blue-500">
                                   <SelectValue placeholder="Select Subject" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -1634,51 +1619,30 @@ export default function ClosedSalesPage() {
                                 </SelectContent>
                               </Select>
                             ) : (
-                              <span className="text-neutral-400">-</span>
+                              <span className="text-slate-400 text-sm">-</span>
                             )}
                           </td>
-                          <td className="py-3 px-4 border-r">
+                          <td className="py-4 px-5">
                             <Input
                               type="number"
-                              className="h-10 text-sm"
+                              className="h-9 text-sm border-slate-200 hover:border-blue-400 focus:border-blue-500 focus:ring-blue-500 w-24"
                               value={row.strength || ''}
                               onChange={(e) => {
                                 const updated = [...productRows]
                                 updated[idx].strength = Number(e.target.value) || 0
-                                updated[idx].total = updated[idx].price * updated[idx].strength
                                 setProductRows(updated)
                               }}
-                              placeholder="Enter Quantity"
+                              placeholder="0"
                               min="0"
                             />
                           </td>
-                          <td className="py-3 px-4 border-r">
-                            <Input
-                              type="number"
-                              className="h-10 text-sm"
-                              value={row.price !== undefined && row.price !== null ? String(row.price) : ''}
-                              onChange={(e) => {
-                                const updated = [...productRows]
-                                const newPrice = Number(e.target.value) || 0
-                                updated[idx].price = newPrice
-                                updated[idx].total = newPrice * (updated[idx].strength || 0)
-                                setProductRows(updated)
-                              }}
-                              placeholder="Enter Price"
-                              min="0"
-                              step="0.01"
-                            />
-                          </td>
-                          <td className="py-3 px-4 border-r font-medium">
-                            {(row.total || 0).toFixed(2)}
-                          </td>
-                          <td className="py-3 px-4 border-r">
+                          <td className="py-4 px-5">
                             <Select value={row.level || 'L2'} onValueChange={(v) => {
                               const updated = [...productRows]
                               updated[idx].level = v
                               setProductRows(updated)
                             }}>
-                              <SelectTrigger className="h-10 text-sm">
+                              <SelectTrigger className="h-9 text-sm border-slate-200 hover:border-blue-400 focus:border-blue-500 focus:ring-blue-500 w-20">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -1688,37 +1652,34 @@ export default function ClosedSalesPage() {
                               </SelectContent>
                             </Select>
                           </td>
-                          <td className="py-3 px-4 text-center">
+                          <td className="py-4 px-5 text-center">
                             {productRows.length > 1 && (
                               <Button
                                 type="button"
                                 size="sm"
                                 variant="ghost"
-                                className="text-red-600 hover:text-red-700 hover:bg-red-50 h-10 w-10 p-0"
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50 h-9 w-9 p-0 rounded-full transition-all duration-200"
                                 onClick={() => {
                                   setProductRows(productRows.filter((_, i) => i !== idx))
                                 }}
                               >
-                                ×
+                                <X className="w-4 h-4" />
                               </Button>
                             )}
                           </td>
                         </tr>
                       ))}
                       {/* Total Row */}
-                      <tr className="border-t-2 border-slate-300 bg-slate-100 font-semibold">
-                        <td colSpan={4} className="px-3 py-3 text-right">
-                          <span className="text-slate-700">Total:</span>
+                      <tr className="bg-gradient-to-r from-slate-100 to-slate-200 border-t-2 border-slate-400 font-bold">
+                        <td colSpan={5} className="px-5 py-4 text-right">
+                          <span className="text-slate-800 text-base">Grand Total:</span>
                         </td>
-                        <td className="px-3 py-3"></td>
-                        <td className="px-3 py-3 text-right">
-                          {productRows.reduce((sum, row) => sum + (Number(row.strength) || 0), 0)}
+                        <td className="px-5 py-4 text-right">
+                          <span className="text-slate-800 text-base">
+                            {productRows.reduce((sum, row) => sum + (Number(row.strength) || 0), 0)}
+                          </span>
                         </td>
-                        <td className="px-3 py-3"></td>
-                        <td className="px-3 py-3 text-right font-bold text-lg">
-                          {productRows.reduce((sum, row) => sum + (Number(row.total) || 0), 0).toFixed(2)}
-                        </td>
-                        <td colSpan={2} className="px-3 py-3"></td>
+                        <td colSpan={2} className="px-5 py-4"></td>
                       </tr>
                     </tbody>
                   </table>
@@ -1726,49 +1687,53 @@ export default function ClosedSalesPage() {
               </div>
 
               {/* DC Details */}
-              <div className="space-y-5 border-t border-slate-200 pt-6 mt-6">
-                <h3 className="font-semibold text-slate-900 text-lg border-b border-slate-200 pb-3 mb-5">DC Details</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="space-y-6 border-t border-slate-200 pt-8 mt-8">
+                <div>
+                  <h3 className="font-bold text-slate-900 text-xl mb-2">DC Details</h3>
+                  <p className="text-sm text-slate-500">Enter delivery challan information</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50/50 p-6 rounded-lg border border-slate-200">
                   <div>
-                    <Label className="text-sm font-medium mb-2 block">DC Date</Label>
+                    <Label className="text-sm font-semibold mb-2.5 block text-slate-700">DC Date *</Label>
                     <Input
                       type="date"
                       value={dcDate}
                       onChange={(e) => setDcDate(e.target.value)}
                       placeholder="mm/dd/yyyy"
-                      className="h-11 text-sm"
+                      className="h-11 text-sm border-slate-200 hover:border-blue-400 focus:border-blue-500 focus:ring-blue-500 bg-white"
                     />
                   </div>
                   <div>
-                    <Label className="text-sm font-medium mb-2 block">DC Category</Label>
+                    <Label className="text-sm font-semibold mb-2.5 block text-slate-700">DC Category *</Label>
                     <Select value={dcCategory} onValueChange={setDcCategory}>
-                      <SelectTrigger className="h-11 text-sm">
+                      <SelectTrigger className="h-11 text-sm border-slate-200 hover:border-blue-400 focus:border-blue-500 focus:ring-blue-500 bg-white">
                         <SelectValue placeholder="Select DC Category" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="Term 1">Term 1</SelectItem>
                         <SelectItem value="Term 2">Term 2</SelectItem>
-                        <SelectItem value="Both">Both</SelectItem>
+                        <SelectItem value="Term 3">Term 3</SelectItem>
+                        <SelectItem value="Full Year">Full Year</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div>
-                    <Label className="text-sm font-medium mb-2 block">DC Remarks</Label>
+                    <Label className="text-sm font-semibold mb-2.5 block text-slate-700">DC Remarks</Label>
                     <Input
                       value={dcRemarks}
                       onChange={(e) => setDcRemarks(e.target.value)}
-                      placeholder="Remarks"
-                      className="h-11 text-sm"
+                      placeholder="Enter remarks"
+                      className="h-11 text-sm border-slate-200 hover:border-blue-400 focus:border-blue-500 focus:ring-blue-500 bg-white"
                     />
                   </div>
                   <div className="md:col-span-2">
-                    <Label className="text-sm font-medium mb-2 block">DC Notes</Label>
+                    <Label className="text-sm font-semibold mb-2.5 block text-slate-700">DC Notes</Label>
                     <Textarea
                       value={dcNotes}
                       onChange={(e) => setDcNotes(e.target.value)}
-                      placeholder="Notes"
+                      placeholder="Enter additional notes or comments"
                       rows={4}
-                      className="text-sm"
+                      className="text-sm border-slate-200 hover:border-blue-400 focus:border-blue-500 focus:ring-blue-500 bg-white resize-none"
                     />
                   </div>
                 </div>

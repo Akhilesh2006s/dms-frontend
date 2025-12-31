@@ -114,7 +114,7 @@ export default function ReportsClosedLeadsPage() {
       
       // Check if it's a connection error
       if (err?.message?.includes('Failed to fetch') || err?.message?.includes('ERR_CONNECTION_REFUSED')) {
-        toast.error('Cannot connect to backend server. Please make sure the backend server is running on port 5000.')
+        toast.error('Cannot connect to backend server. Please check your connection or contact support.')
       } else {
         toast.error(err?.message || 'Failed to load closed leads. Check console for details.')
       }
@@ -279,7 +279,7 @@ export default function ReportsClosedLeadsPage() {
       if (schoolName) qs.append('schoolName', schoolName)
 
       const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:5000"
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") || "https://crm-backend-production-2ffd.up.railway.app"
 
       const response = await fetch(`${API_BASE_URL}/api/leads/export?${qs.toString()}`, {
         method: 'GET',

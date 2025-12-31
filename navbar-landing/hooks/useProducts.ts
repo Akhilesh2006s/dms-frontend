@@ -9,6 +9,8 @@ type Product = {
   subjects: string[]
   hasSpecs: boolean
   specs?: string | string[] // Support both old (string) and new (array) format
+  hasCategory?: boolean
+  categories?: string[]
   prodStatus: number
 }
 
@@ -88,6 +90,19 @@ export function useProducts() {
     hasProductSubjects: (productName: string): boolean => {
       const product = products.find(p => p.productName === productName)
       return product?.hasSubjects === true && product?.subjects && Array.isArray(product.subjects) && product.subjects.length > 0
+    },
+    // Get product categories for a specific product
+    getProductCategories: (productName: string): string[] => {
+      const product = products.find(p => p.productName === productName)
+      if (product && product.hasCategory && product.categories && Array.isArray(product.categories)) {
+        return product.categories
+      }
+      return [] // No categories if not configured
+    },
+    // Check if product has categories
+    hasProductCategories: (productName: string): boolean => {
+      const product = products.find(p => p.productName === productName)
+      return product?.hasCategory === true && product?.categories && Array.isArray(product.categories) && product.categories.length > 0
     },
   }
 }

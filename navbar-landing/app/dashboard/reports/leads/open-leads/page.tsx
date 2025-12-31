@@ -118,7 +118,7 @@ export default function ReportsOpenLeadsPage() {
     } catch (err: any) {
       console.error('Error loading pending leads:', err)
       if (err?.message?.includes('Failed to fetch') || err?.message?.includes('ERR_CONNECTION_REFUSED')) {
-        toast.error('Cannot connect to backend server. Please make sure the backend server is running on port 5000.')
+        toast.error('Cannot connect to backend server. Please check your connection or contact support.')
       } else {
         toast.error(err?.message || 'Failed to load leads')
       }

@@ -75,14 +75,15 @@ export default function CloseLeadPage() {
     sameRateForAllClasses?: boolean // Flag to apply same rate to all classes for this spec/level
     selectedSubjects?: string[] // Selected subjects for parent row (multi-select)
     selectedSpecs?: string[] // Selected specs for parent row (multi-select)
+    selectedCategories?: string[] // Selected categories for parent row (multi-select)
   }>>([])
   const [poPhoto, setPoPhoto] = useState<File | null>(null)
   const [poPhotoUrl, setPoPhotoUrl] = useState<string>('')
   const [uploadingPO, setUploadingPO] = useState(false)
   
-  const { productNames: availableProducts, getProductLevels, getDefaultLevel, getProductSpecs, getProductSubjects, hasProductSubjects } = useProducts()
+  const { productNames: availableProducts, getProductLevels, getDefaultLevel, getProductSpecs, getProductSubjects, hasProductSubjects, getProductCategories, hasProductCategories } = useProducts()
   const availableClasses = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']
-  const availableCategories = ['New Students', 'Existing Students', 'Both']
+  const defaultCategories = ['New Students', 'Existing Students', 'Both']
   const availableDCCategories = ['Term 1', 'Term 2', 'Term 3', 'Full Year']
 
   useEffect(() => {
@@ -106,13 +107,14 @@ export default function CloseLeadPage() {
       if (leadData) {
         setLead(leadData)
         // Pre-fill form with lead data
+        // Only use estimated_delivery_date, NOT follow_up_date
         const deliveryDate = leadData.estimated_delivery_date 
           ? new Date(leadData.estimated_delivery_date).toISOString().split('T')[0]
           : ''
         setForm({
           contact_person2: leadData.decision_maker || leadData.contact_person2 || leadData.contact_person || '',
           contact_mobile2: leadData.email || leadData.contact_mobile2 || '',
-                delivery_date: deliveryDate,
+                delivery_date: deliveryDate, // Do NOT use follow_up_date here
                 year: '2025-26',
         })
         
@@ -235,7 +237,9 @@ export default function CloseLeadPage() {
               class: '1',
               fromClass: productData?.fromClass || productData?.class || '1',
               toClass: productData?.toClass || '10',
-              category: leadData.school_type === 'Existing' ? 'Existing Students' : 'New Students',
+              category: hasProductCategories(product)
+                ? (getProductCategories(product)[0] || '')
+                : (leadData.school_type === 'Existing' ? 'Existing Students' : 'New Students'),
               quantity: 1,
               strength: 0,
               price: 0,
@@ -246,6 +250,9 @@ export default function CloseLeadPage() {
               sameRateForAllClasses: false,
               selectedSubjects: [],
               selectedSpecs: getProductSpecs(product),
+              selectedCategories: hasProductCategories(product) 
+                ? getProductCategories(product) 
+                : undefined,
             }
           })
           setProductDetails(parentRows)
@@ -280,7 +287,9 @@ export default function CloseLeadPage() {
       class: '1', // Default, will be replaced when range is set
       fromClass: '1',
       toClass: '10',
-        category: lead?.school_type === 'Existing' ? 'Existing Students' : 'New Students',
+        category: hasProductCategories(product)
+          ? (getProductCategories(product)[0] || '')
+          : (lead?.school_type === 'Existing' ? 'Existing Students' : 'New Students'),
       quantity: 1,
       strength: 0,
       price: 0,
@@ -291,6 +300,9 @@ export default function CloseLeadPage() {
       sameRateForAllClasses: false, // Default: not enabled
       selectedSubjects: [], // Selected subjects (multi-select)
       selectedSpecs: getProductSpecs(product), // Selected specs (multi-select)
+      selectedCategories: hasProductCategories(product) 
+        ? getProductCategories(product) 
+        : undefined,
     }
     
     setProductDetails([...productDetails, newRow])
@@ -314,34 +326,42 @@ export default function CloseLeadPage() {
       const selectedSubjects = parentRow.selectedSubjects || []
       const hasSubjects = hasProductSubjects(parentRow.product) && selectedSubjects.length > 0
       const subjectsToUse = hasSubjects ? selectedSubjects : [undefined] // Use undefined if no subjects
+      const selectedCategories = parentRow.selectedCategories || []
+      // Use product-specific categories if available, otherwise use default student categories
+      const categoriesToUse = hasProductCategories(parentRow.product)
+        ? (selectedCategories.length > 0 ? selectedCategories : getProductCategories(parentRow.product))
+        : [lead?.school_type === 'Existing' ? 'Existing Students' : 'New Students']
       
       // Remove all child rows of this parent and other parent rows
       const otherParentRows = currentDetails.filter(p => p.isParentRow && p.id !== parentId)
       const otherChildRows = currentDetails.filter(p => !p.isParentRow && !p.id.startsWith(parentId + '_'))
       
-      // Generate rows: for each class in range, create a row for each spec (one row per class × spec)
+      // Generate rows: for each class in range, create a row for each spec × category combination
       const newRows: Array<typeof parentRow> = []
+      let rowIdx = 0
       for (let classNum = from; classNum <= to; classNum++) {
-        specsToUse.forEach((spec, specIdx) => {
-          // Create one row per class × spec combination
-          // Combine all selected subjects into a single string or use first subject
-          const subjectDisplay = hasSubjects && selectedSubjects.length > 0 
-            ? selectedSubjects.join(', ') 
-            : undefined
-          newRows.push({
-            id: parentId + '_' + classNum + '_' + specIdx,
-            product: parentRow.product,
-            class: classNum.toString(),
-            category: parentRow.category,
-            quantity: 1,
-            strength: 0,
-            price: 0,
-            total: 0,
-            level: parentRow.level,
-            specs: spec,
-            subject: subjectDisplay, // Combined subjects or undefined
-            isParentRow: false,
-            sameRateForAllClasses: false,
+        specsToUse.forEach((spec) => {
+          categoriesToUse.forEach((category) => {
+            // Create one row per class × spec × category combination
+            // Combine all selected subjects into a single string or use first subject
+            const subjectDisplay = hasSubjects && selectedSubjects.length > 0 
+              ? selectedSubjects.join(', ') 
+              : undefined
+            newRows.push({
+              id: parentId + '_' + classNum + '_' + rowIdx++,
+              product: parentRow.product,
+              class: classNum.toString(),
+              category: category,
+              quantity: 1,
+              strength: 0,
+              price: 0,
+              total: 0,
+              level: parentRow.level,
+              specs: spec,
+              subject: subjectDisplay, // Combined subjects or undefined
+              isParentRow: false,
+              sameRateForAllClasses: false,
+            })
           })
         })
       }
@@ -396,8 +416,8 @@ export default function CloseLeadPage() {
         }
       }
       
-      // If From/To class or selectedSubjects or selectedSpecs changes on a parent row, regenerate all child rows
-      if (rowToUpdate.isParentRow && (field === 'fromClass' || field === 'toClass' || field === 'selectedSubjects' || field === 'selectedSpecs')) {
+      // If From/To class or selectedSubjects or selectedSpecs or selectedCategories changes on a parent row, regenerate all child rows
+      if (rowToUpdate.isParentRow && (field === 'fromClass' || field === 'toClass' || field === 'selectedSubjects' || field === 'selectedSpecs' || field === 'selectedCategories')) {
         setTimeout(() => {
           generateRowsFromRange(id, updated.fromClass || '1', updated.toClass || '10')
         }, 0)
@@ -629,7 +649,14 @@ export default function CloseLeadPage() {
       const dcProductDetails = actualProductDetails.map(p => ({
         product: p.product,
         class: p.class || '1', // Use actual class value
-        category: p.category || (lead?.school_type === 'Existing' ? 'Existing Students' : 'New Students'),
+        category: p.category || (() => {
+          // Use product-specific categories if available, otherwise use school-type based category
+          if (hasProductCategories(p.product)) {
+            const productCats = getProductCategories(p.product)
+            return productCats[0] || (lead?.school_type === 'Existing' ? 'Existing Students' : 'New Students')
+          }
+          return lead?.school_type === 'Existing' ? 'Existing Students' : 'New Students'
+        })(),
         quantity: Number(p.quantity) || 0, // Keep for backend compatibility
         strength: Number(p.strength) || 0,
         price: Number(p.price) || 0,
@@ -1000,6 +1027,10 @@ export default function CloseLeadPage() {
                       const selectedSubjects = pd.selectedSubjects || []
                       const productSpecs = getProductSpecs(pd.product)
                       const selectedSpecs = pd.selectedSpecs || productSpecs
+                      const productCategories = hasProductCategories(pd.product) 
+                        ? getProductCategories(pd.product) 
+                        : []
+                      const selectedCategories = pd.selectedCategories || (hasProductCategories(pd.product) ? productCategories : undefined)
                       
                       return (
                         <div key={pd.id} className="space-y-2 p-3 border rounded bg-neutral-50">
@@ -1106,6 +1137,57 @@ export default function CloseLeadPage() {
                             </div>
                           )}
                           
+                          {/* Product Categories Multi-Select (only if product has product categories configured) */}
+                          {hasProductCategories(pd.product) && (() => {
+                            const productCategories = getProductCategories(pd.product)
+                            const selectedCategories = pd.selectedCategories || productCategories
+                            return (
+                              <div className="mt-2 pt-2 border-t">
+                                <Label className="text-xs font-semibold mb-2 block">Select Product Categories:</Label>
+                                <div className="flex flex-wrap gap-2">
+                                  {productCategories.map((category) => (
+                                    <div key={category} className="flex items-center space-x-1">
+                                      <Checkbox
+                                        id={`category-${pd.id}-${category}`}
+                                        checked={selectedCategories.includes(category)}
+                                        onCheckedChange={(checked) => {
+                                          const newCategories = checked
+                                            ? [...selectedCategories, category]
+                                            : selectedCategories.filter(c => c !== category)
+                                          // Ensure at least one product category is selected
+                                          if (newCategories.length === 0) {
+                                            toast.error('At least one product category must be selected')
+                                            return
+                                          }
+                                          // Update parent row with new categories
+                                          setProductDetails(currentDetails => {
+                                            const updated = currentDetails.map(p => 
+                                              p.id === pd.id ? { ...p, selectedCategories: newCategories } : p
+                                            )
+                                            // Regenerate rows after update
+                                            setTimeout(() => {
+                                              const updatedParent = updated.find(p => p.id === pd.id)
+                                              if (updatedParent) {
+                                                generateRowsFromRange(pd.id, updatedParent.fromClass || '1', updatedParent.toClass || '10')
+                                              }
+                                            }, 0)
+                                            return updated
+                                          })
+                                        }}
+                                      />
+                                      <Label 
+                                        htmlFor={`category-${pd.id}-${category}`} 
+                                        className="text-xs cursor-pointer"
+                                      >
+                                        {category}
+                                      </Label>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )
+                          })()}
+                          
                           {/* Subjects Multi-Select (only if product has subjects) */}
                           {hasSubjects && productSubjects.length > 0 && (
                             <div className="mt-2 pt-2 border-t">
@@ -1168,6 +1250,8 @@ export default function CloseLeadPage() {
                         <th className="px-3 py-2 text-left">Specs</th>
                         <th className="px-3 py-2 text-left">Subject</th>
                         <th className="px-3 py-2 text-left">Strength</th>
+                        <th className="px-3 py-2 text-left">Price</th>
+                        <th className="px-3 py-2 text-left">Total</th>
                         <th className="px-3 py-2 text-left">Level</th>
                         <th className="px-3 py-2 text-left">Action</th>
                       </tr>
@@ -1185,9 +1269,15 @@ export default function CloseLeadPage() {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                {availableCategories.map(c => (
-                                  <SelectItem key={c} value={c}>{c}</SelectItem>
-                                ))}
+                                {hasProductCategories(pd.product) ? (
+                                  getProductCategories(pd.product).map(c => (
+                                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                                  ))
+                                ) : (
+                                  defaultCategories.map(c => (
+                                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                                  ))
+                                )}
                               </SelectContent>
                             </Select>
                           </td>
@@ -1202,6 +1292,20 @@ export default function CloseLeadPage() {
                               min="0"
                               placeholder="0"
                             />
+                          </td>
+                          <td className="px-3 py-2">
+                            <Input
+                              type="number"
+                              value={pd.price}
+                              onChange={(e) => updateProductDetail(pd.id, 'price', Number(e.target.value))}
+                              className="w-24 h-8"
+                              min="0"
+                              placeholder="0"
+                              step="0.01"
+                            />
+                          </td>
+                          <td className="px-3 py-2 font-medium">
+                            ₹{((Number(pd.strength) || 0) * (Number(pd.price) || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
                           <td className="px-3 py-2">
                             <Select value={pd.level} onValueChange={(v) => updateProductDetail(pd.id, 'level', v)}>
@@ -1236,6 +1340,12 @@ export default function CloseLeadPage() {
                           {productDetails
                             .filter(pd => !pd.isParentRow)
                             .reduce((sum, pd) => sum + (Number(pd.strength) || 0), 0)}
+                        </td>
+                        <td className="px-3 py-3 text-right">-</td>
+                        <td className="px-3 py-3 text-right">
+                          ₹{productDetails
+                            .filter(pd => !pd.isParentRow)
+                            .reduce((sum, pd) => sum + ((Number(pd.strength) || 0) * (Number(pd.price) || 0)), 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
                         <td colSpan={2} className="px-3 py-3"></td>
                       </tr>

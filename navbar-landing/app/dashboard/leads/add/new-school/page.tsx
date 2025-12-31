@@ -201,6 +201,11 @@ export default function NewSchoolPage() {
       setSubmitting(false)
       return
     }
+    if (!form.follow_up_date || !form.follow_up_date.trim()) {
+      setError('Follow-up date is required')
+      setSubmitting(false)
+      return
+    }
     
     try {
       const parseFollowUp = (s: string) => {
@@ -251,7 +256,7 @@ export default function NewSchoolPage() {
         average_fee: form.average_fee ? Number(form.average_fee) : undefined,
         email: form.email,
         products: selectedProducts,
-        estimated_delivery_date: parseFollowUp(form.follow_up_date),
+        follow_up_date: parseFollowUp(form.follow_up_date), // Save as follow_up_date, NOT estimated_delivery_date
         assigned_to: currentUser?._id, // Auto-assign to current employee
       }
       
@@ -489,7 +494,7 @@ export default function NewSchoolPage() {
             </p>
           </div>
           <div>
-            <Label>Follow-up date</Label>
+            <Label>Follow-up date *</Label>
             <Input 
               type="date"
               className="bg-white text-neutral-900" 
@@ -498,7 +503,8 @@ export default function NewSchoolPage() {
               onChange={(e) => {
                 const dateValue = e.target.value
                 setForm((f) => ({ ...f, follow_up_date: dateValue }))
-              }} 
+              }}
+              required
             />
           </div>
           {error && <div className="md:col-span-2 text-red-600 text-sm">{error}</div>}

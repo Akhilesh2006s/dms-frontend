@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { getCurrentUser } from '@/lib/auth'
+import { useSidebar } from '@/contexts/SidebarContext'
 import {
   LayoutDashboard,
   Truck,
@@ -249,18 +250,8 @@ export function Sidebar() {
   const pathname = usePathname()
   const [open, setOpen] = useState<Record<string, boolean>>({})
   const [user, setUser] = useState<{ _id?: string; name?: string; email?: string; role?: string } | null>(null)
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const { sidebarOpen, setSidebarOpen, toggleSidebar: toggleSidebarContext } = useSidebar()
   const [hoveredItem, setHoveredItem] = useState<string | null>(null)
-
-  // Load sidebar collapsed state from localStorage
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('sidebarCollapsed')
-      if (saved !== null) {
-        setSidebarOpen(JSON.parse(saved))
-      }
-    }
-  }, [])
 
   // Load sidebar state from localStorage
   useEffect(() => {
@@ -610,29 +601,8 @@ export function Sidebar() {
   }
 
   const toggleSidebar = () => {
-    const newState = !sidebarOpen
-    setSidebarOpen(newState)
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('sidebarCollapsed', JSON.stringify(!newState))
-      // Dispatch custom event to notify TopBar
-      window.dispatchEvent(new CustomEvent('sidebarToggle'))
-      // Update main content margin
-      const mainContent = document.getElementById('main-content')
-      if (mainContent) {
-        mainContent.style.marginLeft = newState ? '256px' : '64px'
-      }
-    }
+    toggleSidebarContext()
   }
-
-  // Update main content margin on mount and when sidebar state changes
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const mainContent = document.getElementById('main-content')
-      if (mainContent) {
-        mainContent.style.marginLeft = sidebarOpen ? '256px' : '64px'
-      }
-    }
-  }, [sidebarOpen])
 
   return (
     <>

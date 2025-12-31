@@ -376,7 +376,7 @@ export default function EditLeadPage() {
         average_fee: form.average_fee ? Number(form.average_fee) : undefined,
         email: form.email,
         products: selectedProducts,
-        estimated_delivery_date: parseFollowUp(form.follow_up_date),
+        follow_up_date: parseFollowUp(form.follow_up_date), // Save as follow_up_date, NOT estimated_delivery_date
       }
       
       // Validate required fields

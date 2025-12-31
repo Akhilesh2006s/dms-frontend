@@ -65,8 +65,6 @@ export default function ClientDCPage() {
     subject?: string
     quantity: number
     strength: number
-    price: number
-    total: number
     level: string
   }>>([])
   const [dcDate, setDcDate] = useState('')
@@ -343,12 +341,8 @@ export default function ClientDCPage() {
           console.log('Loading products for Client DC:', JSON.stringify(addedProducts, null, 2))
           setDcProductRows(addedProducts.map((p: any, idx: number) => {
             // Read values directly - preserve 0 values, only default if null/undefined
-            const priceNum = p.price !== null && p.price !== undefined ? Number(p.price) : 0
             const strengthNum = p.strength !== null && p.strength !== undefined ? Number(p.strength) : 0
             const quantityNum = p.quantity !== null && p.quantity !== undefined ? Number(p.quantity) : strengthNum
-            const totalNum = p.total !== null && p.total !== undefined && p.total !== 0
-              ? Number(p.total)
-              : (priceNum * strengthNum)
             
             const row = {
               id: String(idx + 1),
@@ -359,18 +353,12 @@ export default function ClientDCPage() {
               subject: (p.subject && p.subject.trim() !== '') ? p.subject : undefined, // Preserve subject from saved data, handle empty string
               quantity: quantityNum,
               strength: strengthNum,
-              price: priceNum,
-              total: totalNum,
               level: p.level || getDefaultLevel(p.product || 'Abacus'),
             }
             console.log(`Client DC Product ${idx + 1} - Specs/Subject:`, {
               raw: { specs: p.specs, subject: p.subject, product: p.product },
               loaded: { specs: row.specs, subject: row.subject },
               fullProduct: p
-            })
-            console.log(`Client DC Product ${idx + 1}:`, {
-              raw: { price: p.price, total: p.total, strength: p.strength },
-              converted: { price: priceNum, total: totalNum, strength: strengthNum },
             })
             return row
           }))
@@ -419,8 +407,6 @@ export default function ClientDCPage() {
             subject: row.subject || undefined,
             quantity: Number(row.quantity) || 0,
             strength: Number(row.strength) || 0,
-            price: Number(row.price) || 0,
-            total: Number(row.total) || (Number(row.price) || 0) * (Number(row.strength) || 0),
             level: row.level || getDefaultLevel(row.product || 'Abacus'),
           }))
         : undefined
@@ -486,8 +472,6 @@ export default function ClientDCPage() {
         subject: row.subject || undefined,
         quantity: Number(row.quantity) || 0,
         strength: Number(row.strength) || 0,
-        price: Number(row.price) || 0,
-        total: Number(row.total) || (Number(row.price) || 0) * (Number(row.strength) || 0),
         level: row.level || getDefaultLevel(row.product || 'Abacus'),
       }))
 
@@ -1112,8 +1096,6 @@ export default function ClientDCPage() {
                         subject: undefined,
                         quantity: 0,
                         strength: 0,
-                        price: 0,
-                        total: 0,
                         level: getDefaultLevel('Abacus'),
                       }])
                     }}
@@ -1141,8 +1123,6 @@ export default function ClientDCPage() {
                       <th className="py-3 px-4 text-left text-sm font-semibold border-r">Specs</th>
                       <th className="py-3 px-4 text-left text-sm font-semibold border-r">Subject</th>
                       <th className="py-3 px-4 text-left text-sm font-semibold border-r">Strength</th>
-                      <th className="py-3 px-4 text-left text-sm font-semibold border-r min-w-[120px]">Price</th>
-                      <th className="py-3 px-4 text-left text-sm font-semibold border-r">Total</th>
                       <th className="py-3 px-4 text-left text-sm font-semibold border-r">Level</th>
                       <th className="py-3 px-4 text-center text-sm font-semibold">Action</th>
                     </tr>
@@ -1243,31 +1223,11 @@ export default function ClientDCPage() {
                             onChange={(e) => {
                               const updated = [...dcProductRows]
                               updated[idx].strength = Number(e.target.value) || 0
-                              updated[idx].total = updated[idx].price * updated[idx].strength
                               setDcProductRows(updated)
                             }}
                             placeholder="0"
                             min="0"
                           />
-                        </td>
-                        <td className="py-3 px-4 border-r">
-                          <Input
-                            type="number"
-                            className="h-10 text-sm w-32"
-                            value={row.price || ''}
-                            onChange={(e) => {
-                              const updated = [...dcProductRows]
-                              updated[idx].price = Number(e.target.value) || 0
-                              updated[idx].total = updated[idx].price * updated[idx].strength
-                              setDcProductRows(updated)
-                            }}
-                            placeholder="0"
-                            min="0"
-                            step="0.01"
-                          />
-                        </td>
-                        <td className="py-3 px-4 border-r font-medium">
-                          {(row.total || 0).toFixed(2)}
                         </td>
                         <td className="py-3 px-4 border-r">
                           <Select value={row.level} onValueChange={(v) => {
@@ -1309,10 +1269,6 @@ export default function ClientDCPage() {
                       <td className="px-3 py-3"></td>
                       <td className="px-3 py-3 text-right">
                         {dcProductRows.reduce((sum, row) => sum + (Number(row.strength) || 0), 0)}
-                      </td>
-                      <td className="px-3 py-3"></td>
-                      <td className="px-3 py-3 text-right font-bold text-lg">
-                        {dcProductRows.reduce((sum, row) => sum + (Number(row.total) || 0), 0).toFixed(2)}
                       </td>
                       <td colSpan={2} className="px-3 py-3"></td>
                     </tr>
