@@ -273,6 +273,76 @@ export default function CloseLeadPage() {
     }
   }
 
+  // Get products that were selected when the lead was created (from "Products Interested")
+  const getLeadProducts = (): string[] => {
+    if (!lead?.products) {
+      return []
+    }
+    
+    let productNames: string[] = []
+    
+    // Handle array format
+    if (Array.isArray(lead.products) && lead.products.length > 0) {
+      productNames = lead.products.map((p: any) => {
+        const name = p.product_name || p.product || p
+        return typeof name === 'string' ? name.trim() : null
+      }).filter((name: string | null): name is string => name !== null)
+    } 
+    // Handle string format (comma-separated)
+    else if (typeof lead.products === 'string' && lead.products.trim()) {
+      productNames = lead.products.split(',').map((p: string) => p.trim()).filter(Boolean)
+    }
+    
+    if (productNames.length === 0) {
+      return []
+    }
+    
+    // Normalize product names to match availableProducts
+    return productNames
+      .map((name: string) => {
+        const normalized = name.trim()
+        // Map variations to exact names (same normalization as in loadLead)
+        const lower = normalized.toLowerCase()
+        if (lower === 'mathlab' || lower === 'math lab' || lower === 'maths lab') {
+          return 'Maths lab'
+        }
+        if (lower === 'codechamp' || lower === 'code champ') {
+          return 'Codechamp'
+        }
+        if (lower === 'vedicmath' || lower === 'vedic math') {
+          return 'Vedic Maths'
+        }
+        if (lower === 'financial literacy' || lower === 'financialliteracy') {
+          return 'Financial literacy'
+        }
+        if (lower === 'brain bytes' || lower === 'brainbytes') {
+          return 'Brain bytes'
+        }
+        if (lower === 'spelling bee' || lower === 'spellingbee') {
+          return 'Spelling bee'
+        }
+        if (lower === 'skill pro' || lower === 'skillpro') {
+          return 'Skill pro'
+        }
+        if (lower === 'abacus') {
+          return 'Abacus'
+        }
+        if (lower === 'eel' || lower === 'eell') {
+          return 'EEL'
+        }
+        if (lower === 'iit') {
+          return 'IIT'
+        }
+        return normalized
+      })
+      .filter((name: string) => {
+        return name !== null && availableProducts.includes(name)
+      })
+  }
+
+  // Filter available products to only show those that were selected when lead was created
+  const filteredProducts = lead ? getLeadProducts() : availableProducts
+
   const addProductWithSpec = (product: string, spec: string) => {
     // Add product to selected products
     if (!selectedProducts.includes(product)) {
@@ -983,9 +1053,18 @@ export default function CloseLeadPage() {
             {/* Product Selection */}
             <div>
               <Label className="text-sm font-semibold mb-2 block">Add Products</Label>
-              <p className="text-xs text-neutral-500 mb-2">Click to add product - rows will be created automatically for each spec</p>
-              <div className="space-y-2 max-h-[200px] overflow-y-auto border rounded p-3">
-                {availableProducts.map((product) => {
+              <p className="text-xs text-neutral-500 mb-2">
+                {filteredProducts.length > 0 
+                  ? `Showing products selected when lead was created (${filteredProducts.length} available)`
+                  : 'No products were selected when this lead was created'}
+              </p>
+              {filteredProducts.length === 0 ? (
+                <div className="p-4 border rounded bg-yellow-50 text-yellow-800 text-sm">
+                  No products available. This lead was created without selecting any products in "Products Interested".
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[200px] overflow-y-auto border rounded p-3">
+                  {filteredProducts.map((product) => {
                   const productSpecs = getProductSpecs(product)
                   const hasSpecs = productSpecs.length > 0
                   const specCount = hasSpecs ? productSpecs.length : 1
@@ -1011,7 +1090,8 @@ export default function CloseLeadPage() {
                     </div>
                   )
                 })}
-              </div>
+                </div>
+              )}
             </div>
 
             {/* Product Range Configuration */}

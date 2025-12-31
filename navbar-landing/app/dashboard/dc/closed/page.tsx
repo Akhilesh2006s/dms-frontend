@@ -40,6 +40,24 @@ type DcOrder = {
   status?: string
   dcRequestData?: any
   isLead?: boolean // Flag to identify if this is a converted lead
+  // Delivery and Address fields
+  property_number?: string
+  floor?: string
+  tower_block?: string
+  nearby_landmark?: string
+  area?: string
+  city?: string
+  pincode?: string
+  pendingEdit?: {
+    property_number?: string
+    floor?: string
+    tower_block?: string
+    nearby_landmark?: string
+    area?: string
+    city?: string
+    pincode?: string
+    status?: string
+  }
 }
 
 type DC = {
@@ -764,7 +782,6 @@ export default function ClosedSalesPage() {
         dcOrderId: selectedDeal._id,
         dcDate: dcDate || undefined,
         dcRemarks: dcRemarks || undefined,
-        dcNotes: dcNotes || undefined,
       }
       
       // Only include employeeId if deal doesn't already have one assigned (backend will use deal's assigned_to if available)
@@ -803,7 +820,6 @@ export default function ClosedSalesPage() {
             dcDate: raisePayload.dcDate,
             dcRemarks: raisePayload.dcRemarks,
             dcCategory: raisePayload.dcCategory,
-            dcNotes: raisePayload.dcNotes,
             productDetails: raisePayload.productDetails,
           }),
         })
@@ -821,7 +837,7 @@ export default function ClosedSalesPage() {
         method: 'POST',
         body: JSON.stringify({
           requestedQuantity: totalQuantity || 1,
-          remarks: dcRemarks || dcNotes || undefined,
+          remarks: dcRemarks || undefined,
         }),
       })
 
@@ -872,7 +888,6 @@ export default function ClosedSalesPage() {
       const dcRequestData = {
         dcDate: dcDate || undefined,
         dcRemarks: dcRemarks || undefined,
-        dcNotes: dcNotes || undefined,
         dcCategory: dcCategory || undefined,
         requestedQuantity: totalQuantity || 1,
         productDetails: productRows.map(row => ({
@@ -920,7 +935,6 @@ export default function ClosedSalesPage() {
       // Use current form data if available (for updates), otherwise use request data, otherwise use deal's products
       const finalDcDate = dcDate || (dcRequestData.dcDate ? new Date(dcRequestData.dcDate).toISOString().split('T')[0] : undefined)
       const finalDcRemarks = dcRemarks || dcRequestData.dcRemarks || undefined
-      const finalDcNotes = dcNotes || dcRequestData.dcNotes || undefined
       const finalDcCategory = dcCategory || dcRequestData.dcCategory || undefined
       
       // Determine product details: use form data if available, otherwise request data, otherwise deal's products
@@ -960,7 +974,6 @@ export default function ClosedSalesPage() {
         dcOrderId: selectedDeal._id,
         dcDate: finalDcDate || undefined,
         dcRemarks: finalDcRemarks,
-        dcNotes: finalDcNotes,
         dcCategory: finalDcCategory,
         requestedQuantity: finalRequestedQuantity,
         productDetails: finalProductDetails,
@@ -1038,7 +1051,6 @@ export default function ClosedSalesPage() {
         dcOrderId: selectedDeal._id,
         dcDate: dcRequestData.dcDate || dcDate || undefined,
         dcRemarks: dcRequestData.dcRemarks || dcRemarks || undefined,
-        dcNotes: dcRequestData.dcNotes || dcNotes || undefined,
         dcCategory: dcRequestData.dcCategory || dcCategory || undefined,
         requestedQuantity: dcRequestData.requestedQuantity || 1,
         productDetails: dcRequestData.productDetails || productRows.map(row => ({
@@ -1078,7 +1090,7 @@ export default function ClosedSalesPage() {
         method: 'POST',
         body: JSON.stringify({
           requestedQuantity: raisePayload.requestedQuantity || 1,
-          remarks: raisePayload.dcRemarks || raisePayload.dcNotes || undefined,
+          remarks: raisePayload.dcRemarks || undefined,
         }),
       })
 
@@ -1474,6 +1486,79 @@ export default function ClosedSalesPage() {
                 </div>
               </div>
 
+              {/* Delivery and Address Section */}
+              <div className="border-t border-slate-200 pt-6 mt-6">
+                <div className="mb-4">
+                  <h3 className="font-bold text-slate-900 text-xl mb-2">Delivery and Address</h3>
+                  <p className="text-sm text-slate-500">Delivery address details for this order</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Property Number</Label>
+                    <Input 
+                      value={selectedDeal.property_number || ''} 
+                      disabled 
+                      className="bg-slate-50 text-slate-900 border-slate-200 h-11 text-sm" 
+                      placeholder="Property Number"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Floor</Label>
+                    <Input 
+                      value={selectedDeal.floor || ''} 
+                      disabled 
+                      className="bg-slate-50 text-slate-900 border-slate-200 h-11 text-sm" 
+                      placeholder="Floor"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Tower/Block</Label>
+                    <Input 
+                      value={selectedDeal.tower_block || ''} 
+                      disabled 
+                      className="bg-slate-50 text-slate-900 border-slate-200 h-11 text-sm" 
+                      placeholder="Tower/Block"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Nearby Landmark</Label>
+                    <Input 
+                      value={selectedDeal.nearby_landmark || ''} 
+                      disabled 
+                      className="bg-slate-50 text-slate-900 border-slate-200 h-11 text-sm" 
+                      placeholder="Nearby Landmark"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Area</Label>
+                    <Input 
+                      value={selectedDeal.area || ''} 
+                      disabled 
+                      className="bg-slate-50 text-slate-900 border-slate-200 h-11 text-sm" 
+                      placeholder="Area"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">City</Label>
+                    <Input 
+                      value={selectedDeal.city || ''} 
+                      disabled 
+                      className="bg-slate-50 text-slate-900 border-slate-200 h-11 text-sm" 
+                      placeholder="City"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Pincode</Label>
+                    <Input 
+                      value={selectedDeal.pincode || ''} 
+                      disabled 
+                      className="bg-slate-50 text-slate-900 border-slate-200 h-11 text-sm" 
+                      placeholder="Pincode"
+                    />
+                  </div>
+                </div>
+              </div>
+
               {/* Products Table - Where quantities are added */}
               <div className="border-t border-slate-200 pt-8 mt-8">
                 <div className="flex items-center justify-between mb-6">
@@ -1724,16 +1809,6 @@ export default function ClosedSalesPage() {
                       onChange={(e) => setDcRemarks(e.target.value)}
                       placeholder="Enter remarks"
                       className="h-11 text-sm border-slate-200 hover:border-blue-400 focus:border-blue-500 focus:ring-blue-500 bg-white"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <Label className="text-sm font-semibold mb-2.5 block text-slate-700">DC Notes</Label>
-                    <Textarea
-                      value={dcNotes}
-                      onChange={(e) => setDcNotes(e.target.value)}
-                      placeholder="Enter additional notes or comments"
-                      rows={4}
-                      className="text-sm border-slate-200 hover:border-blue-400 focus:border-blue-500 focus:ring-blue-500 bg-white resize-none"
                     />
                   </div>
                 </div>

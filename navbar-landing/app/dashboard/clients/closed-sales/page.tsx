@@ -27,6 +27,14 @@ type PendingEdit = {
   pod_proof_url?: string
   remarks?: string
   total_amount?: number
+  // Delivery and Address fields
+  property_number?: string
+  floor?: string
+  tower_block?: string
+  nearby_landmark?: string
+  area?: string
+  city?: string
+  pincode?: string
   requestedBy?: { _id: string; name?: string; email?: string }
   requestedAt?: string
   status?: 'pending' | 'approved' | 'rejected'
@@ -60,6 +68,14 @@ type DcOrder = {
   pod_proof_url?: string
   status?: string
   pendingEdit?: PendingEdit
+  // Delivery and Address fields
+  property_number?: string
+  floor?: string
+  tower_block?: string
+  nearby_landmark?: string
+  area?: string
+  city?: string
+  pincode?: string
 }
 
 export default function ExecutiveManagerClosedSalesPage() {
@@ -129,6 +145,14 @@ export default function ExecutiveManagerClosedSalesPage() {
         cluster: deal.cluster || '',
         pod_proof_url: deal.pod_proof_url || deal.podProofUrl || null,
         pendingEdit: deal.pendingEdit || null,
+        // Delivery and Address fields
+        property_number: deal.property_number || '',
+        floor: deal.floor || '',
+        tower_block: deal.tower_block || '',
+        nearby_landmark: deal.nearby_landmark || '',
+        area: deal.area || '',
+        city: deal.city || '',
+        pincode: deal.pincode || '',
       }))
       
       // Sort by edit request date (most recent first)
@@ -171,9 +195,61 @@ export default function ExecutiveManagerClosedSalesPage() {
     }).replace(/(\d+)\/(\d+)\/(\d+),/, '$3-$2-$1').replace(', ', ' ')
   }
 
-  const openEditViewDialog = (dcOrder: DcOrder) => {
+  const openEditViewDialog = async (dcOrder: DcOrder) => {
     if (dcOrder.pendingEdit) {
-      setSelectedEdit({ dcOrder, pendingEdit: dcOrder.pendingEdit })
+      // Fetch full DcOrder to ensure we have all fields including delivery address
+      try {
+        const fullDcOrder = await apiRequest<DcOrder>(`/dc-orders/${dcOrder._id}`)
+        console.log('Full DcOrder loaded:', {
+          property_number: fullDcOrder.property_number,
+          floor: fullDcOrder.floor,
+          pendingEdit_property_number: fullDcOrder.pendingEdit?.property_number,
+          pendingEdit_floor: fullDcOrder.pendingEdit?.floor,
+        })
+        console.log('Full pendingEdit object:', JSON.stringify(fullDcOrder.pendingEdit, null, 2))
+        const pendingEditData = fullDcOrder.pendingEdit || dcOrder.pendingEdit
+        setSelectedEdit({ 
+          dcOrder: {
+            ...dcOrder,
+            // Ensure delivery address fields are included from main DcOrder
+            property_number: fullDcOrder.property_number || dcOrder.property_number || '',
+            floor: fullDcOrder.floor || dcOrder.floor || '',
+            tower_block: fullDcOrder.tower_block || dcOrder.tower_block || '',
+            nearby_landmark: fullDcOrder.nearby_landmark || dcOrder.nearby_landmark || '',
+            area: fullDcOrder.area || dcOrder.area || '',
+            city: fullDcOrder.city || dcOrder.city || '',
+            pincode: fullDcOrder.pincode || dcOrder.pincode || '',
+          }, 
+          pendingEdit: {
+            ...pendingEditData,
+            // Ensure delivery address fields are included from pendingEdit
+            property_number: pendingEditData?.property_number || '',
+            floor: pendingEditData?.floor || '',
+            tower_block: pendingEditData?.tower_block || '',
+            nearby_landmark: pendingEditData?.nearby_landmark || '',
+            area: pendingEditData?.area || '',
+            city: pendingEditData?.city || '',
+            pincode: pendingEditData?.pincode || '',
+          }
+        })
+      } catch (e) {
+        console.error('Failed to load full DcOrder:', e)
+        // Fallback to using the dcOrder we have
+        setSelectedEdit({ 
+          dcOrder, 
+          pendingEdit: {
+            ...dcOrder.pendingEdit,
+            // Ensure delivery address fields exist even if empty
+            property_number: dcOrder.pendingEdit?.property_number || '',
+            floor: dcOrder.pendingEdit?.floor || '',
+            tower_block: dcOrder.pendingEdit?.tower_block || '',
+            nearby_landmark: dcOrder.pendingEdit?.nearby_landmark || '',
+            area: dcOrder.pendingEdit?.area || '',
+            city: dcOrder.pendingEdit?.city || '',
+            pincode: dcOrder.pendingEdit?.pincode || '',
+          }
+        })
+      }
       setViewEditDialogOpen(true)
     }
   }
@@ -319,122 +395,197 @@ export default function ExecutiveManagerClosedSalesPage() {
           <DialogHeader>
             <DialogTitle>PO Edit Request - {selectedEdit?.dcOrder.school_name || 'Client'}</DialogTitle>
             <DialogDescription>
-              Review the PO edit changes requested by Executive. Original values are shown for comparison. Approve or reject the changes.
+              Review the PO edit changes requested by Executive. Delivery address has already been saved directly. Approve or reject the other changes.
             </DialogDescription>
           </DialogHeader>
           
           {selectedEdit && (
             <div className="space-y-6 py-4">
-              {/* Comparison Table */}
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Field</TableHead>
-                      <TableHead>Original Value</TableHead>
-                      <TableHead>New Value</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableRow>
-                      <TableCell className="font-medium">School Name</TableCell>
-                      <TableCell>{selectedEdit.dcOrder.school_name || '-'}</TableCell>
-                      <TableCell className={selectedEdit.pendingEdit.school_name !== selectedEdit.dcOrder.school_name ? 'bg-yellow-50 font-medium' : ''}>
-                        {selectedEdit.pendingEdit.school_name || '-'}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="font-medium">Contact Person</TableCell>
-                      <TableCell>{selectedEdit.dcOrder.contact_person || '-'}</TableCell>
-                      <TableCell className={selectedEdit.pendingEdit.contact_person !== selectedEdit.dcOrder.contact_person ? 'bg-yellow-50 font-medium' : ''}>
-                        {selectedEdit.pendingEdit.contact_person || '-'}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="font-medium">Contact Mobile</TableCell>
-                      <TableCell>{selectedEdit.dcOrder.contact_mobile || '-'}</TableCell>
-                      <TableCell className={selectedEdit.pendingEdit.contact_mobile !== selectedEdit.dcOrder.contact_mobile ? 'bg-yellow-50 font-medium' : ''}>
-                        {selectedEdit.pendingEdit.contact_mobile || '-'}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="font-medium">Email</TableCell>
-                      <TableCell>{selectedEdit.dcOrder.email || '-'}</TableCell>
-                      <TableCell className={selectedEdit.pendingEdit.email !== selectedEdit.dcOrder.email ? 'bg-yellow-50 font-medium' : ''}>
-                        {selectedEdit.pendingEdit.email || '-'}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="font-medium">Zone</TableCell>
-                      <TableCell>{selectedEdit.dcOrder.zone || '-'}</TableCell>
-                      <TableCell className={selectedEdit.pendingEdit.zone !== selectedEdit.dcOrder.zone ? 'bg-yellow-50 font-medium' : ''}>
-                        {selectedEdit.pendingEdit.zone || '-'}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="font-medium">Location</TableCell>
-                      <TableCell>{selectedEdit.dcOrder.location || '-'}</TableCell>
-                      <TableCell className={selectedEdit.pendingEdit.location !== selectedEdit.dcOrder.location ? 'bg-yellow-50 font-medium' : ''}>
-                        {selectedEdit.pendingEdit.location || '-'}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="font-medium">Address</TableCell>
-                      <TableCell className="max-w-xs truncate">{selectedEdit.dcOrder.address || '-'}</TableCell>
-                      <TableCell className={`max-w-xs truncate ${selectedEdit.pendingEdit.address !== selectedEdit.dcOrder.address ? 'bg-yellow-50 font-medium' : ''}`}>
-                        {selectedEdit.pendingEdit.address || '-'}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="font-medium">Total Amount</TableCell>
-                      <TableCell>{selectedEdit.dcOrder.total_amount || 0}</TableCell>
-                      <TableCell className={selectedEdit.pendingEdit.total_amount !== selectedEdit.dcOrder.total_amount ? 'bg-yellow-50 font-medium' : ''}>
-                        {selectedEdit.pendingEdit.total_amount || 0}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="font-medium">Remarks</TableCell>
-                      <TableCell className="max-w-xs truncate">{selectedEdit.dcOrder.remarks || '-'}</TableCell>
-                      <TableCell className={`max-w-xs truncate ${selectedEdit.pendingEdit.remarks !== selectedEdit.dcOrder.remarks ? 'bg-yellow-50 font-medium' : ''}`}>
-                        {selectedEdit.pendingEdit.remarks || '-'}
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
+              {/* PO Information */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label>School Name</Label>
+                  <Input 
+                    value={selectedEdit.pendingEdit.school_name || ''} 
+                    disabled 
+                    className="bg-neutral-50" 
+                  />
+                </div>
+                <div>
+                  <Label>Contact Person</Label>
+                  <Input 
+                    value={selectedEdit.pendingEdit.contact_person || ''} 
+                    disabled 
+                    className="bg-neutral-50" 
+                  />
+                </div>
+                <div>
+                  <Label>Contact Mobile</Label>
+                  <Input 
+                    value={selectedEdit.pendingEdit.contact_mobile || ''} 
+                    disabled 
+                    className="bg-neutral-50" 
+                  />
+                </div>
+                <div>
+                  <Label>Contact Person 2</Label>
+                  <Input 
+                    value={selectedEdit.pendingEdit.contact_person2 || ''} 
+                    disabled 
+                    className="bg-neutral-50" 
+                  />
+                </div>
+                <div>
+                  <Label>Contact Mobile 2</Label>
+                  <Input 
+                    value={selectedEdit.pendingEdit.contact_mobile2 || ''} 
+                    disabled 
+                    className="bg-neutral-50" 
+                  />
+                </div>
+                <div>
+                  <Label>Email</Label>
+                  <Input 
+                    value={selectedEdit.pendingEdit.email || ''} 
+                    disabled 
+                    className="bg-neutral-50" 
+                  />
+                </div>
+                <div>
+                  <Label>Zone</Label>
+                  <Input 
+                    value={selectedEdit.pendingEdit.zone || ''} 
+                    disabled 
+                    className="bg-neutral-50" 
+                  />
+                </div>
+                <div>
+                  <Label>Location</Label>
+                  <Input 
+                    value={selectedEdit.pendingEdit.location || ''} 
+                    disabled 
+                    className="bg-neutral-50" 
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <Label>Address</Label>
+                  <Textarea 
+                    value={selectedEdit.pendingEdit.address || ''} 
+                    disabled 
+                    className="bg-neutral-50" 
+                    rows={3}
+                  />
+                </div>
+                <div>
+                  <Label>Total Amount</Label>
+                  <Input 
+                    type="number"
+                    value={selectedEdit.pendingEdit.total_amount || 0} 
+                    disabled 
+                    className="bg-neutral-50" 
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <Label>Remarks</Label>
+                  <Textarea 
+                    value={selectedEdit.pendingEdit.remarks || ''} 
+                    disabled 
+                    className="bg-neutral-50" 
+                    rows={3}
+                  />
+                </div>
               </div>
 
-              {/* Products Comparison */}
+              {/* Delivery and Address - Already saved directly (no approval needed) */}
+              <div className="border-t pt-4">
+                <div className="flex items-center justify-between mb-4">
+                  <Label className="text-lg font-semibold">Delivery and Address</Label>
+                  <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">Already Saved</span>
+                </div>
+                <p className="text-xs text-neutral-500 mb-4">Delivery address was saved directly to the database and does not require approval.</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label>Property Number</Label>
+                    <Input 
+                      value={selectedEdit.dcOrder?.property_number || ''} 
+                      disabled 
+                      className="bg-neutral-50" 
+                    />
+                  </div>
+                  <div>
+                    <Label>Floor</Label>
+                    <Input 
+                      value={selectedEdit.dcOrder?.floor || ''} 
+                      disabled 
+                      className="bg-neutral-50" 
+                    />
+                  </div>
+                  <div>
+                    <Label>Tower/Block</Label>
+                    <Input 
+                      value={selectedEdit.dcOrder?.tower_block || ''} 
+                      disabled 
+                      className="bg-neutral-50" 
+                    />
+                  </div>
+                  <div>
+                    <Label>Nearby Landmark</Label>
+                    <Input 
+                      value={selectedEdit.dcOrder?.nearby_landmark || ''} 
+                      disabled 
+                      className="bg-neutral-50" 
+                    />
+                  </div>
+                  <div>
+                    <Label>Area</Label>
+                    <Input 
+                      value={selectedEdit.dcOrder?.area || ''} 
+                      disabled 
+                      className="bg-neutral-50" 
+                    />
+                  </div>
+                  <div>
+                    <Label>City</Label>
+                    <Input 
+                      value={selectedEdit.dcOrder?.city || ''} 
+                      disabled 
+                      className="bg-neutral-50" 
+                    />
+                  </div>
+                  <div>
+                    <Label>Pincode</Label>
+                    <Input 
+                      value={selectedEdit.dcOrder?.pincode || ''} 
+                      disabled 
+                      className="bg-neutral-50" 
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Products */}
               <div className="border-t pt-4">
                 <Label className="text-lg font-semibold mb-4 block">Products</Label>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-sm font-medium text-neutral-600 mb-2 block">Original Products</Label>
-                    <div className="space-y-2">
-                      {selectedEdit.dcOrder.products && selectedEdit.dcOrder.products.length > 0 ? (
-                        selectedEdit.dcOrder.products.map((p, idx) => (
-                          <div key={idx} className="p-2 bg-neutral-50 rounded text-sm">
-                            {p.product_name} - Qty: {p.quantity}
+                <div className="space-y-2">
+                  {selectedEdit.pendingEdit.products && selectedEdit.pendingEdit.products.length > 0 ? (
+                    selectedEdit.pendingEdit.products.map((p, idx) => (
+                      <div key={idx} className="p-3 bg-neutral-50 rounded border">
+                        <div className="text-sm">
+                          <span className="font-medium">Product:</span> {p.product_name}
+                        </div>
+                        <div className="text-sm">
+                          <span className="font-medium">Quantity:</span> {p.quantity}
+                        </div>
+                        {p.unit_price && (
+                          <div className="text-sm">
+                            <span className="font-medium">Unit Price:</span> {p.unit_price}
                           </div>
-                        ))
-                      ) : (
-                        <div className="text-sm text-neutral-400">No products</div>
-                      )}
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium text-neutral-600 mb-2 block">New Products</Label>
-                    <div className="space-y-2">
-                      {selectedEdit.pendingEdit.products && selectedEdit.pendingEdit.products.length > 0 ? (
-                        selectedEdit.pendingEdit.products.map((p, idx) => (
-                          <div key={idx} className={`p-2 rounded text-sm ${JSON.stringify(p) !== JSON.stringify(selectedEdit.dcOrder.products?.[idx]) ? 'bg-yellow-50 font-medium' : 'bg-neutral-50'}`}>
-                            {p.product_name} - Qty: {p.quantity} - Price: {p.unit_price}
-                          </div>
-                        ))
-                      ) : (
-                        <div className="text-sm text-neutral-400">No products</div>
-                      )}
-                    </div>
-                  </div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-sm text-neutral-400 p-3 bg-neutral-50 rounded">No products</div>
+                  )}
                 </div>
               </div>
 

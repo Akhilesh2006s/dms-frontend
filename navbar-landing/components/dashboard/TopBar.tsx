@@ -13,11 +13,19 @@ export function TopBar() {
   const lastY = useRef(0)
 
   const handleLogout = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('authToken')
-      localStorage.removeItem('authUser')
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('authToken')
+        localStorage.removeItem('authUser')
+      }
+      router.push('/auth/login')
+    } catch (error) {
+      console.error('Error during logout:', error)
+      // Fallback: redirect using window.location
+      if (typeof window !== 'undefined') {
+        window.location.href = '/auth/login'
+      }
     }
-    router.push('/auth/login')
   }
 
   useEffect(() => {

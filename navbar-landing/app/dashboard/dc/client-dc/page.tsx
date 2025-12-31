@@ -73,6 +73,16 @@ export default function ClientDCPage() {
   const [dcNotes, setDcNotes] = useState('')
   const [dcPoPhotoUrl, setDcPoPhotoUrl] = useState('')
   const [savingClientDC, setSavingClientDC] = useState(false)
+  // Delivery and Address data (read-only)
+  const [deliveryAddress, setDeliveryAddress] = useState({
+    property_number: '',
+    floor: '',
+    tower_block: '',
+    nearby_landmark: '',
+    area: '',
+    city: '',
+    pincode: '',
+  })
   
   // Edit PO Dialog state
   const [editPODialogOpen, setEditPODialogOpen] = useState(false)
@@ -92,6 +102,14 @@ export default function ClientDCPage() {
     pod_proof_url: '',
     remarks: '',
     total_amount: 0,
+    // Delivery and Address fields
+    property_number: '',
+    floor: '',
+    tower_block: '',
+    nearby_landmark: '',
+    area: '',
+    city: '',
+    pincode: '',
   })
   const [submittingEdit, setSubmittingEdit] = useState(false)
   const [editProductRows, setEditProductRows] = useState<Array<{
@@ -329,6 +347,53 @@ export default function ClientDCPage() {
       ? 'Existing School'
       : 'New School'
     
+    // Load delivery address data from dcOrderId
+    let deliveryData = {
+      property_number: '',
+      floor: '',
+      tower_block: '',
+      nearby_landmark: '',
+      area: '',
+      city: '',
+      pincode: '',
+    }
+    
+    // Get dcOrderId to fetch delivery address
+    const dcOrderId = typeof dc.dcOrderId === 'object' ? dc.dcOrderId._id : dc.dcOrderId
+    if (dcOrderId) {
+      try {
+        const dcOrder = await apiRequest<any>(`/dc-orders/${dcOrderId}`)
+        // Load delivery address - prioritize pendingEdit (if exists), then approved fields
+        // This ensures we show the delivery address that was filled in Edit PO
+        if (dcOrder.pendingEdit && dcOrder.pendingEdit.status === 'pending') {
+          // Show from pendingEdit if there's a pending edit request
+          deliveryData = {
+            property_number: dcOrder.pendingEdit.property_number || '',
+            floor: dcOrder.pendingEdit.floor || '',
+            tower_block: dcOrder.pendingEdit.tower_block || '',
+            nearby_landmark: dcOrder.pendingEdit.nearby_landmark || '',
+            area: dcOrder.pendingEdit.area || '',
+            city: dcOrder.pendingEdit.city || '',
+            pincode: dcOrder.pendingEdit.pincode || '',
+          }
+        } else {
+          // If no pending edit, show from approved/main fields (delivery address saved after approval)
+          deliveryData = {
+            property_number: dcOrder.property_number || '',
+            floor: dcOrder.floor || '',
+            tower_block: dcOrder.tower_block || '',
+            nearby_landmark: dcOrder.nearby_landmark || '',
+            area: dcOrder.area || '',
+            city: dcOrder.city || '',
+            pincode: dcOrder.pincode || '',
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load delivery address:', e)
+      }
+    }
+    setDeliveryAddress(deliveryData)
+    
     // Load full DC details
     try {
       const fullDC = await apiRequest<any>(`/dc/${dc._id}`)
@@ -477,22 +542,17 @@ export default function ClientDCPage() {
 
       const totalQuantity = dcProductRows.reduce((sum, p) => sum + (p.quantity || 0), 0)
 
-      // Update DC but keep status as 'created' (or 'po_submitted' if PO provided)
-      // This keeps it in Closed Sales instead of going to Pending DC
-      // Only the DcOrder status will be updated to 'dc_requested' to appear in Closed Sales
+      // Update DC and set status to 'pending_dc' when request is submitted
       const updatePayload: any = {
         productDetails: productDetails,
         requestedQuantity: totalQuantity,
-        // Don't change DC status to 'sent_to_manager' - keep it as 'created' so it stays in Closed Sales
-        // status: 'sent_to_manager', // Removed - this was sending it to Pending DC
+        status: 'pending_dc', // Set status to pending_dc when request is submitted
       }
 
       // Update PO photo if provided
       if (dcPoPhotoUrl) {
         updatePayload.poPhotoUrl = dcPoPhotoUrl
         updatePayload.poDocument = dcPoPhotoUrl
-        // If PO is provided, set status to 'po_submitted' instead of 'created'
-        updatePayload.status = 'po_submitted'
       }
 
       await apiRequest(`/dc/${selectedDC._id}`, {
@@ -591,7 +651,7 @@ export default function ClientDCPage() {
       setSelectedDcOrder(dcOrder)
       
       // Populate form with current data
-      setEditFormData({
+      const formData = {
         school_name: dcOrder.school_name || '',
         contact_person: dcOrder.contact_person || '',
         contact_mobile: dcOrder.contact_mobile || '',
@@ -606,7 +666,28 @@ export default function ClientDCPage() {
         pod_proof_url: dcOrder.pod_proof_url || dc.poPhotoUrl || '',
         remarks: dcOrder.remarks || '',
         total_amount: dcOrder.total_amount || 0,
+        // Delivery and Address fields - only from pendingEdit (not from school address)
+        property_number: dcOrder.pendingEdit?.property_number || '',
+        floor: dcOrder.pendingEdit?.floor || '',
+        tower_block: dcOrder.pendingEdit?.tower_block || '',
+        nearby_landmark: dcOrder.pendingEdit?.nearby_landmark || '',
+        area: dcOrder.pendingEdit?.area || '',
+        city: dcOrder.pendingEdit?.city || '',
+        pincode: dcOrder.pendingEdit?.pincode || '',
+      }
+      
+      console.log('📋 Edit PO Dialog opened - Form data initialized:', {
+        property_number: formData.property_number,
+        floor: formData.floor,
+        tower_block: formData.tower_block,
+        nearby_landmark: formData.nearby_landmark,
+        area: formData.area,
+        city: formData.city,
+        pincode: formData.pincode,
+        hasPendingEdit: !!dcOrder.pendingEdit,
       })
+      
+      setEditFormData(formData)
       
       // Set product rows
       setEditProductRows(
@@ -625,10 +706,26 @@ export default function ClientDCPage() {
   }
 
   const submitEditRequest = async () => {
-    if (!selectedDcOrder) return
+    console.log('🚀 submitEditRequest called')
+    if (!selectedDcOrder) {
+      console.error('❌ No selectedDcOrder, cannot submit')
+      return
+    }
 
+    console.log('✅ selectedDcOrder exists:', selectedDcOrder._id)
     setSubmittingEdit(true)
     try {
+      // Log current editFormData state before preparing payload
+      console.log('📝 Current editFormData state:', {
+        property_number: editFormData.property_number,
+        floor: editFormData.floor,
+        tower_block: editFormData.tower_block,
+        nearby_landmark: editFormData.nearby_landmark,
+        area: editFormData.area,
+        city: editFormData.city,
+        pincode: editFormData.pincode,
+      })
+
       // Prepare products array
       const products = editProductRows.map(row => ({
         product_name: row.product_name,
@@ -639,21 +736,63 @@ export default function ClientDCPage() {
       // Calculate total amount
       const totalAmount = products.reduce((sum, p) => sum + (p.quantity * p.unit_price), 0)
 
-      // Submit edit request
-      await apiRequest(`/dc-orders/${selectedDcOrder._id}/submit-edit`, {
-        method: 'POST',
-        body: JSON.stringify({
-          ...editFormData,
-          products,
-          total_amount: totalAmount,
-        }),
+      // Prepare the payload with all fields including delivery address
+      // Explicitly include delivery address fields to ensure they're sent
+      // Get delivery address fields from editFormData, with fallback to empty string
+      const deliveryAddressFields = {
+        property_number: (editFormData.property_number !== undefined && editFormData.property_number !== null) ? String(editFormData.property_number) : '',
+        floor: (editFormData.floor !== undefined && editFormData.floor !== null) ? String(editFormData.floor) : '',
+        tower_block: (editFormData.tower_block !== undefined && editFormData.tower_block !== null) ? String(editFormData.tower_block) : '',
+        nearby_landmark: (editFormData.nearby_landmark !== undefined && editFormData.nearby_landmark !== null) ? String(editFormData.nearby_landmark) : '',
+        area: (editFormData.area !== undefined && editFormData.area !== null) ? String(editFormData.area) : '',
+        city: (editFormData.city !== undefined && editFormData.city !== null) ? String(editFormData.city) : '',
+        pincode: (editFormData.pincode !== undefined && editFormData.pincode !== null) ? String(editFormData.pincode) : '',
+      }
+
+      const payload = {
+        ...editFormData,
+        products,
+        total_amount: totalAmount,
+        // Explicitly include delivery address fields (overrides any from spread)
+        ...deliveryAddressFields,
+      }
+
+      // Log the full payload to verify delivery address fields are included
+      console.log('Submitting edit request - Full payload:', JSON.stringify(payload, null, 2))
+      console.log('Delivery address fields in payload:', {
+        property_number: payload.property_number,
+        floor: payload.floor,
+        tower_block: payload.tower_block,
+        nearby_landmark: payload.nearby_landmark,
+        area: payload.area,
+        city: payload.city,
+        pincode: payload.pincode,
       })
+
+      // Submit edit request
+      console.log('📤 Sending request to:', `/dc-orders/${selectedDcOrder._id}/submit-edit`)
+      const response = await apiRequest(`/dc-orders/${selectedDcOrder._id}/submit-edit`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+      console.log('✅ Edit request submitted successfully:', response)
 
       toast.success('Edit request submitted successfully! It will be reviewed by Executive Manager.')
       setEditPODialogOpen(false)
       load()
     } catch (e: any) {
-      toast.error(e?.message || 'Failed to submit edit request')
+      console.error('❌❌❌ ERROR SUBMITTING EDIT REQUEST ❌❌❌')
+      console.error('Error object:', e)
+      console.error('Error message:', e?.message)
+      console.error('Error status:', e?.status)
+      console.error('Error response:', e?.response)
+      
+      // Check if it's a 400 error about existing pending edit
+      if (e?.message?.includes('already a pending edit')) {
+        toast.error('There is already a pending edit request for this PO. Please wait for it to be reviewed or contact your manager.')
+      } else {
+        toast.error(e?.message || 'Failed to submit edit request')
+      }
     } finally {
       setSubmittingEdit(false)
     }
@@ -821,25 +960,29 @@ export default function ClientDCPage() {
                           )}
                         </TableCell>
                         <TableCell className="text-center">
-                          <div className="flex items-center gap-2 justify-center">
-                            {d.poPhotoUrl && (
+                          {status === 'pending_dc' ? (
+                            <span className="text-sm text-neutral-400">-</span>
+                          ) : (
+                            <div className="flex items-center gap-2 justify-center">
+                              {d.poPhotoUrl && (
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  onClick={() => openEditPODialog(d)}
+                                >
+                                  <Pencil className="w-4 h-4 mr-2" />
+                                  Edit PO
+                                </Button>
+                              )}
                               <Button 
                                 size="sm" 
-                                variant="outline"
-                                onClick={() => openEditPODialog(d)}
+                                onClick={() => openClientDCDialog(d)}
                               >
-                                <Pencil className="w-4 h-4 mr-2" />
-                                Edit PO
+                                <Package className="w-4 h-4 mr-2" />
+                                Request DC
                               </Button>
-                            )}
-                            <Button 
-                              size="sm" 
-                              onClick={() => openClientDCDialog(d)}
-                            >
-                              <Package className="w-4 h-4 mr-2" />
-                              Request DC
-                            </Button>
-                          </div>
+                            </div>
+                          )}
                         </TableCell>
                       </TableRow>
                     )
@@ -946,16 +1089,6 @@ export default function ClientDCPage() {
             <div className="border rounded-lg p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <Label className="text-lg font-semibold">PO Photo</Label>
-                {dcPoPhotoUrl && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setDcPoPhotoUrl('')}
-                  >
-                    <X className="w-4 h-4 mr-1" />
-                    Remove
-                  </Button>
-                )}
               </div>
               {dcPoPhotoUrl ? (
                 <div className="relative">
@@ -1018,92 +1151,89 @@ export default function ClientDCPage() {
                       }}
                     />
                   )}
-                  <div className="mt-2">
-                    <Input
-                      type="text"
-                      placeholder="PO Photo URL"
-                      value={dcPoPhotoUrl}
-                      onChange={(e) => setDcPoPhotoUrl(e.target.value)}
-                      className="mb-2"
-                    />
-                    <Input
-                      type="file"
-                      accept="image/*,application/pdf"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0]
-                        if (file) {
-                          const reader = new FileReader()
-                          reader.onloadend = () => {
-                            setDcPoPhotoUrl(reader.result as string)
-                          }
-                          reader.readAsDataURL(file)
-                        }
-                      }}
-                    />
-                  </div>
                 </div>
               ) : (
                 <div className="border-2 border-dashed border-neutral-300 rounded-lg p-8 text-center">
                   <Upload className="w-8 h-8 mx-auto mb-2 text-neutral-400" />
-                  <Input
-                    type="text"
-                    placeholder="PO Photo URL"
-                    value={dcPoPhotoUrl}
-                    onChange={(e) => setDcPoPhotoUrl(e.target.value)}
-                    className="mb-2"
-                  />
-                  <Input
-                    type="file"
-                    accept="image/*,application/pdf"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0]
-                      if (file) {
-                        const reader = new FileReader()
-                        reader.onloadend = () => {
-                          setDcPoPhotoUrl(reader.result as string)
-                        }
-                        reader.readAsDataURL(file)
-                      }
-                    }}
-                  />
+                  <p className="text-sm text-neutral-500">No PO photo uploaded</p>
                 </div>
               )}
+            </div>
+
+            {/* Delivery and Address Table */}
+            <div className="border rounded-lg p-6 space-y-4">
+              <Label className="text-lg font-semibold mb-4 block">Delivery and Address</Label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label>Property Number</Label>
+                  <Input
+                    value={deliveryAddress.property_number}
+                    readOnly
+                    disabled
+                    className="bg-neutral-50"
+                  />
+                </div>
+                <div>
+                  <Label>Floor</Label>
+                  <Input
+                    value={deliveryAddress.floor}
+                    readOnly
+                    disabled
+                    className="bg-neutral-50"
+                  />
+                </div>
+                <div>
+                  <Label>Tower/Block</Label>
+                  <Input
+                    value={deliveryAddress.tower_block}
+                    readOnly
+                    disabled
+                    className="bg-neutral-50"
+                  />
+                </div>
+                <div>
+                  <Label>Nearby Landmark</Label>
+                  <Input
+                    value={deliveryAddress.nearby_landmark}
+                    readOnly
+                    disabled
+                    className="bg-neutral-50"
+                  />
+                </div>
+                <div>
+                  <Label>Area</Label>
+                  <Input
+                    value={deliveryAddress.area}
+                    readOnly
+                    disabled
+                    className="bg-neutral-50"
+                  />
+                </div>
+                <div>
+                  <Label>City</Label>
+                  <Input
+                    value={deliveryAddress.city}
+                    readOnly
+                    disabled
+                    className="bg-neutral-50"
+                  />
+                </div>
+                <div>
+                  <Label>Pincode</Label>
+                  <Input
+                    value={deliveryAddress.pincode}
+                    readOnly
+                    disabled
+                    className="bg-neutral-50"
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Products Table */}
             <div className="border rounded-lg p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <Label className="text-lg font-semibold">Products & Quantities</Label>
-                <div className="flex gap-2">
-                  {dcProductRows.length === 0 && (
-                    <p className="text-sm text-neutral-500 mr-2">Add products using the form below</p>
-                  )}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      // Determine category automatically based on selectedDC's school_type
-                      const autoCategory = selectedDC?.dcOrderId && typeof selectedDC.dcOrderId === 'object' && selectedDC.dcOrderId.school_type === 'Existing'
-                        ? 'Existing School'
-                        : 'New School'
-                      
-                      setDcProductRows([...dcProductRows, {
-                        id: Date.now().toString(),
-                        product: 'Abacus',
-                        class: '1',
-                        category: autoCategory,
-                        specs: 'Regular',
-                        subject: undefined,
-                        quantity: 0,
-                        strength: 0,
-                        level: getDefaultLevel('Abacus'),
-                      }])
-                    }}
-                  >
-                    <Plus className="w-4 h-4 mr-1" />
-                    Add Row
-                  </Button>
-                </div>
               </div>
               
               {dcProductRows.length === 0 ? (
@@ -1124,45 +1254,28 @@ export default function ClientDCPage() {
                       <th className="py-3 px-4 text-left text-sm font-semibold border-r">Subject</th>
                       <th className="py-3 px-4 text-left text-sm font-semibold border-r">Strength</th>
                       <th className="py-3 px-4 text-left text-sm font-semibold border-r">Level</th>
-                      <th className="py-3 px-4 text-center text-sm font-semibold">Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {dcProductRows.map((row, idx) => (
                       <tr key={row.id} className="border-b">
                         <td className="py-3 px-4 border-r">
-                          <Select value={row.product} onValueChange={(v) => {
-                            const updated = [...dcProductRows]
-                            updated[idx].product = v
-                            // Update level to default for the selected product
-                            updated[idx].level = getDefaultLevel(v)
-                            setDcProductRows(updated)
-                          }}>
-                            <SelectTrigger className="h-10 text-sm">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {availableProducts.map(p => (
-                                <SelectItem key={p} value={p}>{p}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <Input
+                            type="text"
+                            className="h-10 text-sm bg-neutral-50"
+                            value={row.product}
+                            readOnly
+                            disabled
+                          />
                         </td>
                         <td className="py-2 px-3 border-r">
-                          <Select value={row.class} onValueChange={(v) => {
-                            const updated = [...dcProductRows]
-                            updated[idx].class = v
-                            setDcProductRows(updated)
-                          }}>
-                            <SelectTrigger className="h-10 text-sm">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {availableClasses.map(c => (
-                                <SelectItem key={c} value={c}>{c}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <Input
+                            type="text"
+                            className="h-10 text-sm bg-neutral-50"
+                            value={row.class}
+                            readOnly
+                            disabled
+                          />
                         </td>
                         <td className="py-3 px-4 border-r">
                           <Input
@@ -1174,43 +1287,23 @@ export default function ClientDCPage() {
                           />
                         </td>
                         <td className="py-3 px-4 border-r">
-                          <Select 
-                            value={row.specs || 'Regular'} 
-                            onValueChange={(v) => {
-                              const updated = [...dcProductRows]
-                              updated[idx].specs = v
-                              setDcProductRows(updated)
-                            }}
-                          >
-                            <SelectTrigger className="h-10 text-sm">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {getProductSpecs(row.product).map(spec => (
-                                <SelectItem key={spec} value={spec}>{spec}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <Input
+                            type="text"
+                            className="h-10 text-sm bg-neutral-50"
+                            value={row.specs || 'Regular'}
+                            readOnly
+                            disabled
+                          />
                         </td>
                         <td className="py-3 px-4 border-r">
-                          {getProductSubjects(row.product).length > 0 ? (
-                            <Select 
-                              value={row.subject || undefined} 
-                              onValueChange={(v) => {
-                                const updated = [...dcProductRows]
-                                updated[idx].subject = v
-                                setDcProductRows(updated)
-                              }}
-                            >
-                              <SelectTrigger className="h-10 text-sm">
-                                <SelectValue placeholder="Select Subject" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {getProductSubjects(row.product).map(subject => (
-                                  <SelectItem key={subject} value={subject}>{subject}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                          {row.subject ? (
+                            <Input
+                              type="text"
+                              className="h-10 text-sm bg-neutral-50"
+                              value={row.subject}
+                              readOnly
+                              disabled
+                            />
                           ) : (
                             <span className="text-neutral-400">-</span>
                           )}
@@ -1218,46 +1311,22 @@ export default function ClientDCPage() {
                         <td className="py-3 px-4 border-r">
                           <Input
                             type="number"
-                            className="h-10 text-sm"
+                            className="h-10 text-sm bg-neutral-50"
                             value={row.strength || ''}
-                            onChange={(e) => {
-                              const updated = [...dcProductRows]
-                              updated[idx].strength = Number(e.target.value) || 0
-                              setDcProductRows(updated)
-                            }}
+                            readOnly
+                            disabled
                             placeholder="0"
                             min="0"
                           />
                         </td>
                         <td className="py-3 px-4 border-r">
-                          <Select value={row.level} onValueChange={(v) => {
-                            const updated = [...dcProductRows]
-                            updated[idx].level = v
-                            setDcProductRows(updated)
-                          }}>
-                            <SelectTrigger className="h-10 text-sm">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {getAvailableLevels(row.product).map(level => (
-                                <SelectItem key={level} value={level}>{level}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          {dcProductRows.length > 1 && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-red-600 hover:text-red-700 h-10 w-10 p-0"
-                              onClick={() => {
-                                setDcProductRows(dcProductRows.filter((_, i) => i !== idx))
-                              }}
-                            >
-                              <X className="w-4 h-4" />
-                            </Button>
-                          )}
+                          <Input
+                            type="text"
+                            className="h-10 text-sm bg-neutral-50"
+                            value={row.level}
+                            readOnly
+                            disabled
+                          />
                         </td>
                       </tr>
                     ))}
@@ -1270,7 +1339,7 @@ export default function ClientDCPage() {
                       <td className="px-3 py-3 text-right">
                         {dcProductRows.reduce((sum, row) => sum + (Number(row.strength) || 0), 0)}
                       </td>
-                      <td colSpan={2} className="px-3 py-3"></td>
+                      <td className="px-3 py-3"></td>
                     </tr>
                   </tbody>
                 </table>
@@ -1282,9 +1351,6 @@ export default function ClientDCPage() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setClientDCDialogOpen(false)}>Cancel</Button>
-            <Button variant="outline" onClick={saveClientRequest} disabled={savingClientDC}>
-              {savingClientDC ? 'Saving...' : 'Save'}
-            </Button>
             <Button onClick={requestClientDC} disabled={savingClientDC}>
               {savingClientDC ? 'Submitting...' : 'Request'}
             </Button>
@@ -1404,6 +1470,69 @@ export default function ClientDCPage() {
                 </div>
               </div>
 
+              {/* Delivery and Address Section */}
+              <div className="border-t pt-4">
+                <Label className="text-lg font-semibold mb-4 block">Delivery and Address</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label>Property Number *</Label>
+                    <Input
+                      value={editFormData.property_number}
+                      onChange={(e) => setEditFormData({ ...editFormData, property_number: e.target.value })}
+                      placeholder="Enter property number"
+                    />
+                  </div>
+                  <div>
+                    <Label>Floor *</Label>
+                    <Input
+                      value={editFormData.floor}
+                      onChange={(e) => setEditFormData({ ...editFormData, floor: e.target.value })}
+                      placeholder="Enter floor"
+                    />
+                  </div>
+                  <div>
+                    <Label>Tower/Block (Optional)</Label>
+                    <Input
+                      value={editFormData.tower_block}
+                      onChange={(e) => setEditFormData({ ...editFormData, tower_block: e.target.value })}
+                      placeholder="Enter tower/block"
+                    />
+                  </div>
+                  <div>
+                    <Label>Nearby Landmark (Optional)</Label>
+                    <Input
+                      value={editFormData.nearby_landmark}
+                      onChange={(e) => setEditFormData({ ...editFormData, nearby_landmark: e.target.value })}
+                      placeholder="Enter nearby landmark"
+                    />
+                  </div>
+                  <div>
+                    <Label>Area *</Label>
+                    <Input
+                      value={editFormData.area}
+                      onChange={(e) => setEditFormData({ ...editFormData, area: e.target.value })}
+                      placeholder="Enter area"
+                    />
+                  </div>
+                  <div>
+                    <Label>City *</Label>
+                    <Input
+                      value={editFormData.city}
+                      onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
+                      placeholder="Enter city"
+                    />
+                  </div>
+                  <div>
+                    <Label>Pincode *</Label>
+                    <Input
+                      value={editFormData.pincode}
+                      onChange={(e) => setEditFormData({ ...editFormData, pincode: e.target.value })}
+                      placeholder="Enter pincode"
+                    />
+                  </div>
+                </div>
+              </div>
+
               {/* Products Section */}
               <div className="border-t pt-4">
                 <div className="flex items-center justify-between mb-4">
@@ -1441,15 +1570,25 @@ export default function ClientDCPage() {
                       {editProductRows.map((row, idx) => (
                         <TableRow key={row.id}>
                           <TableCell>
-                            <Input
+                            <Select
                               value={row.product_name}
-                              onChange={(e) => {
+                              onValueChange={(v) => {
                                 const updated = [...editProductRows]
-                                updated[idx].product_name = e.target.value
+                                updated[idx].product_name = v
                                 setEditProductRows(updated)
                               }}
-                              placeholder="Product name"
-                            />
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Select product" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {availableProducts.map((product) => (
+                                  <SelectItem key={product} value={product}>
+                                    {product}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </TableCell>
                           <TableCell>
                             <Input

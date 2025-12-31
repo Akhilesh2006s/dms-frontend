@@ -582,11 +582,19 @@ export function Sidebar() {
   }, [pathname, isEmployee, isManager, isCoordinator, isSeniorCoordinator])
 
   const signOut = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('authToken')
-      localStorage.removeItem('authUser')
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('authToken')
+        localStorage.removeItem('authUser')
+      }
+      router.push('/auth/login')
+    } catch (error) {
+      console.error('Error during sign out:', error)
+      // Fallback: redirect using window.location
+      if (typeof window !== 'undefined') {
+        window.location.href = '/auth/login'
+      }
     }
-    router.push('/auth/login')
   }
 
   const toggle = (label: string) => {

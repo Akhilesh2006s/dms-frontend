@@ -38,6 +38,24 @@ type DcOrderData = {
   } | string
   due_amount?: number
   due_percentage?: number
+  // Delivery and Address fields
+  property_number?: string
+  floor?: string
+  tower_block?: string
+  nearby_landmark?: string
+  area?: string
+  city?: string
+  pincode?: string
+  pendingEdit?: {
+    property_number?: string
+    floor?: string
+    tower_block?: string
+    nearby_landmark?: string
+    area?: string
+    city?: string
+    pincode?: string
+    status?: string
+  }
 }
 
 type DC = {
@@ -550,6 +568,78 @@ export default function PendingDCPage() {
                   />
                 </div>
               </div>
+
+              {/* Delivery and Address Section */}
+              {selectedDC.dcOrderId && typeof selectedDC.dcOrderId === 'object' && (
+                <div className="border-t border-gray-200 pt-6 mt-6">
+                  <h3 className="font-semibold text-gray-900 mb-4">Delivery and Address</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label>Property Number</Label>
+                      <Input 
+                        value={selectedDC.dcOrderId.property_number || ''} 
+                        disabled 
+                        className="bg-gray-100 text-gray-900" 
+                        placeholder="Property Number"
+                      />
+                    </div>
+                    <div>
+                      <Label>Floor</Label>
+                      <Input 
+                        value={selectedDC.dcOrderId.floor || ''} 
+                        disabled 
+                        className="bg-gray-100 text-gray-900" 
+                        placeholder="Floor"
+                      />
+                    </div>
+                    <div>
+                      <Label>Tower/Block</Label>
+                      <Input 
+                        value={selectedDC.dcOrderId.tower_block || ''} 
+                        disabled 
+                        className="bg-gray-100 text-gray-900" 
+                        placeholder="Tower/Block"
+                      />
+                    </div>
+                    <div>
+                      <Label>Nearby Landmark</Label>
+                      <Input 
+                        value={selectedDC.dcOrderId.nearby_landmark || ''} 
+                        disabled 
+                        className="bg-gray-100 text-gray-900" 
+                        placeholder="Nearby Landmark"
+                      />
+                    </div>
+                    <div>
+                      <Label>Area</Label>
+                      <Input 
+                        value={selectedDC.dcOrderId.area || ''} 
+                        disabled 
+                        className="bg-gray-100 text-gray-900" 
+                        placeholder="Area"
+                      />
+                    </div>
+                    <div>
+                      <Label>City</Label>
+                      <Input 
+                        value={selectedDC.dcOrderId.city || ''} 
+                        disabled 
+                        className="bg-gray-100 text-gray-900" 
+                        placeholder="City"
+                      />
+                    </div>
+                    <div>
+                      <Label>Pincode</Label>
+                      <Input 
+                        value={selectedDC.dcOrderId.pincode || ''} 
+                        disabled 
+                        className="bg-gray-100 text-gray-900" 
+                        placeholder="Pincode"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
