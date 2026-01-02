@@ -8,6 +8,9 @@ import { useEffect, useState } from 'react'
 import BarGradient from '@/components/charts/BarGradient'
 import AreaGradient from '@/components/charts/AreaGradient'
 import DoughnutStatus from '@/components/charts/DoughnutStatus'
+import PieChart from '@/components/charts/PieChart'
+import LineChart from '@/components/charts/LineChart'
+import MultiBarChart from '@/components/charts/MultiBarChart'
 import { apiRequest } from '@/lib/api'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -212,7 +215,9 @@ export default function DashboardPage() {
   const [zoneWiseClosedLeads, setZoneWiseClosedLeads] = useState<ZoneWiseClosedLeadData[]>([])
   const [executiveWiseClosedLeads, setExecutiveWiseClosedLeads] = useState<ExecutiveWiseClosedLeadData[]>([])
   const [leadsLoading, setLeadsLoading] = useState(false)
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'leads'>('dashboard')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'leads' | 'analytics'>('dashboard')
+  const [analyticsData, setAnalyticsData] = useState<any>(null)
+  const [analyticsLoading, setAnalyticsLoading] = useState(true)
 
   // compute KPIs for the teal chart
   const salesArr = trends && trends.length ? trends.map(t => t.revenue) : [0]
@@ -294,7 +299,20 @@ export default function DashboardPage() {
 
     fetchDashboardData()
     fetchLeadsAnalytics() // Initial load without date filter
+    fetchComprehensiveAnalytics()
   }, [])
+
+  const fetchComprehensiveAnalytics = async () => {
+    setAnalyticsLoading(true)
+    try {
+      const data = await apiRequest<any>('/dashboard/comprehensive-analytics')
+      setAnalyticsData(data)
+    } catch (error) {
+      console.error('Error fetching comprehensive analytics:', error)
+    } finally {
+      setAnalyticsLoading(false)
+    }
+  }
 
   const fetchLeadsAnalytics = async () => {
     setLeadsLoading(true)
@@ -358,7 +376,7 @@ export default function DashboardPage() {
 
       {/* Premium Tab Navigation */}
       <div className="flex items-center gap-1 border-b border-neutral-200/60">
-        <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as 'dashboard' | 'leads')} className="w-full">
+        <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as 'dashboard' | 'leads' | 'analytics')} className="w-full">
           <TabsList className="bg-transparent p-0 h-auto gap-0">
             <TabsTrigger
               value="dashboard"
@@ -383,6 +401,19 @@ export default function DashboardPage() {
             >
               Leads Dashboard
               {activeTab === 'leads' && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full" />
+              )}
+            </TabsTrigger>
+            <TabsTrigger
+              value="analytics"
+              className={`px-5 py-3 rounded-t-lg font-medium text-sm transition-all duration-200 relative ${
+                activeTab === 'analytics'
+                  ? 'text-neutral-900 bg-white'
+                  : 'text-neutral-500 hover:text-neutral-700'
+              }`}
+            >
+              Comprehensive Analytics
+              {activeTab === 'analytics' && (
                 <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full" />
               )}
             </TabsTrigger>
@@ -572,11 +603,11 @@ export default function DashboardPage() {
       <div className="mt-6 space-y-6">
         <Card className="p-6">
           <div className="mb-6">
-            <h2 className="text-2xl font-bold text-neutral-900 mb-1">Leads Analytics</h2>
-            <p className="text-sm text-neutral-500">Filter and analyze leads by date range</p>
+            <h2 className="text-2xl font-bold text-neutral-900 mb-1">Leads Analytics Dashboard</h2>
+            <p className="text-sm text-neutral-500">Comprehensive analytics and insights for leads management</p>
             
             {/* Premium Date Range Filter */}
-            <div className="flex flex-wrap items-center gap-3 mt-6 p-4 bg-neutral-50/50 rounded-lg border border-neutral-200/60">
+            <div className="flex flex-wrap items-center gap-3 mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200/60">
               <div className="flex items-center gap-2">
                 <label htmlFor="fromDate" className="text-sm font-medium text-neutral-700 whitespace-nowrap">
                   From:
@@ -586,7 +617,7 @@ export default function DashboardPage() {
                   type="date"
                   value={fromDate}
                   onChange={(e) => setFromDate(e.target.value)}
-                  className="w-[160px] bg-white"
+                  className="w-[160px] bg-white border-blue-200"
                 />
               </div>
               <div className="flex items-center gap-2">
@@ -598,19 +629,308 @@ export default function DashboardPage() {
                   type="date"
                   value={toDate}
                   onChange={(e) => setToDate(e.target.value)}
-                  className="w-[160px] bg-white"
+                  className="w-[160px] bg-white border-blue-200"
                 />
               </div>
               <Button 
                 onClick={handleSearch} 
                 className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-sm hover:shadow-md transition-all"
               >
-                Search
+                Apply Filters
               </Button>
             </div>
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-8">
+            {/* Summary Statistics Cards */}
+            {!leadsLoading && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <Card className="p-5 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-50 border-2 border-blue-200 shadow-lg hover:shadow-xl transition-all">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-blue-700 mb-2 uppercase tracking-wide">Total Active Leads</div>
+                      <div className="text-3xl font-bold text-blue-900">
+                        {zoneWiseLeads.reduce((sum, item) => sum + (item.total || 0), 0)}
+                      </div>
+                    </div>
+                    <div className="h-12 w-12 rounded-full bg-blue-500 flex items-center justify-center">
+                      <Zap className="w-6 h-6 text-white" />
+                    </div>
+                  </div>
+                </Card>
+                <Card className="p-5 bg-gradient-to-br from-red-50 via-red-100 to-red-50 border-2 border-red-200 shadow-lg hover:shadow-xl transition-all">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-red-700 mb-2 uppercase tracking-wide">Hot Leads</div>
+                      <div className="text-3xl font-bold text-red-900">
+                        {zoneWiseLeads.reduce((sum, item) => sum + (item.hot || 0), 0)}
+                      </div>
+                    </div>
+                    <div className="h-12 w-12 rounded-full bg-red-500 flex items-center justify-center">
+                      <TrendingUp className="w-6 h-6 text-white" />
+                    </div>
+                  </div>
+                </Card>
+                <Card className="p-5 bg-gradient-to-br from-amber-50 via-amber-100 to-amber-50 border-2 border-amber-200 shadow-lg hover:shadow-xl transition-all">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-amber-700 mb-2 uppercase tracking-wide">Warm Leads</div>
+                      <div className="text-3xl font-bold text-amber-900">
+                        {zoneWiseLeads.reduce((sum, item) => sum + (item.warm || 0), 0)}
+                      </div>
+                    </div>
+                    <div className="h-12 w-12 rounded-full bg-amber-500 flex items-center justify-center">
+                      <TrendingUp className="w-6 h-6 text-white" />
+                    </div>
+                  </div>
+                </Card>
+                <Card className="p-5 bg-gradient-to-br from-emerald-50 via-emerald-100 to-emerald-50 border-2 border-emerald-200 shadow-lg hover:shadow-xl transition-all">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-emerald-700 mb-2 uppercase tracking-wide">Closed Leads</div>
+                      <div className="text-3xl font-bold text-emerald-900">
+                        {zoneWiseClosedLeads.reduce((sum, item) => sum + (item.totalClosed || 0), 0)}
+                      </div>
+                    </div>
+                    <div className="h-12 w-12 rounded-full bg-emerald-500 flex items-center justify-center">
+                      <DollarSign className="w-6 h-6 text-white" />
+                    </div>
+                  </div>
+                </Card>
+              </div>
+            )}
+
+            {/* Charts Section */}
+            {!leadsLoading && (
+              <>
+                {/* Zone-wise Leads Charts */}
+                {zoneWiseLeads.length > 0 && (
+                  <>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                        <div className="flex items-center justify-between mb-6">
+                          <h3 className="font-semibold text-lg text-neutral-900">Zone-wise Leads Distribution</h3>
+                          <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
+                            <GraduationCap className="w-5 h-5 text-white" />
+                          </div>
+                        </div>
+                        <PieChart
+                          data={zoneWiseLeads.map((item, idx) => ({
+                            label: item.zone || 'Unassigned',
+                            value: item.total || 0,
+                            color: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#f97316'][idx % 8]
+                          }))}
+                          height={320}
+                        />
+                      </Card>
+                      <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                        <div className="flex items-center justify-between mb-6">
+                          <h3 className="font-semibold text-lg text-neutral-900">Priority Distribution by Zone</h3>
+                          <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center">
+                            <TrendingUp className="w-5 h-5 text-white" />
+                          </div>
+                        </div>
+                        <MultiBarChart
+                          labels={zoneWiseLeads.map(item => item.zone || 'Unassigned')}
+                          datasets={[
+                            {
+                              label: 'Hot',
+                              data: zoneWiseLeads.map(item => item.hot || 0),
+                              color: '#ef4444'
+                            },
+                            {
+                              label: 'Warm',
+                              data: zoneWiseLeads.map(item => item.warm || 0),
+                              color: '#f59e0b'
+                            },
+                            {
+                              label: 'Cold',
+                              data: zoneWiseLeads.map(item => item.cold || 0),
+                              color: '#6b7280'
+                            }
+                          ]}
+                          height={320}
+                        />
+                      </Card>
+                    </div>
+
+                    {/* Zone-wise Total Leads Bar Chart */}
+                    <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                      <div className="flex items-center justify-between mb-6">
+                        <h3 className="font-semibold text-lg text-neutral-900">Total Leads by Zone</h3>
+                        <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center">
+                          <Zap className="w-5 h-5 text-white" />
+                        </div>
+                      </div>
+                      <MultiBarChart
+                        labels={zoneWiseLeads.map(item => item.zone || 'Unassigned')}
+                        datasets={[{
+                          label: 'Total Leads',
+                          data: zoneWiseLeads.map(item => item.total || 0),
+                          color: '#3b82f6'
+                        }]}
+                        height={350}
+                      />
+                    </Card>
+                  </>
+                )}
+
+                {/* Executive-wise Performance Charts */}
+                {executiveWiseLeads.length > 0 && (
+                  <>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                        <div className="flex items-center justify-between mb-6">
+                          <h3 className="font-semibold text-lg text-neutral-900">Top 10 Executives by Total Leads</h3>
+                          <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center">
+                            <DollarSign className="w-5 h-5 text-white" />
+                          </div>
+                        </div>
+                        <MultiBarChart
+                          labels={executiveWiseLeads
+                            .sort((a, b) => (b.total || 0) - (a.total || 0))
+                            .slice(0, 10)
+                            .map(item => item.executiveName || 'Unassigned')}
+                          datasets={[{
+                            label: 'Total Leads',
+                            data: executiveWiseLeads
+                              .sort((a, b) => (b.total || 0) - (a.total || 0))
+                              .slice(0, 10)
+                              .map(item => item.total || 0),
+                            color: '#10b981'
+                          }]}
+                          height={380}
+                        />
+                      </Card>
+                      <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                        <div className="flex items-center justify-between mb-6">
+                          <h3 className="font-semibold text-lg text-neutral-900">Executive Performance by Priority</h3>
+                          <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center">
+                            <TrendingUp className="w-5 h-5 text-white" />
+                          </div>
+                        </div>
+                        <MultiBarChart
+                          labels={executiveWiseLeads
+                            .sort((a, b) => (b.total || 0) - (a.total || 0))
+                            .slice(0, 8)
+                            .map(item => item.executiveName || 'Unassigned')}
+                          datasets={[
+                            {
+                              label: 'Hot',
+                              data: executiveWiseLeads
+                                .sort((a, b) => (b.total || 0) - (a.total || 0))
+                                .slice(0, 8)
+                                .map(item => item.hot || 0),
+                              color: '#ef4444'
+                            },
+                            {
+                              label: 'Warm',
+                              data: executiveWiseLeads
+                                .sort((a, b) => (b.total || 0) - (a.total || 0))
+                                .slice(0, 8)
+                                .map(item => item.warm || 0),
+                              color: '#f59e0b'
+                            },
+                            {
+                              label: 'Cold',
+                              data: executiveWiseLeads
+                                .sort((a, b) => (b.total || 0) - (a.total || 0))
+                                .slice(0, 8)
+                                .map(item => item.cold || 0),
+                              color: '#6b7280'
+                            }
+                          ]}
+                          height={380}
+                        />
+                      </Card>
+                    </div>
+                  </>
+                )}
+
+                {/* Closed Leads Analytics */}
+                {(zoneWiseClosedLeads.length > 0 || executiveWiseClosedLeads.length > 0) && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {zoneWiseClosedLeads.length > 0 && (
+                      <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                        <div className="flex items-center justify-between mb-6">
+                          <h3 className="font-semibold text-lg text-neutral-900">Closed Leads by Zone</h3>
+                          <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center">
+                            <DollarSign className="w-5 h-5 text-white" />
+                          </div>
+                        </div>
+                        <PieChart
+                          data={zoneWiseClosedLeads.map((item, idx) => ({
+                            label: item.zone || 'Unassigned',
+                            value: item.totalClosed || 0,
+                            color: ['#10b981', '#34d399', '#6ee7b7', '#a7f3d0', '#d1fae5', '#86efac'][idx % 6]
+                          }))}
+                          height={320}
+                        />
+                      </Card>
+                    )}
+                    {executiveWiseClosedLeads.length > 0 && (
+                      <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                        <div className="flex items-center justify-between mb-6">
+                          <h3 className="font-semibold text-lg text-neutral-900">Top 10 Executives - Closed Leads</h3>
+                          <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-teal-500 to-teal-600 flex items-center justify-center">
+                            <TrendingUp className="w-5 h-5 text-white" />
+                          </div>
+                        </div>
+                        <MultiBarChart
+                          labels={executiveWiseClosedLeads
+                            .sort((a, b) => (b.totalClosed || 0) - (a.totalClosed || 0))
+                            .slice(0, 10)
+                            .map(item => item.executiveName || 'Unassigned')}
+                          datasets={[{
+                            label: 'Closed Leads',
+                            data: executiveWiseClosedLeads
+                              .sort((a, b) => (b.totalClosed || 0) - (a.totalClosed || 0))
+                              .slice(0, 10)
+                              .map(item => item.totalClosed || 0),
+                            color: '#10b981'
+                          }]}
+                          height={320}
+                        />
+                      </Card>
+                    )}
+                  </div>
+                )}
+
+                {/* Priority Distribution Pie Chart */}
+                {zoneWiseLeads.length > 0 && (
+                  <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="font-semibold text-lg text-neutral-900">Overall Priority Distribution</h3>
+                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-rose-500 to-rose-600 flex items-center justify-center">
+                        <TrendingUp className="w-5 h-5 text-white" />
+                      </div>
+                    </div>
+                    <div className="max-w-md mx-auto">
+                      <PieChart
+                        data={[
+                          {
+                            label: 'Hot',
+                            value: zoneWiseLeads.reduce((sum, item) => sum + (item.hot || 0), 0),
+                            color: '#ef4444'
+                          },
+                          {
+                            label: 'Warm',
+                            value: zoneWiseLeads.reduce((sum, item) => sum + (item.warm || 0), 0),
+                            color: '#f59e0b'
+                          },
+                          {
+                            label: 'Cold',
+                            value: zoneWiseLeads.reduce((sum, item) => sum + (item.cold || 0), 0),
+                            color: '#6b7280'
+                          }
+                        ]}
+                        height={300}
+                      />
+                    </div>
+                  </Card>
+                )}
+              </>
+            )}
             {/* Premium Zone wise Leads */}
             <Card className="p-6">
               <div className="flex items-center justify-between mb-4">
@@ -789,6 +1109,224 @@ export default function DashboardPage() {
           </div>
         </Card>
       </div>
+      )}
+
+      {/* Comprehensive Analytics Tab */}
+      {activeTab === 'analytics' && (
+        <div className="space-y-8">
+          {analyticsLoading ? (
+            <div className="text-center py-12">
+              <div className="text-neutral-400">Loading comprehensive analytics...</div>
+            </div>
+          ) : analyticsData ? (
+            <>
+              {/* Leads Analytics */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card className="p-6">
+                  <h3 className="font-semibold text-lg text-neutral-900 mb-6">Leads by Status</h3>
+                  <PieChart
+                    data={analyticsData.leads?.byStatus?.map((item: any, idx: number) => ({
+                      label: item._id || 'Unknown',
+                      value: item.count || 0,
+                      color: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'][idx % 4]
+                    })) || []}
+                    height={300}
+                  />
+                </Card>
+                <Card className="p-6">
+                  <h3 className="font-semibold text-lg text-neutral-900 mb-6">Leads by Priority</h3>
+                  <PieChart
+                    data={analyticsData.leads?.byPriority?.map((item: any, idx: number) => ({
+                      label: item._id || 'Unknown',
+                      value: item.count || 0,
+                      color: ['#ef4444', '#f59e0b', '#6b7280'][idx % 3]
+                    })) || []}
+                    height={300}
+                  />
+                </Card>
+              </div>
+
+              {/* Payments Analytics */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card className="p-6">
+                  <h3 className="font-semibold text-lg text-neutral-900 mb-6">Payments by Status</h3>
+                  <PieChart
+                    data={analyticsData.payments?.byStatus?.map((item: any, idx: number) => ({
+                      label: item._id || 'Unknown',
+                      value: item.count || 0,
+                      color: ['#10b981', '#f59e0b', '#ef4444', '#6b7280'][idx % 4]
+                    })) || []}
+                    height={300}
+                  />
+                </Card>
+                <Card className="p-6">
+                  <h3 className="font-semibold text-lg text-neutral-900 mb-6">Payments by Method</h3>
+                  <MultiBarChart
+                    labels={analyticsData.payments?.byMethod?.map((item: any) => item._id || 'Unknown') || []}
+                    datasets={[{
+                      label: 'Count',
+                      data: analyticsData.payments?.byMethod?.map((item: any) => item.count || 0) || [],
+                      color: '#3b82f6'
+                    }]}
+                    height={300}
+                  />
+                </Card>
+              </div>
+
+              {/* Monthly Payments Trend */}
+              {analyticsData.payments?.monthly && analyticsData.payments.monthly.length > 0 && (
+                <Card className="p-6">
+                  <h3 className="font-semibold text-lg text-neutral-900 mb-6">Monthly Payments Trend</h3>
+                  <LineChart
+                    labels={analyticsData.payments.monthly.map((item: any) => item._id || '')}
+                    datasets={[
+                      {
+                        label: 'Total Amount (₹)',
+                        data: analyticsData.payments.monthly.map((item: any) => item.totalAmount || 0),
+                        color: '#10b981'
+                      },
+                      {
+                        label: 'Count',
+                        data: analyticsData.payments.monthly.map((item: any) => item.count || 0),
+                        color: '#3b82f6'
+                      }
+                    ]}
+                    height={350}
+                  />
+                </Card>
+              )}
+
+              {/* Expenses Analytics */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card className="p-6">
+                  <h3 className="font-semibold text-lg text-neutral-900 mb-6">Expenses by Status</h3>
+                  <PieChart
+                    data={analyticsData.expenses?.byStatus?.map((item: any, idx: number) => ({
+                      label: item._id || 'Unknown',
+                      value: item.count || 0,
+                      color: ['#f59e0b', '#10b981', '#ef4444', '#3b82f6', '#6b7280'][idx % 5]
+                    })) || []}
+                    height={300}
+                  />
+                </Card>
+                <Card className="p-6">
+                  <h3 className="font-semibold text-lg text-neutral-900 mb-6">Expenses by Category</h3>
+                  <MultiBarChart
+                    labels={analyticsData.expenses?.byCategory?.map((item: any) => item._id || 'Unknown') || []}
+                    datasets={[{
+                      label: 'Total Amount (₹)',
+                      data: analyticsData.expenses?.byCategory?.map((item: any) => item.totalAmount || 0) || [],
+                      color: '#ef4444'
+                    }]}
+                    height={300}
+                  />
+                </Card>
+              </div>
+
+              {/* Monthly Expenses Trend */}
+              {analyticsData.expenses?.monthly && analyticsData.expenses.monthly.length > 0 && (
+                <Card className="p-6">
+                  <h3 className="font-semibold text-lg text-neutral-900 mb-6">Monthly Expenses Trend</h3>
+                  <LineChart
+                    labels={analyticsData.expenses.monthly.map((item: any) => item._id || '')}
+                    datasets={[
+                      {
+                        label: 'Total Amount (₹)',
+                        data: analyticsData.expenses.monthly.map((item: any) => item.totalAmount || 0),
+                        color: '#ef4444'
+                      }
+                    ]}
+                    height={350}
+                  />
+                </Card>
+              )}
+
+              {/* Training & Services Analytics */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <Card className="p-6">
+                  <h3 className="font-semibold text-lg text-neutral-900 mb-6">Training by Status</h3>
+                  <PieChart
+                    data={analyticsData.training?.byStatus?.map((item: any, idx: number) => ({
+                      label: item._id || 'Unknown',
+                      value: item.count || 0,
+                      color: ['#3b82f6', '#10b981', '#ef4444'][idx % 3]
+                    })) || []}
+                    height={280}
+                  />
+                </Card>
+                <Card className="p-6">
+                  <h3 className="font-semibold text-lg text-neutral-900 mb-6">Training by Subject</h3>
+                  <MultiBarChart
+                    labels={analyticsData.training?.bySubject?.map((item: any) => item._id || 'Unknown').slice(0, 8) || []}
+                    datasets={[{
+                      label: 'Count',
+                      data: analyticsData.training?.bySubject?.map((item: any) => item.count || 0).slice(0, 8) || [],
+                      color: '#8b5cf6'
+                    }]}
+                    height={280}
+                  />
+                </Card>
+                <Card className="p-6">
+                  <h3 className="font-semibold text-lg text-neutral-900 mb-6">Services by Status</h3>
+                  <PieChart
+                    data={analyticsData.services?.byStatus?.map((item: any, idx: number) => ({
+                      label: item._id || 'Unknown',
+                      value: item.count || 0,
+                      color: ['#3b82f6', '#10b981', '#ef4444'][idx % 3]
+                    })) || []}
+                    height={280}
+                  />
+                </Card>
+              </div>
+
+              {/* Sales & Employees Analytics */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card className="p-6">
+                  <h3 className="font-semibold text-lg text-neutral-900 mb-6">Sales (DCs) by Status</h3>
+                  <PieChart
+                    data={analyticsData.sales?.byStatus?.map((item: any, idx: number) => ({
+                      label: item._id || 'Unknown',
+                      value: item.count || 0,
+                      color: ['#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#6b7280'][idx % 5]
+                    })) || []}
+                    height={300}
+                  />
+                </Card>
+                <Card className="p-6">
+                  <h3 className="font-semibold text-lg text-neutral-900 mb-6">Employees by Role</h3>
+                  <MultiBarChart
+                    labels={analyticsData.employees?.byRole?.map((item: any) => item._id || 'Unknown') || []}
+                    datasets={[{
+                      label: 'Count',
+                      data: analyticsData.employees?.byRole?.map((item: any) => item.count || 0) || [],
+                      color: '#06b6d4'
+                    }]}
+                    height={300}
+                  />
+                </Card>
+              </div>
+
+              {/* Products Analytics */}
+              {analyticsData.products?.byStatus && analyticsData.products.byStatus.length > 0 && (
+                <Card className="p-6">
+                  <h3 className="font-semibold text-lg text-neutral-900 mb-6">Products by Status</h3>
+                  <PieChart
+                    data={analyticsData.products.byStatus.map((item: any, idx: number) => ({
+                      label: item._id === 1 ? 'Active' : item._id === 0 ? 'Inactive' : `Status ${item._id}`,
+                      value: item.count || 0,
+                      color: ['#10b981', '#ef4444', '#6b7280'][idx % 3]
+                    }))}
+                    height={300}
+                  />
+                </Card>
+              )}
+            </>
+          ) : (
+            <div className="text-center py-12">
+              <div className="text-neutral-400">No analytics data available</div>
+            </div>
+          )}
+        </div>
       )}
     </div>
   )

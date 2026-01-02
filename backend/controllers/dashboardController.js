@@ -6,6 +6,10 @@ const Payment = require('../models/Payment');
 const Training = require('../models/Training');
 const Service = require('../models/Service');
 const User = require('../models/User');
+const Expense = require('../models/Expense');
+const Product = require('../models/Product');
+const Warehouse = require('../models/Warehouse');
+const Attendance = require('../models/Attendance');
 
 // @desc    Get dashboard statistics
 // @route   GET /api/dashboard/stats
@@ -355,6 +359,121 @@ const getExecutiveWiseClosedLeads = async (req, res) => {
   }
 };
 
+// @desc    Get comprehensive analytics for all categories
+// @route   GET /api/dashboard/comprehensive-analytics
+// @access  Private
+const getComprehensiveAnalytics = async (req, res) => {
+  try {
+    // Leads Analytics
+    const leadsByStatus = await Lead.aggregate([
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]);
+    const leadsByPriority = await Lead.aggregate([
+      { $group: { _id: '$priority', count: { $sum: 1 } } }
+    ]);
+
+    // Payments Analytics
+    const paymentsByStatus = await Payment.aggregate([
+      { $group: { _id: '$status', count: { $sum: 1 }, totalAmount: { $sum: '$amount' } } }
+    ]);
+    const paymentsByMethod = await Payment.aggregate([
+      { $group: { _id: '$paymentMethod', count: { $sum: 1 }, totalAmount: { $sum: '$amount' } } }
+    ]);
+    const paymentsMonthly = await Payment.aggregate([
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m', date: '$paymentDate' } },
+          count: { $sum: 1 },
+          totalAmount: { $sum: '$amount' }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    // Expenses Analytics
+    const expensesByStatus = await Expense.aggregate([
+      { $group: { _id: '$status', count: { $sum: 1 }, totalAmount: { $sum: '$amount' } } }
+    ]);
+    const expensesByCategory = await Expense.aggregate([
+      { $group: { _id: '$category', count: { $sum: 1 }, totalAmount: { $sum: '$amount' } } }
+    ]);
+    const expensesMonthly = await Expense.aggregate([
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m', date: '$date' } },
+          count: { $sum: 1 },
+          totalAmount: { $sum: '$amount' }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    // Training Analytics
+    const trainingByStatus = await Training.aggregate([
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]);
+    const trainingBySubject = await Training.aggregate([
+      { $group: { _id: '$subject', count: { $sum: 1 } } }
+    ]);
+
+    // Service Analytics
+    const serviceByStatus = await Service.aggregate([
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]);
+
+    // DC/Sales Analytics
+    const dcByStatus = await DC.aggregate([
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]);
+
+    // Employee Analytics
+    const employeesByRole = await User.aggregate([
+      { $match: { isActive: true } },
+      { $group: { _id: '$role', count: { $sum: 1 } } }
+    ]);
+
+    // Product Analytics
+    const productsByStatus = await Product.aggregate([
+      { $group: { _id: '$prodStatus', count: { $sum: 1 } } }
+    ]);
+
+    res.json({
+      leads: {
+        byStatus: leadsByStatus,
+        byPriority: leadsByPriority
+      },
+      payments: {
+        byStatus: paymentsByStatus,
+        byMethod: paymentsByMethod,
+        monthly: paymentsMonthly
+      },
+      expenses: {
+        byStatus: expensesByStatus,
+        byCategory: expensesByCategory,
+        monthly: expensesMonthly
+      },
+      training: {
+        byStatus: trainingByStatus,
+        bySubject: trainingBySubject
+      },
+      services: {
+        byStatus: serviceByStatus
+      },
+      sales: {
+        byStatus: dcByStatus
+      },
+      employees: {
+        byRole: employeesByRole
+      },
+      products: {
+        byStatus: productsByStatus
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   getDashboardStats,
   getLeadsByZone,
@@ -365,7 +484,8 @@ module.exports = {
   getZoneWiseLeads,
   getExecutiveWiseLeads,
   getZoneWiseClosedLeads,
-  getExecutiveWiseClosedLeads
+  getExecutiveWiseClosedLeads,
+  getComprehensiveAnalytics
 };
 
 

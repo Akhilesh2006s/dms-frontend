@@ -280,6 +280,7 @@ export function Sidebar() {
   const isSeniorCoordinator = user?.role === 'Senior Coordinator'
   const isExecutiveManager = user?.role === 'Executive Manager'
   const isExecutive = user?.role === 'Executive'
+  const isTrainer = user?.role === 'Trainer'
 
   // Add employee leave menu if employee, replace admin Leave Management
   const employeeLeavesMenu: NavItem = {
@@ -521,6 +522,27 @@ export function Sidebar() {
         label: 'Leave Management',
         icon: CalendarCheck2,
         href: `/dashboard/executive-managers/${user?._id || ''}/leaves`,
+      },
+      { label: 'Sign out', icon: LogOut, href: '/auth/login' },
+    ]
+  } else if (isTrainer) {
+    // For Trainer role, show only Training, Services, and Expenses
+    finalNav = [
+      {
+        label: 'Trainings & Services',
+        icon: GraduationCap,
+        children: [
+          { label: 'Trainings List', href: '/dashboard/training/list' },
+          { label: 'Services List', href: '/dashboard/training/services' },
+        ],
+      },
+      {
+        label: 'Expenses',
+        icon: Calculator,
+        children: [
+          { label: 'Create Expense', href: '/dashboard/expenses/create', icon: PlusCircle },
+          { label: 'My Expenses', href: '/dashboard/expenses/my', icon: FileText },
+        ],
       },
       { label: 'Sign out', icon: LogOut, href: '/auth/login' },
     ]
