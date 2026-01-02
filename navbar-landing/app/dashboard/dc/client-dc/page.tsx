@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Pencil, Package, Plus, Upload, X, Search, CreditCard, FileText } from 'lucide-react'
+import { Pencil, Package, Plus, Upload, X, Search, CreditCard, FileText, PlusCircle } from 'lucide-react'
 import { getCurrentUser } from '@/lib/auth'
 import { toast } from 'sonner'
 import { useProducts } from '@/hooks/useProducts'
@@ -93,6 +93,8 @@ export default function ClientDCPage() {
     city: '',
     pincode: '',
   })
+  // DcOrder data for display (read-only) - includes all fields from Edit PO
+  const [dcOrderData, setDcOrderData] = useState<any>(null)
   
   // Edit PO Dialog state
   const [editPODialogOpen, setEditPODialogOpen] = useState(false)
@@ -128,6 +130,8 @@ export default function ClientDCPage() {
     quantity: number
     unit_price: number
   }>>([])
+  const [addProductDialogOpen, setAddProductDialogOpen] = useState(false)
+  const [originalPOProducts, setOriginalPOProducts] = useState<string[]>([])
   
   const { productNames: availableProducts, getProductLevels, getDefaultLevel, getProductSpecs, getProductSubjects } = useProducts()
   
@@ -572,16 +576,27 @@ export default function ClientDCPage() {
       pincode: '',
     }
     
-    // Get dcOrderId to fetch delivery address
+    // Get dcOrderId to fetch delivery address and all DcOrder data
     const dcOrderId = typeof dc.dcOrderId === 'object' ? dc.dcOrderId._id : dc.dcOrderId
     if (dcOrderId) {
       try {
         const dcOrder = await apiRequest<any>(`/dc-orders/${dcOrderId}`)
-        // Load delivery address - prioritize pendingEdit (if exists), then approved fields
-        // This ensures we show the delivery address that was filled in Edit PO
+        
+        // Store full DcOrder data for display (prioritize pendingEdit if exists, else use main fields)
+        let displayData: any = {}
         if (dcOrder.pendingEdit && dcOrder.pendingEdit.status === 'pending') {
           // Show from pendingEdit if there's a pending edit request
-          deliveryData = {
+          displayData = {
+            school_name: dcOrder.pendingEdit.school_name || dcOrder.school_name || '',
+            contact_person: dcOrder.pendingEdit.contact_person || dcOrder.contact_person || '',
+            contact_mobile: dcOrder.pendingEdit.contact_mobile || dcOrder.contact_mobile || '',
+            contact_person2: dcOrder.pendingEdit.contact_person2 || dcOrder.contact_person2 || '',
+            contact_mobile2: dcOrder.pendingEdit.contact_mobile2 || dcOrder.contact_mobile2 || '',
+            email: dcOrder.pendingEdit.email || dcOrder.email || '',
+            address: dcOrder.pendingEdit.address || dcOrder.address || '',
+            zone: dcOrder.pendingEdit.zone || dcOrder.zone || '',
+            location: dcOrder.pendingEdit.location || dcOrder.location || '',
+            remarks: dcOrder.pendingEdit.remarks || dcOrder.remarks || '',
             property_number: dcOrder.pendingEdit.property_number || '',
             floor: dcOrder.pendingEdit.floor || '',
             tower_block: dcOrder.pendingEdit.tower_block || '',
@@ -591,8 +606,18 @@ export default function ClientDCPage() {
             pincode: dcOrder.pendingEdit.pincode || '',
           }
         } else {
-          // If no pending edit, show from approved/main fields (delivery address saved after approval)
-          deliveryData = {
+          // If no pending edit, show from approved/main fields
+          displayData = {
+            school_name: dcOrder.school_name || '',
+            contact_person: dcOrder.contact_person || '',
+            contact_mobile: dcOrder.contact_mobile || '',
+            contact_person2: dcOrder.contact_person2 || '',
+            contact_mobile2: dcOrder.contact_mobile2 || '',
+            email: dcOrder.email || '',
+            address: dcOrder.address || '',
+            zone: dcOrder.zone || '',
+            location: dcOrder.location || '',
+            remarks: dcOrder.remarks || '',
             property_number: dcOrder.property_number || '',
             floor: dcOrder.floor || '',
             tower_block: dcOrder.tower_block || '',
@@ -602,29 +627,76 @@ export default function ClientDCPage() {
             pincode: dcOrder.pincode || '',
           }
         }
+        setDcOrderData(displayData)
+        
+        // Load delivery address from displayData
+        deliveryData = {
+          property_number: displayData.property_number || '',
+          floor: displayData.floor || '',
+          tower_block: displayData.tower_block || '',
+          nearby_landmark: displayData.nearby_landmark || '',
+          area: displayData.area || '',
+          city: displayData.city || '',
+          pincode: displayData.pincode || '',
+        }
       } catch (e) {
         console.error('Failed to load delivery address:', e)
+        setDcOrderData(null)
       }
+    } else {
+      setDcOrderData(null)
     }
     setDeliveryAddress(deliveryData)
+    
+    // Load products from DcOrder (includes products added/edited in Edit PO)
+    let dcOrderProducts: any[] = []
+    if (dcOrderId) {
+      try {
+        const dcOrder = await apiRequest<any>(`/dc-orders/${dcOrderId}`)
+        if (dcOrder.products && Array.isArray(dcOrder.products)) {
+          dcOrderProducts = dcOrder.products
+        }
+      } catch (e) {
+        console.error('Failed to load DcOrder products:', e)
+      }
+    }
     
     // Load full DC details
     try {
       const fullDC = await apiRequest<any>(`/dc/${dc._id}`)
       
-      // Load existing product details - only show products that were added via "Add Products"
-      if (fullDC.productDetails && Array.isArray(fullDC.productDetails) && fullDC.productDetails.length > 0) {
+      // Load existing product details - prioritize dcOrder.products (from Edit PO), then DC.productDetails
+      // Convert dcOrder.products format to dcProductRows format
+      let productsToShow: any[] = []
+      
+      // First, try to use products from DcOrder (Edit PO products)
+      if (dcOrderProducts.length > 0) {
+        productsToShow = dcOrderProducts.map((p: any, idx: number) => ({
+          id: `dcorder-${idx + 1}`,
+          product: p.product_name || '',
+          class: '1', // Default, as Edit PO doesn't have class
+          category: autoCategory,
+          specs: 'Regular', // Default, as Edit PO doesn't have specs
+          subject: undefined,
+          quantity: Number(p.quantity) || 0,
+          strength: Number(p.quantity) || 0, // Use quantity as strength
+          level: getDefaultLevel(p.product_name || 'Abacus'),
+        }))
+      }
+      
+      // If no DcOrder products, fall back to DC.productDetails
+      if (productsToShow.length === 0 && fullDC.productDetails && Array.isArray(fullDC.productDetails) && fullDC.productDetails.length > 0) {
         // Only show products that were actually added (have product name and details)
         const addedProducts = fullDC.productDetails.filter((p: any) => p.product && (p.price > 0 || p.strength > 0))
         if (addedProducts.length > 0) {
-          console.log('Loading products for Client DC:', JSON.stringify(addedProducts, null, 2))
-          setDcProductRows(addedProducts.map((p: any, idx: number) => {
+          console.log('Loading products for Client DC from DC.productDetails:', JSON.stringify(addedProducts, null, 2))
+          productsToShow = addedProducts.map((p: any, idx: number) => {
             // Read values directly - preserve 0 values, only default if null/undefined
             const strengthNum = p.strength !== null && p.strength !== undefined ? Number(p.strength) : 0
             const quantityNum = p.quantity !== null && p.quantity !== undefined ? Number(p.quantity) : strengthNum
             
             const row = {
-              id: String(idx + 1),
+              id: `dc-${idx + 1}`,
               product: p.product || '',
               class: p.class || '1',
               category: autoCategory, // Use auto-determined category
@@ -640,13 +712,16 @@ export default function ClientDCPage() {
               fullProduct: p
             })
             return row
-          }))
-        } else {
-          // No products added yet - show empty state
-          setDcProductRows([])
+          })
         }
+      }
+      
+      // Set the products to display
+      if (productsToShow.length > 0) {
+        console.log('Setting products for Request DC:', JSON.stringify(productsToShow, null, 2))
+        setDcProductRows(productsToShow)
       } else {
-        // No productDetails at all - show empty state
+        // No products - show empty state
         setDcProductRows([])
       }
       
@@ -1186,6 +1261,12 @@ export default function ClientDCPage() {
         }))
       )
       
+      // Extract unique product names from original PO (products selected when lead was closed)
+      const originalProducts = Array.from(new Set(
+        (dcOrder.products || []).map((p: any) => p.product_name).filter(Boolean)
+      ))
+      setOriginalPOProducts(originalProducts)
+      
       setEditPODialogOpen(true)
     } catch (e: any) {
       toast.error(e?.message || 'Failed to load DC Order details')
@@ -1662,6 +1743,107 @@ export default function ClientDCPage() {
               )}
             </div>
 
+            {/* School/Client Information (from Edit PO) */}
+            {dcOrderData && (
+              <div className="border rounded-lg p-6 space-y-4">
+                <Label className="text-lg font-semibold mb-4 block">School/Client Information</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label>School Name</Label>
+                    <Input
+                      value={dcOrderData.school_name || ''}
+                      readOnly
+                      disabled
+                      className="bg-neutral-50"
+                    />
+                  </div>
+                  <div>
+                    <Label>Contact Person</Label>
+                    <Input
+                      value={dcOrderData.contact_person || ''}
+                      readOnly
+                      disabled
+                      className="bg-neutral-50"
+                    />
+                  </div>
+                  <div>
+                    <Label>Contact Mobile</Label>
+                    <Input
+                      value={dcOrderData.contact_mobile || ''}
+                      readOnly
+                      disabled
+                      className="bg-neutral-50"
+                    />
+                  </div>
+                  <div>
+                    <Label>Email</Label>
+                    <Input
+                      value={dcOrderData.email || ''}
+                      readOnly
+                      disabled
+                      className="bg-neutral-50"
+                    />
+                  </div>
+                  <div>
+                    <Label>Contact Person 2 (Decision Maker)</Label>
+                    <Input
+                      value={dcOrderData.contact_person2 || ''}
+                      readOnly
+                      disabled
+                      className="bg-neutral-50"
+                    />
+                  </div>
+                  <div>
+                    <Label>Contact Mobile 2</Label>
+                    <Input
+                      value={dcOrderData.contact_mobile2 || ''}
+                      readOnly
+                      disabled
+                      className="bg-neutral-50"
+                    />
+                  </div>
+                  <div>
+                    <Label>Address</Label>
+                    <Textarea
+                      value={dcOrderData.address || ''}
+                      readOnly
+                      disabled
+                      className="bg-neutral-50"
+                      rows={2}
+                    />
+                  </div>
+                  <div>
+                    <Label>Location</Label>
+                    <Input
+                      value={dcOrderData.location || ''}
+                      readOnly
+                      disabled
+                      className="bg-neutral-50"
+                    />
+                  </div>
+                  <div>
+                    <Label>Zone</Label>
+                    <Input
+                      value={dcOrderData.zone || ''}
+                      readOnly
+                      disabled
+                      className="bg-neutral-50"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label>Remarks</Label>
+                    <Textarea
+                      value={dcOrderData.remarks || ''}
+                      readOnly
+                      disabled
+                      className="bg-neutral-50"
+                      rows={2}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Delivery and Address Table */}
             <div className="border rounded-lg p-6 space-y-4">
               <Label className="text-lg font-semibold mb-4 block">Delivery and Address</Label>
@@ -2044,12 +2226,7 @@ export default function ClientDCPage() {
                     size="sm"
                     variant="outline"
                     onClick={() => {
-                      setEditProductRows([...editProductRows, {
-                        id: Date.now().toString(),
-                        product_name: '',
-                        quantity: 0,
-                        unit_price: 0,
-                      }])
+                      setAddProductDialogOpen(true)
                     }}
                   >
                     <Plus className="w-4 h-4 mr-2" />
@@ -2072,25 +2249,11 @@ export default function ClientDCPage() {
                       {editProductRows.map((row, idx) => (
                         <TableRow key={row.id}>
                           <TableCell>
-                            <Select
+                            <Input
                               value={row.product_name}
-                              onValueChange={(v) => {
-                                const updated = [...editProductRows]
-                                updated[idx].product_name = v
-                                setEditProductRows(updated)
-                              }}
-                            >
-                              <SelectTrigger className="w-full">
-                                <SelectValue placeholder="Select product" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {availableProducts.map((product) => (
-                                  <SelectItem key={product} value={product}>
-                                    {product}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                              readOnly
+                              className="bg-neutral-50 cursor-not-allowed"
+                            />
                           </TableCell>
                           <TableCell>
                             <Input
@@ -2173,6 +2336,78 @@ export default function ClientDCPage() {
               disabled={submittingEdit}
             >
               {submittingEdit ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Products Dialog (for Edit PO) */}
+      <Dialog open={addProductDialogOpen} onOpenChange={setAddProductDialogOpen}>
+        <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add Products</DialogTitle>
+            <DialogDescription>Select products from the original PO</DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {/* Product Selection */}
+            <div>
+              <Label className="text-sm font-semibold mb-2 block">Add Products</Label>
+              <p className="text-xs text-neutral-500 mb-2">
+                {originalPOProducts.length > 0 
+                  ? `Products selected for this PO (${originalPOProducts.length} available)`
+                  : 'No products available'}
+              </p>
+              {originalPOProducts.length === 0 ? (
+                <div className="p-4 border rounded bg-yellow-50 text-yellow-800 text-sm">
+                  No products available. This PO was created without products.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[200px] overflow-y-auto border rounded p-3">
+                  {originalPOProducts.map((product, index) => {
+                    const productSpecs = getProductSpecs(product)
+                    const hasSpecs = productSpecs.length > 0
+                    const specCount = hasSpecs ? productSpecs.length : 1
+                    
+                    return (
+                      <div key={`${product}-${index}`} className="flex items-center justify-between p-2 border rounded hover:bg-neutral-50">
+                        <div className="flex items-center space-x-2 flex-1">
+                          <span className="text-sm font-medium">{product}</span>
+                          {hasSpecs && (
+                            <span className="text-xs text-neutral-500">({specCount} specs - {productSpecs.join(', ')})</span>
+                          )}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            // Add product to editProductRows
+                            const newRow = {
+                              id: Date.now().toString(),
+                              product_name: product,
+                              quantity: 0,
+                              unit_price: 0,
+                            }
+                            setEditProductRows([...editProductRows, newRow])
+                            setAddProductDialogOpen(false)
+                          }}
+                          className="text-xs"
+                        >
+                          <PlusCircle className="w-3 h-3 mr-1" />
+                          Add Product
+                        </Button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddProductDialogOpen(false)}>
+              Cancel
             </Button>
           </DialogFooter>
         </DialogContent>

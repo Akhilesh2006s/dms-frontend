@@ -340,8 +340,8 @@ export default function CloseLeadPage() {
       })
   }
 
-  // Filter available products to only show those that were selected when lead was created
-  const filteredProducts = lead ? getLeadProducts() : availableProducts
+  // Show all available products from database
+  const filteredProducts = availableProducts
 
   const addProductWithSpec = (product: string, spec: string) => {
     // Add product to selected products
@@ -1055,12 +1055,12 @@ export default function CloseLeadPage() {
               <Label className="text-sm font-semibold mb-2 block">Add Products</Label>
               <p className="text-xs text-neutral-500 mb-2">
                 {filteredProducts.length > 0 
-                  ? `Showing products selected when lead was created (${filteredProducts.length} available)`
-                  : 'No products were selected when this lead was created'}
+                  ? `All products from database (${filteredProducts.length} available)`
+                  : 'No products available in database'}
               </p>
               {filteredProducts.length === 0 ? (
                 <div className="p-4 border rounded bg-yellow-50 text-yellow-800 text-sm">
-                  No products available. This lead was created without selecting any products in "Products Interested".
+                  No products available in the database. Please contact admin to add products.
                 </div>
               ) : (
                 <div className="space-y-2 max-h-[200px] overflow-y-auto border rounded p-3">

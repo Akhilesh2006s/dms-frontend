@@ -4,20 +4,20 @@ import { Platform } from 'react-native';
 
 // IMPORTANT: Update this to your computer's IP address for physical device testing
 // For iOS Simulator/Android Emulator: use 'localhost' or '127.0.0.1'
-// For physical device: use your computer's IP address (e.g., 'http://192.168.1.100:5000/api')
+// For physical device: use your computer's IP address (e.g., 'http://192.168.1.100:5001/api')
 // To find your IP: Windows: ipconfig | Mac/Linux: ifconfig
 // Look for IPv4 Address (usually 192.168.x.x or 10.0.x.x)
 
 // Local development API URL
 const DEV_API_URL = Platform.OS === 'web' 
-  ? 'http://localhost:5000/api'
-  : 'http://localhost:5000/api'; // For emulator/simulator, use localhost
+  ? 'http://localhost:5001/api'
+  : 'http://localhost:5001/api'; // For emulator/simulator, use localhost
 
 // Production API URL (Railway backend)
 const PROD_API_URL = 'https://crm-backend-production-2ffd.up.railway.app/api';
 
-// Use Railway production URL
-const API_BASE_URL = PROD_API_URL;
+// Use local development URL (change to PROD_API_URL for production)
+const API_BASE_URL = DEV_API_URL;
 
 class ApiService {
   private baseURL: string;
@@ -61,7 +61,7 @@ class ApiService {
       return response.data;
     } catch (error: any) {
       if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.message?.includes('Network Error') || error.message?.includes('timeout')) {
-        throw new Error(`Cannot connect to server. Make sure:\n1. Backend is running on port 5000\n2. API URL is correct (currently: ${this.baseURL})\n3. Device and computer are on same network\n4. Firewall allows port 5000`);
+        throw new Error(`Cannot connect to server. Make sure:\n1. Backend is running on port 5001\n2. API URL is correct (currently: ${this.baseURL})\n3. Device and computer are on same network\n4. Firewall allows port 5001`);
       }
       throw error;
     }
@@ -77,7 +77,7 @@ class ApiService {
       return response.data;
     } catch (error: any) {
       if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.message?.includes('Network Error') || error.message?.includes('timeout')) {
-        throw new Error(`Cannot connect to server. Make sure:\n1. Backend is running on port 5000\n2. API URL is correct (currently: ${this.baseURL})\n3. Device and computer are on same network\n4. Firewall allows port 5000`);
+        throw new Error(`Cannot connect to server. Make sure:\n1. Backend is running on port 5001\n2. API URL is correct (currently: ${this.baseURL})\n3. Device and computer are on same network\n4. Firewall allows port 5001`);
       }
       throw error;
     }
