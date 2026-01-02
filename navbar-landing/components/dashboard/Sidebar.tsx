@@ -193,7 +193,9 @@ const NAV: NavItem[] = [
     label: 'Payments',
     icon: CreditCard,
     children: [
+      { label: 'Pending Payments', href: '/dashboard/payments' },
       { label: 'Add Payment', href: '/dashboard/payments/add-payment' },
+      { label: 'Payments Done', href: '/dashboard/payments/done' },
       { label: 'Transaction Report', href: '/dashboard/payments/transaction-report' },
       { label: 'Approval Pending Cash', href: '/dashboard/payments/approval-pending-cash' },
       { label: 'Approval Pending Cheques', href: '/dashboard/payments/approval-pending-cheques' },
@@ -311,6 +313,7 @@ export function Sidebar() {
         label: 'Payments',
         icon: CreditCard,
         children: [
+          { label: 'Pending Payments', href: '/dashboard/payments', icon: Clock },
           { label: 'Add Payment', href: '/dashboard/payments/add-payment', icon: PlusCircle },
           { label: 'Payments Done', href: '/dashboard/payments/done', icon: CheckCircle2 },
         ],

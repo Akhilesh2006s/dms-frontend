@@ -15,7 +15,7 @@ router.get('/', authMiddleware, getPayments);
 router.post('/create', authMiddleware, createPayment);
 router.get('/:id', authMiddleware, getPayment);
 router.put('/:id', authMiddleware, updatePayment);
-router.put('/:id/approve', authMiddleware, roleMiddleware('Finance Manager', 'Admin', 'Super Admin'), approvePayment);
+router.put('/:id/approve', authMiddleware, roleMiddleware('Finance Manager', 'Admin', 'Super Admin', 'Manager'), approvePayment);
 
 module.exports = router;
 

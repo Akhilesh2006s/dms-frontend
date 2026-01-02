@@ -363,7 +363,9 @@ const update = async (req, res) => {
       'contact_person2', 'contact_mobile2', 'email', 'address', 'school_type',
       'pincode', 'state', 'city', 'region', 'area',
       'average_fee', 'branches', 'strength', 'remarks',
-      'estimated_delivery_date', 'products', 'dcRequestData'
+      'estimated_delivery_date', 'products', 'dcRequestData', 'total_amount',
+      // Delivery address fields
+      'property_number', 'floor', 'tower_block', 'nearby_landmark', 'pod_proof_url'
     ];
     fieldsToUpdate.forEach(field => {
       if (req.body[field] !== undefined) {

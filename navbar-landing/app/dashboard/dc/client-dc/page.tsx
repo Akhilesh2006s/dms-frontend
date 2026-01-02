@@ -10,10 +10,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Pencil, Package, Plus, Upload, X, Search } from 'lucide-react'
+import { Pencil, Package, Plus, Upload, X, Search, CreditCard, FileText } from 'lucide-react'
 import { getCurrentUser } from '@/lib/auth'
 import { toast } from 'sonner'
 import { useProducts } from '@/hooks/useProducts'
+import { useRouter } from 'next/navigation'
 
 type DC = {
   _id: string
@@ -46,6 +47,7 @@ type DC = {
 }
 
 export default function ClientDCPage() {
+  const router = useRouter()
   const currentUser = getCurrentUser()
   const [items, setItems] = useState<DC[]>([])
   const [loading, setLoading] = useState(true)
@@ -73,6 +75,14 @@ export default function ClientDCPage() {
   const [dcNotes, setDcNotes] = useState('')
   const [dcPoPhotoUrl, setDcPoPhotoUrl] = useState('')
   const [savingClientDC, setSavingClientDC] = useState(false)
+  // Invoice view state
+  const [invoiceModalOpen, setInvoiceModalOpen] = useState(false)
+  const [invoiceData, setInvoiceData] = useState<{
+    schoolInfo: any
+    paymentBreakdown: any[]
+    totalAmount: number
+    dcDate?: string
+  } | null>(null)
   // Delivery and Address data (read-only)
   const [deliveryAddress, setDeliveryAddress] = useState({
     property_number: '',
@@ -338,6 +348,210 @@ export default function ClientDCPage() {
     load()
   }, [])
 
+  const openInvoiceView = async (dc: DC) => {
+    try {
+      // Get DC details
+      const fullDC = await apiRequest<any>(`/dc/${dc._id}`)
+      
+      // Get school/client information
+      let schoolInfo: any = {}
+      let paymentBreakdown: any[] = []
+      let totalAmount = 0
+      let dcOrder: any = null
+      
+      if (dc.dcOrderId) {
+        const dcOrderId = typeof dc.dcOrderId === 'object' 
+          ? dc.dcOrderId._id 
+          : dc.dcOrderId
+        dcOrder = await apiRequest<any>(`/dc-orders/${dcOrderId}`)
+        
+        schoolInfo = {
+          customerName: dcOrder.school_name || dc.customerName || '',
+          schoolCode: dcOrder.school_code || '',
+          contactName: dcOrder.contact_person || '',
+          mobileNumber: dcOrder.contact_mobile || dc.customerPhone || '',
+          location: dcOrder.location || dcOrder.area || '',
+          zone: dcOrder.zone || '',
+          email: dcOrder.email || dc.customerEmail || '',
+        }
+      } else {
+        schoolInfo = {
+          customerName: dc.customerName || '',
+          mobileNumber: dc.customerPhone || '',
+        }
+      }
+      
+      // Always recalculate from DcOrder products (most accurate) - don't rely on stored payment breakdown
+      // This ensures prices are always correct even if DcOrder was updated after payment creation
+      console.log('🔍 Invoice View - DcOrder products:', JSON.stringify(dcOrder?.products, null, 2))
+      console.log('🔍 Invoice View - DC productDetails:', JSON.stringify(fullDC.productDetails, null, 2))
+      
+      if (fullDC.productDetails && Array.isArray(fullDC.productDetails) && fullDC.productDetails.length > 0) {
+        if (dcOrder && dcOrder.products && Array.isArray(dcOrder.products) && dcOrder.products.length > 0) {
+          console.log('🔍 Matching - DcOrder has', dcOrder.products.length, 'products, DC has', fullDC.productDetails.length, 'productDetails')
+          // Match DC productDetails with DcOrder products by INDEX/POSITION first (most accurate)
+          // This ensures each row gets its corresponding price from Edit PO
+          const usedIndices = new Set<number>()
+          
+          paymentBreakdown = fullDC.productDetails.map((pd: any, index: number) => {
+            // First try to match by index/position (most accurate)
+            let matchingProduct: any = null
+            let matchingIndex = -1
+            
+            // Try exact index match first
+            if (index < dcOrder.products.length && !usedIndices.has(index)) {
+              matchingProduct = dcOrder.products[index]
+              matchingIndex = index
+              usedIndices.add(index)
+              console.log(`Invoice Product[${index}]: Matched by exact index -> ${matchingProduct?.product_name} (₹${matchingProduct?.unit_price})`)
+            } else {
+              // If exact index is used or out of bounds, find unused product with matching name
+              const dcProductName = (pd.product || '').toLowerCase().trim()
+              
+              // First try to find unused product with exact name match
+              for (let i = 0; i < dcOrder.products.length; i++) {
+                if (usedIndices.has(i)) continue
+                
+                const p = dcOrder.products[i]
+                const orderProductName = (p.product_name || '').toLowerCase().trim()
+                
+                if (dcProductName === orderProductName) {
+                  matchingProduct = p
+                  matchingIndex = i
+                  usedIndices.add(i)
+                  console.log(`Invoice Product[${index}]: Matched by name (exact) at index ${i} -> ${matchingProduct?.product_name} (₹${matchingProduct?.unit_price})`)
+                  break
+                }
+              }
+              
+              // If still no match, try partial name match
+              if (!matchingProduct) {
+                for (let i = 0; i < dcOrder.products.length; i++) {
+                  if (usedIndices.has(i)) continue
+                  
+                  const p = dcOrder.products[i]
+                  const orderProductName = (p.product_name || '').toLowerCase().trim()
+                  
+                  if (dcProductName.includes(orderProductName) || orderProductName.includes(dcProductName)) {
+                    matchingProduct = p
+                    matchingIndex = i
+                    usedIndices.add(i)
+                    console.log(`Invoice Product[${index}]: Matched by name (partial) at index ${i} -> ${matchingProduct?.product_name} (₹${matchingProduct?.unit_price})`)
+                    break
+                  }
+                }
+              }
+              
+              // Last resort: use any matching product name (even if already used)
+              if (!matchingProduct) {
+                const dcProductName = (pd.product || '').toLowerCase().trim()
+                matchingProduct = dcOrder.products.find((p: any) => {
+                  const orderProductName = (p.product_name || '').toLowerCase().trim()
+                  return dcProductName === orderProductName || 
+                         dcProductName.includes(orderProductName) || 
+                         orderProductName.includes(dcProductName)
+                })
+                if (matchingProduct) {
+                  console.log(`Invoice Product[${index}]: Matched by name (fallback, may be duplicate) -> ${matchingProduct?.product_name} (₹${matchingProduct?.unit_price})`)
+                }
+              }
+            }
+            
+            // Get unit price from DcOrder product, or from DC productDetails if available
+            const unitPrice = matchingProduct 
+              ? (Number(matchingProduct.unit_price) || 0)
+              : (Number(pd.price) || 0)
+            
+            const quantity = Number(pd.quantity) || 0
+            const strength = Number(pd.strength) || 0
+            // Use strength for calculation (not quantity) - strength is the actual number of students/items
+            const total = unitPrice * strength
+            totalAmount += total
+            
+            console.log(`Invoice Product[${index}]: ${pd.product}, UnitPrice: ₹${unitPrice}, Strength: ${strength}, Total: ₹${total}, MatchedIndex: ${matchingIndex}`)
+            
+            return {
+              product: pd.product || '',
+              class: pd.class || '1',
+              category: pd.category || 'New School',
+              specs: pd.specs || 'Regular',
+              subject: pd.subject || undefined,
+              quantity: quantity,
+              strength: strength,
+              level: pd.level || 'L2',
+              unitPrice: unitPrice,
+              total: total,
+            }
+          })
+        } else {
+          // Fallback: use DC productDetails with prices if available
+          paymentBreakdown = fullDC.productDetails.map((p: any) => {
+            const price = Number(p.price) || 0
+            const quantity = Number(p.quantity) || 0
+            const strength = Number(p.strength) || 0
+            // Use strength for calculation (not quantity) - strength is the actual number of students/items
+            const total = Number(p.total) || (price * strength)
+            totalAmount += total
+            return {
+              product: p.product || '',
+              class: p.class || '1',
+              category: p.category || 'New School',
+              specs: p.specs || 'Regular',
+              subject: p.subject || undefined,
+              quantity: quantity,
+              strength: strength,
+              level: p.level || 'L2',
+              unitPrice: price,
+              total: total,
+            }
+          })
+        }
+      }
+      
+      // If still no breakdown but we have total_amount from DcOrder, estimate
+      if (paymentBreakdown.length === 0 && dcOrder && dcOrder.total_amount && Number(dcOrder.total_amount) > 0) {
+        totalAmount = Number(dcOrder.total_amount)
+        // Try to get from DC productDetails and estimate prices
+        if (fullDC.productDetails && Array.isArray(fullDC.productDetails) && fullDC.productDetails.length > 0) {
+          // Use strength for calculation (not quantity)
+          const totalStrength = fullDC.productDetails.reduce((sum: number, p: any) => 
+            sum + (Number(p.strength) || 0), 0
+          )
+          const estimatedUnitPrice = totalStrength > 0 ? totalAmount / totalStrength : 0
+          
+          paymentBreakdown = fullDC.productDetails.map((pd: any) => {
+            const quantity = Number(pd.quantity) || 0
+            const strength = Number(pd.strength) || 0
+            const total = estimatedUnitPrice * strength
+            return {
+              product: pd.product || '',
+              class: pd.class || '1',
+              category: pd.category || 'New School',
+              specs: pd.specs || 'Regular',
+              subject: pd.subject || undefined,
+              quantity: quantity,
+              strength: Number(pd.strength) || 0,
+              level: pd.level || 'L2',
+              unitPrice: estimatedUnitPrice,
+              total: total,
+            }
+          })
+        }
+      }
+      
+      setInvoiceData({
+        schoolInfo,
+        paymentBreakdown,
+        totalAmount,
+        dcDate: fullDC.dcDate || undefined,
+      })
+      setInvoiceModalOpen(true)
+    } catch (e: any) {
+      console.error('Failed to load invoice:', e)
+      toast.error('Failed to load invoice data: ' + (e?.message || 'Unknown error'))
+    }
+  }
+
   const openClientDCDialog = async (dc: DC) => {
     setSelectedDC(dc)
     
@@ -555,10 +769,263 @@ export default function ClientDCPage() {
         updatePayload.poDocument = dcPoPhotoUrl
       }
 
-      await apiRequest(`/dc/${selectedDC._id}`, {
+      const updatedDC = await apiRequest(`/dc/${selectedDC._id}`, {
         method: 'PUT',
         body: JSON.stringify(updatePayload),
       })
+
+      // Calculate total amount from productDetails - ALWAYS get prices from DcOrder products
+      let totalAmount = 0
+      let paymentBreakdown: any[] = []
+      
+      // Always try to get prices from DcOrder products first (most accurate)
+      if (selectedDC.dcOrderId) {
+        try {
+          const dcOrderId = typeof selectedDC.dcOrderId === 'object' 
+            ? selectedDC.dcOrderId._id 
+            : selectedDC.dcOrderId
+          const dcOrder = await apiRequest<any>(`/dc-orders/${dcOrderId}`)
+          
+          console.log('📦 DcOrder products:', JSON.stringify(dcOrder.products, null, 2))
+          console.log('📦 DC productDetails:', JSON.stringify(productDetails, null, 2))
+          console.log('📦 Matching products - DcOrder has', dcOrder.products.length, 'products, DC has', productDetails.length, 'productDetails')
+          
+          if (dcOrder.products && Array.isArray(dcOrder.products) && dcOrder.products.length > 0) {
+            // Match products by INDEX/POSITION first (most accurate - each row matches to corresponding DcOrder product)
+            // This ensures that if you have 5 rows of "Abacus" with different prices in Edit PO,
+            // each row gets its own correct price
+            const usedIndices = new Set<number>()
+            
+            paymentBreakdown = productDetails.map((pd: any, index: number) => {
+              // First try to match by index/position (most accurate)
+              let matchingProduct: any = null
+              let matchingIndex = -1
+              
+              // Try exact index match first
+              if (index < dcOrder.products.length && !usedIndices.has(index)) {
+                matchingProduct = dcOrder.products[index]
+                matchingIndex = index
+                usedIndices.add(index)
+                console.log(`Payment Creation Product[${index}]: Matched by exact index -> ${matchingProduct?.product_name} (₹${matchingProduct?.unit_price})`)
+              } else {
+                // If exact index is used or out of bounds, find unused product with matching name
+                const dcProductName = (pd.product || '').toLowerCase().trim()
+                
+                // First try to find unused product with exact name match
+                for (let i = 0; i < dcOrder.products.length; i++) {
+                  if (usedIndices.has(i)) continue
+                  
+                  const p = dcOrder.products[i]
+                  const orderProductName = (p.product_name || '').toLowerCase().trim()
+                  
+                  if (dcProductName === orderProductName) {
+                    matchingProduct = p
+                    matchingIndex = i
+                    usedIndices.add(i)
+                    console.log(`Payment Creation Product[${index}]: Matched by name (exact) at index ${i} -> ${matchingProduct?.product_name} (₹${matchingProduct?.unit_price})`)
+                    break
+                  }
+                }
+                
+                // If still no match, try partial name match
+                if (!matchingProduct) {
+                  for (let i = 0; i < dcOrder.products.length; i++) {
+                    if (usedIndices.has(i)) continue
+                    
+                    const p = dcOrder.products[i]
+                    const orderProductName = (p.product_name || '').toLowerCase().trim()
+                    
+                    if (dcProductName.includes(orderProductName) || orderProductName.includes(dcProductName)) {
+                      matchingProduct = p
+                      matchingIndex = i
+                      usedIndices.add(i)
+                      console.log(`Payment Creation Product[${index}]: Matched by name (partial) at index ${i} -> ${matchingProduct?.product_name} (₹${matchingProduct?.unit_price})`)
+                      break
+                    }
+                  }
+                }
+                
+                // Last resort: use any matching product name (even if already used)
+                if (!matchingProduct) {
+                  const dcProductName = (pd.product || '').toLowerCase().trim()
+                  matchingProduct = dcOrder.products.find((p: any) => {
+                    const orderProductName = (p.product_name || '').toLowerCase().trim()
+                    return dcProductName === orderProductName || 
+                           dcProductName.includes(orderProductName) || 
+                           orderProductName.includes(dcProductName)
+                  })
+                  if (matchingProduct) {
+                    console.log(`Payment Creation Product[${index}]: Matched by name (fallback, may be duplicate) -> ${matchingProduct?.product_name} (₹${matchingProduct?.unit_price})`)
+                  }
+                }
+              }
+              
+              const unitPrice = matchingProduct ? (Number(matchingProduct.unit_price) || 0) : 0
+              const quantity = Number(pd.quantity) || 0
+              const strength = Number(pd.strength) || 0
+              // Use strength for calculation (not quantity) - strength is the actual number of students/items
+              const total = unitPrice * strength
+              totalAmount += total
+              
+              console.log(`Payment Creation Product[${index}]: ${pd.product}, UnitPrice: ₹${unitPrice}, Quantity: ${quantity}, Strength: ${strength}, Total: ₹${total}, MatchedIndex: ${matchingIndex}`)
+              
+              return {
+                product: pd.product || '',
+                class: pd.class || '1',
+                category: pd.category || 'New School',
+                specs: pd.specs || 'Regular',
+                subject: pd.subject || undefined,
+                quantity: quantity,
+                strength: strength,
+                level: pd.level || 'L2',
+                unitPrice: unitPrice,
+                total: total,
+              }
+            })
+            
+            console.log('💰 Calculated totalAmount from DcOrder products:', totalAmount)
+            console.log('💰 Payment breakdown:', paymentBreakdown)
+          }
+        } catch (e) {
+          console.error('Failed to get prices from DcOrder:', e)
+        }
+      }
+      
+      // Fallback: If no prices from DcOrder, try to get from DC productDetails
+      if (totalAmount === 0 && updatedDC.productDetails && Array.isArray(updatedDC.productDetails)) {
+        paymentBreakdown = updatedDC.productDetails.map((p: any) => {
+          const price = Number(p.price) || 0
+          const quantity = Number(p.quantity) || 0
+          const strength = Number(p.strength) || 0
+          // Use strength for calculation (not quantity) - strength is the actual number of students/items
+          const total = Number(p.total) || (price * strength)
+          totalAmount += total
+          return {
+            product: p.product || '',
+            class: p.class || '1',
+            category: p.category || 'New School',
+            specs: p.specs || 'Regular',
+            subject: p.subject || undefined,
+            quantity: quantity,
+            strength: strength,
+            level: p.level || 'L2',
+            unitPrice: price,
+            total: total,
+          }
+        })
+      }
+      
+      // If still no total, calculate from productDetails with default or use total_amount from DcOrder
+      if (totalAmount === 0 && selectedDC.dcOrderId) {
+        try {
+          const dcOrderId = typeof selectedDC.dcOrderId === 'object' 
+            ? selectedDC.dcOrderId._id 
+            : selectedDC.dcOrderId
+          const dcOrder = await apiRequest<any>(`/dc-orders/${dcOrderId}`)
+          
+          if (dcOrder.total_amount && Number(dcOrder.total_amount) > 0) {
+            totalAmount = Number(dcOrder.total_amount)
+            // Create breakdown with estimated prices
+            paymentBreakdown = productDetails.map((pd: any) => {
+            const quantity = Number(pd.quantity) || 0
+            const strength = Number(pd.strength) || 0
+            // Use strength for calculation (not quantity)
+            const totalStrength = productDetails.reduce((sum: number, p: any) => 
+              sum + (Number(p.strength) || 0), 0
+            )
+            const estimatedUnitPrice = totalStrength > 0 ? totalAmount / totalStrength : 0
+            const total = estimatedUnitPrice * strength
+              return {
+                product: pd.product || '',
+                class: pd.class || '1',
+                category: pd.category || 'New School',
+                specs: pd.specs || 'Regular',
+                subject: pd.subject || undefined,
+                quantity: quantity,
+                strength: strength,
+                level: pd.level || 'L2',
+                unitPrice: estimatedUnitPrice,
+                total: total,
+              }
+            })
+          }
+        } catch (e) {
+          console.error('Failed to get total_amount from DcOrder:', e)
+        }
+      }
+
+      // Get school/client information for payment
+      let schoolInfo: any = {}
+      if (selectedDC.dcOrderId) {
+        try {
+          const dcOrderId = typeof selectedDC.dcOrderId === 'object' 
+            ? selectedDC.dcOrderId._id 
+            : selectedDC.dcOrderId
+          const dcOrder = await apiRequest<any>(`/dc-orders/${dcOrderId}`)
+          schoolInfo = {
+            customerName: dcOrder.school_name || selectedDC.customerName || '',
+            schoolCode: dcOrder.school_code || '',
+            contactName: dcOrder.contact_person || '',
+            mobileNumber: dcOrder.contact_mobile || selectedDC.customerPhone || '',
+            location: dcOrder.location || dcOrder.area || '',
+            zone: dcOrder.zone || '',
+            email: dcOrder.email || selectedDC.customerEmail || '',
+          }
+        } catch (e) {
+          console.error('Failed to get school info:', e)
+          schoolInfo = {
+            customerName: selectedDC.customerName || '',
+            mobileNumber: selectedDC.customerPhone || '',
+          }
+        }
+      } else {
+        schoolInfo = {
+          customerName: selectedDC.customerName || '',
+          mobileNumber: selectedDC.customerPhone || '',
+        }
+      }
+
+      // Create payment automatically when DC is requested
+      if (totalAmount > 0) {
+        try {
+          const currentUser = getCurrentUser()
+          const paymentPayload = {
+            dcId: selectedDC._id,
+            customerName: schoolInfo.customerName,
+            schoolCode: schoolInfo.schoolCode,
+            contactName: schoolInfo.contactName,
+            mobileNumber: schoolInfo.mobileNumber,
+            location: schoolInfo.location,
+            zone: schoolInfo.zone,
+            amount: totalAmount,
+            paymentMethod: 'Other', // Will be updated when payment is received (Cash, UPI, etc.)
+            paymentDate: new Date().toISOString(),
+            status: 'Pending',
+            description: `Auto-generated payment for DC request - ${schoolInfo.customerName}`,
+            paymentBreakdown: paymentBreakdown,
+            autoCreated: true,
+            createdBy: currentUser?._id,
+          }
+
+          await apiRequest('/payments/create', {
+            method: 'POST',
+            body: JSON.stringify(paymentPayload),
+          })
+
+          console.log('✅ Payment created automatically for DC request:', {
+            dcId: selectedDC._id,
+            amount: totalAmount,
+            customerName: schoolInfo.customerName,
+          })
+        } catch (paymentErr: any) {
+          console.error('❌ Failed to create payment automatically:', paymentErr)
+          // Don't fail the whole operation if payment creation fails
+          toast.warning('DC requested successfully, but failed to create payment automatically. Please create payment manually.')
+        }
+      } else {
+        console.warn('⚠️ Total amount is 0, skipping payment creation')
+        toast.warning('DC requested successfully, but no payment was created as total amount is 0.')
+      }
 
       // Update the related DcOrder status to 'dc_requested' and store request data
       // This makes it appear in Closed Sales for Admin/Coordinator to review
@@ -626,8 +1093,28 @@ export default function ClientDCPage() {
         }
       }
 
+      // Store invoice data for viewing
+      setInvoiceData({
+        schoolInfo,
+        paymentBreakdown,
+        totalAmount,
+        dcDate: dcDate || undefined,
+      })
+      
+      // Store invoice data for viewing
+      setInvoiceData({
+        schoolInfo,
+        paymentBreakdown,
+        totalAmount,
+        dcDate: dcDate || undefined,
+      })
+      
       toast.success('Client Request submitted successfully! It will appear in Closed Sales for Admin/Coordinator to review and raise DC.')
       setClientDCDialogOpen(false)
+      // Open invoice modal after a short delay
+      setTimeout(() => {
+        setInvoiceModalOpen(true)
+      }, 500)
       load()
     } catch (e: any) {
       toast.error(e?.message || 'Failed to submit Client Request')
@@ -705,10 +1192,10 @@ export default function ClientDCPage() {
     }
   }
 
-  const submitEditRequest = async () => {
-    console.log('🚀 submitEditRequest called')
+  const savePOChanges = async () => {
+    console.log('🚀 savePOChanges called')
     if (!selectedDcOrder) {
-      console.error('❌ No selectedDcOrder, cannot submit')
+      console.error('❌ No selectedDcOrder, cannot save')
       return
     }
 
@@ -758,7 +1245,7 @@ export default function ClientDCPage() {
       }
 
       // Log the full payload to verify delivery address fields are included
-      console.log('Submitting edit request - Full payload:', JSON.stringify(payload, null, 2))
+      console.log('Saving PO changes - Full payload:', JSON.stringify(payload, null, 2))
       console.log('Delivery address fields in payload:', {
         property_number: payload.property_number,
         floor: payload.floor,
@@ -769,30 +1256,25 @@ export default function ClientDCPage() {
         pincode: payload.pincode,
       })
 
-      // Submit edit request
-      console.log('📤 Sending request to:', `/dc-orders/${selectedDcOrder._id}/submit-edit`)
-      const response = await apiRequest(`/dc-orders/${selectedDcOrder._id}/submit-edit`, {
-        method: 'POST',
+      // Update directly (no approval needed)
+      console.log('📤 Updating DC Order directly:', `/dc-orders/${selectedDcOrder._id}`)
+      const response = await apiRequest(`/dc-orders/${selectedDcOrder._id}`, {
+        method: 'PUT',
         body: JSON.stringify(payload),
       })
-      console.log('✅ Edit request submitted successfully:', response)
+      console.log('✅ DC Order updated successfully:', response)
 
-      toast.success('Edit request submitted successfully! It will be reviewed by Executive Manager.')
+      toast.success('PO updated successfully!')
       setEditPODialogOpen(false)
       load()
     } catch (e: any) {
-      console.error('❌❌❌ ERROR SUBMITTING EDIT REQUEST ❌❌❌')
+      console.error('❌❌❌ ERROR UPDATING PO ❌❌❌')
       console.error('Error object:', e)
       console.error('Error message:', e?.message)
       console.error('Error status:', e?.status)
       console.error('Error response:', e?.response)
       
-      // Check if it's a 400 error about existing pending edit
-      if (e?.message?.includes('already a pending edit')) {
-        toast.error('There is already a pending edit request for this PO. Please wait for it to be reviewed or contact your manager.')
-      } else {
-        toast.error(e?.message || 'Failed to submit edit request')
-      }
+      toast.error(e?.message || 'Failed to update PO')
     } finally {
       setSubmittingEdit(false)
     }
@@ -960,11 +1442,31 @@ export default function ClientDCPage() {
                           )}
                         </TableCell>
                         <TableCell className="text-center">
-                          {status === 'pending_dc' ? (
-                            <span className="text-sm text-neutral-400">-</span>
+                          {status === 'pending_dc' || status === 'warehouse_processing' || status === 'completed' ? (
+                            <div className="flex items-center gap-2 justify-center">
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => openInvoiceView(d)}
+                              >
+                                <CreditCard className="w-4 h-4 mr-2" />
+                                View Invoice
+                              </Button>
+                            </div>
                           ) : (
                             <div className="flex items-center gap-2 justify-center">
                               {d.poPhotoUrl && (
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  onClick={() => openEditPODialog(d)}
+                                >
+                                  <Pencil className="w-4 h-4 mr-2" />
+                                  Edit PO
+                                </Button>
+                              )}
+                              {/* Always show Edit PO button if dcOrderId exists, even without PO photo */}
+                              {!d.poPhotoUrl && d.dcOrderId && (
                                 <Button 
                                   size="sm" 
                                   variant="outline"
@@ -1364,7 +1866,7 @@ export default function ClientDCPage() {
           <DialogHeader>
             <DialogTitle>Edit PO - {editFormData.school_name || 'Client'}</DialogTitle>
             <DialogDescription>
-              Make changes to the PO. These changes will be sent to Executive Manager for approval.
+              Make changes to the PO. Changes will be saved instantly.
             </DialogDescription>
           </DialogHeader>
           
@@ -1667,10 +2169,151 @@ export default function ClientDCPage() {
               Cancel
             </Button>
             <Button
-              onClick={submitEditRequest}
+              onClick={savePOChanges}
               disabled={submittingEdit}
             >
-              {submittingEdit ? 'Submitting...' : 'Submit Edit Request'}
+              {submittingEdit ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Invoice View Modal */}
+      <Dialog open={invoiceModalOpen} onOpenChange={setInvoiceModalOpen}>
+        <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Invoice - {invoiceData?.schoolInfo?.customerName || 'Client'}</DialogTitle>
+            <DialogDescription>
+              Product details and costs for this DC request
+            </DialogDescription>
+          </DialogHeader>
+          
+          {invoiceData && (
+            <div className="space-y-6 py-4">
+              {/* School Information */}
+              <div className="border rounded-lg p-4 bg-neutral-50">
+                <h3 className="font-semibold text-lg mb-3">School Information</h3>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="text-neutral-600">School Name:</span>
+                    <span className="ml-2 font-medium">{invoiceData.schoolInfo.customerName || '-'}</span>
+                  </div>
+                  {invoiceData.schoolInfo.schoolCode && (
+                    <div>
+                      <span className="text-neutral-600">School Code:</span>
+                      <span className="ml-2 font-medium">{invoiceData.schoolInfo.schoolCode}</span>
+                    </div>
+                  )}
+                  {invoiceData.schoolInfo.contactName && (
+                    <div>
+                      <span className="text-neutral-600">Contact Person:</span>
+                      <span className="ml-2 font-medium">{invoiceData.schoolInfo.contactName}</span>
+                    </div>
+                  )}
+                  {invoiceData.schoolInfo.mobileNumber && (
+                    <div>
+                      <span className="text-neutral-600">Mobile:</span>
+                      <span className="ml-2 font-medium">{invoiceData.schoolInfo.mobileNumber}</span>
+                    </div>
+                  )}
+                  {invoiceData.schoolInfo.location && (
+                    <div>
+                      <span className="text-neutral-600">Location:</span>
+                      <span className="ml-2 font-medium">{invoiceData.schoolInfo.location}</span>
+                    </div>
+                  )}
+                  {invoiceData.schoolInfo.zone && (
+                    <div>
+                      <span className="text-neutral-600">Zone:</span>
+                      <span className="ml-2 font-medium">{invoiceData.schoolInfo.zone}</span>
+                    </div>
+                  )}
+                  {invoiceData.dcDate && (
+                    <div>
+                      <span className="text-neutral-600">DC Date:</span>
+                      <span className="ml-2 font-medium">{new Date(invoiceData.dcDate).toLocaleDateString()}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Products Table */}
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-neutral-100 px-4 py-3 border-b">
+                  <h3 className="font-semibold text-lg">Products & Pricing</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-neutral-50 border-b">
+                        <th className="py-3 px-4 text-left font-semibold">Product</th>
+                        <th className="py-3 px-4 text-left font-semibold">Class</th>
+                        <th className="py-3 px-4 text-left font-semibold">Category</th>
+                        <th className="py-3 px-4 text-left font-semibold">Specs</th>
+                        <th className="py-3 px-4 text-left font-semibold">Subject</th>
+                        <th className="py-3 px-4 text-right font-semibold">Quantity</th>
+                        <th className="py-3 px-4 text-right font-semibold">Strength</th>
+                        <th className="py-3 px-4 text-right font-semibold">Level</th>
+                        <th className="py-3 px-4 text-right font-semibold">Unit Price</th>
+                        <th className="py-3 px-4 text-right font-semibold">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {invoiceData.paymentBreakdown.map((item, idx) => (
+                        <tr key={idx} className="border-b hover:bg-neutral-50">
+                          <td className="py-3 px-4 font-medium">{item.product}</td>
+                          <td className="py-3 px-4">{item.class}</td>
+                          <td className="py-3 px-4">{item.category}</td>
+                          <td className="py-3 px-4">{item.specs}</td>
+                          <td className="py-3 px-4">{item.subject || '-'}</td>
+                          <td className="py-3 px-4 text-right">{item.quantity}</td>
+                          <td className="py-3 px-4 text-right">{item.strength}</td>
+                          <td className="py-3 px-4 text-right">{item.level}</td>
+                          <td className="py-3 px-4 text-right">₹{item.unitPrice.toFixed(2)}</td>
+                          <td className="py-3 px-4 text-right font-semibold">₹{item.total.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                      <tr className="bg-neutral-100 border-t-2 border-neutral-400 font-bold">
+                        <td colSpan={9} className="py-4 px-4 text-right">
+                          Grand Total:
+                        </td>
+                        <td className="py-4 px-4 text-right text-lg">
+                          ₹{invoiceData.totalAmount.toFixed(2)}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Payment Status */}
+              <div className="border rounded-lg p-4 bg-blue-50">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-neutral-600">Payment Status</p>
+                    <p className="text-lg font-semibold text-blue-700">Pending</p>
+                    <p className="text-xs text-neutral-500 mt-1">
+                      Payment will be updated when received (Cash, UPI, etc.)
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm text-neutral-600">Total Amount</p>
+                    <p className="text-2xl font-bold text-blue-700">₹{invoiceData.totalAmount.toFixed(2)}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setInvoiceModalOpen(false)}>
+              Close
+            </Button>
+            <Button onClick={() => {
+              setInvoiceModalOpen(false)
+              router.push('/dashboard/payments')
+            }}>
+              View in Payments
             </Button>
           </DialogFooter>
         </DialogContent>

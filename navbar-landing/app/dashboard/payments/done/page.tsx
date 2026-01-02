@@ -82,8 +82,8 @@ export default function PaymentsDonePage() {
         return
       }
 
-      // Fetch payments created by this employee
-      const data = await apiRequest<Payment[]>(`/payments?createdBy=${currentUser._id}`)
+      // Fetch only approved/completed payments
+      const data = await apiRequest<Payment[]>(`/payments?status=Approved`)
       setPayments(data || [])
     } catch (err: any) {
       toast.error(err?.message || 'Failed to load payments')
@@ -94,7 +94,8 @@ export default function PaymentsDonePage() {
   }
 
   function filterPayments() {
-    let filtered = [...payments]
+    // Only show approved payments (already filtered in loadPayments)
+    let filtered = payments.filter(p => p.status === 'Approved')
 
     // Search filter
     if (searchTerm.trim()) {
@@ -110,10 +111,8 @@ export default function PaymentsDonePage() {
       )
     }
 
-    // Status filter
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter((p) => p.status === statusFilter)
-    }
+    // Status filter - only approved (already filtered above)
+    // No need to filter again since we only load approved payments
 
     // Payment method filter
     if (paymentMethodFilter !== 'all') {

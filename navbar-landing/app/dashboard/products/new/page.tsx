@@ -152,6 +152,7 @@ export default function NewProductPage() {
 
       toast.success('Product created successfully!')
       router.push('/dashboard/products')
+      router.refresh() // Force refresh to reload products list
     } catch (err: any) {
       setError(err?.message || 'Failed to create product')
       toast.error(err?.message || 'Failed to create product')

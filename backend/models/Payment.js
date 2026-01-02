@@ -5,6 +5,11 @@ const paymentSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Sale',
   },
+  dcId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'DC',
+    index: true,
+  },
   customerName: {
     type: String,
     required: true,
@@ -104,6 +109,24 @@ const paymentSchema = new mongoose.Schema({
   },
   otherDetails: {
     type: String,
+  },
+  // Product breakdown for invoice-like display
+  paymentBreakdown: [{
+    product: String,
+    class: String,
+    category: String,
+    specs: String,
+    subject: String,
+    quantity: Number,
+    strength: Number,
+    level: String,
+    unitPrice: Number,
+    total: Number,
+  }],
+  // Auto-created flag (true if created automatically from DC request)
+  autoCreated: {
+    type: Boolean,
+    default: false,
   },
   approvedBy: {
     type: mongoose.Schema.Types.ObjectId,

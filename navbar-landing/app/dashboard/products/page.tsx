@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState, useRef } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -36,11 +36,13 @@ type Product = {
 
 export default function ProductsPage() {
   const router = useRouter()
+  const pathname = usePathname()
   const currentUser = getCurrentUser()
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const hasLoadedRef = useRef(false)
   
   // Edit modal state
   const [editModalOpen, setEditModalOpen] = useState(false)
@@ -69,7 +71,24 @@ export default function ProductsPage() {
       return
     }
     loadProducts()
+    hasLoadedRef.current = true
   }, [statusFilter])
+
+  // Reload products when page becomes visible (e.g., when navigating back)
+  useEffect(() => {
+    if (!hasLoadedRef.current) return
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        if (currentUser && (currentUser.role === 'Admin' || currentUser.role === 'Super Admin')) {
+          loadProducts()
+        }
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [currentUser])
 
   const loadProducts = async () => {
     setLoading(true)
@@ -78,7 +97,8 @@ export default function ProductsPage() {
         ? '/products' 
         : `/products?status=${statusFilter}`
       const data = await apiRequest<Product[]>(url)
-      setProducts(data || [])
+      // Force state update by creating a new array reference
+      setProducts([...(data || [])])
     } catch (err: any) {
       toast.error('Failed to load products')
       console.error(err)
@@ -238,6 +258,7 @@ export default function ProductsPage() {
       toast.success('Product updated successfully!')
       closeEditModal()
       await loadProducts()
+      router.refresh() // Force refresh to ensure UI updates
     } catch (err: any) {
       toast.error(err?.message || 'Failed to update product')
     } finally {
@@ -311,6 +332,7 @@ export default function ProductsPage() {
                   <th className="text-left py-3 px-4 font-semibold text-neutral-700">Levels</th>
                   <th className="text-left py-3 px-4 font-semibold text-neutral-700">Subjects</th>
                   <th className="text-left py-3 px-4 font-semibold text-neutral-700">Specs</th>
+                  <th className="text-left py-3 px-4 font-semibold text-neutral-700">Product Category</th>
                   <th className="text-left py-3 px-4 font-semibold text-neutral-700">Status</th>
                   <th className="text-left py-3 px-4 font-semibold text-neutral-700">Created Date</th>
                   <th className="text-left py-3 px-4 font-semibold text-neutral-700">Actions</th>
@@ -352,6 +374,19 @@ export default function ProductsPage() {
                           {product.specs.map((spec, idx) => (
                             <Badge key={idx} variant="outline" className="text-xs">
                               {spec}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-neutral-400">-</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      {product.hasCategory && product.categories && Array.isArray(product.categories) && product.categories.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {product.categories.map((category, idx) => (
+                            <Badge key={idx} variant="secondary" className="text-xs">
+                              {category}
                             </Badge>
                           ))}
                         </div>

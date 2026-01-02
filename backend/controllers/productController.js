@@ -65,6 +65,16 @@ const create = async (req, res) => {
       payload.specs = [payload.specs];
     }
     
+    // If hasCategory is true, ensure categories array is provided
+    if (payload.hasCategory && (!payload.categories || !Array.isArray(payload.categories) || payload.categories.length === 0)) {
+      return res.status(400).json({ message: 'At least one product category is required when hasCategory is true' });
+    }
+    
+    // Ensure categories is always an array
+    if (payload.categories && !Array.isArray(payload.categories)) {
+      payload.categories = [payload.categories];
+    }
+    
     const product = await Product.create(payload);
     
     const populated = await Product.findById(product._id)
@@ -97,6 +107,8 @@ const update = async (req, res) => {
       'subjects',
       'hasSpecs',
       'specs',
+      'hasCategory',
+      'categories',
       'prodStatus',
     ];
     
@@ -133,6 +145,27 @@ const update = async (req, res) => {
       const specsArray = Array.isArray(existingSpecs) ? existingSpecs : (existingSpecs ? [existingSpecs] : []);
       if (specsArray.length === 0) {
         return res.status(400).json({ message: 'At least one spec is required when hasSpecs is true' });
+      }
+    }
+    
+    // Handle categories - ensure it's always an array
+    if (updateData.categories !== undefined) {
+      // Convert to array if it's not already
+      if (!Array.isArray(updateData.categories)) {
+        updateData.categories = [updateData.categories];
+      }
+      // Validate if hasCategory is true, categories must be provided
+      if (updateData.hasCategory !== undefined && updateData.hasCategory) {
+        if (updateData.categories.length === 0) {
+          return res.status(400).json({ message: 'At least one product category is required when hasCategory is true' });
+        }
+      }
+    } else if (updateData.hasCategory !== undefined && updateData.hasCategory) {
+      // If hasCategory is being set to true but categories not provided, check existing
+      const existingCategories = product.categories || [];
+      const categoriesArray = Array.isArray(existingCategories) ? existingCategories : (existingCategories ? [existingCategories] : []);
+      if (categoriesArray.length === 0) {
+        return res.status(400).json({ message: 'At least one product category is required when hasCategory is true' });
       }
     }
     
@@ -185,7 +218,7 @@ const remove = async (req, res) => {
 const getActiveProducts = async (req, res) => {
   try {
     const products = await Product.find({ prodStatus: 1 })
-      .select('productName productLevels hasSubjects subjects hasSpecs specs')
+      .select('productName productLevels hasSubjects subjects hasSpecs specs hasCategory categories')
       .sort({ productName: 1 });
     
     res.json(products);

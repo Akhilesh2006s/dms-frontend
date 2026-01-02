@@ -18,6 +18,7 @@ const getPayments = async (req, res) => {
       createdBy,
       zone,
       paymentMethod,
+      dcId,
     } = req.query;
     const filter = {};
 
@@ -27,6 +28,7 @@ const getPayments = async (req, res) => {
     if (schoolName) filter.customerName = { $regex: schoolName, $options: 'i' };
     if (mobileNo) filter.mobileNumber = { $regex: mobileNo, $options: 'i' };
     if (zone) filter.zone = { $regex: zone, $options: 'i' };
+    if (dcId) filter.dcId = dcId;
     if (createdBy) {
       // Filter by createdBy (ObjectId)
       filter.createdBy = createdBy;
@@ -44,6 +46,7 @@ const getPayments = async (req, res) => {
 
     const payments = await Payment.find(filter)
       .populate('saleId')
+      .populate('dcId')
       .populate('approvedBy', 'name email')
       .populate('rejectedBy', 'name email')
       .populate('heldBy', 'name email')
@@ -68,6 +71,7 @@ const createPayment = async (req, res) => {
 
     const populatedPayment = await Payment.findById(payment._id)
       .populate('saleId')
+      .populate('dcId')
       .populate('createdBy', 'name email');
 
     res.status(201).json(populatedPayment);
@@ -83,6 +87,7 @@ const getPayment = async (req, res) => {
   try {
     const payment = await Payment.findById(req.params.id)
       .populate('saleId')
+      .populate('dcId')
       .populate('approvedBy', 'name email')
       .populate('rejectedBy', 'name email')
       .populate('heldBy', 'name email')
@@ -103,7 +108,24 @@ const getPayment = async (req, res) => {
 // @access  Private
 const updatePayment = async (req, res) => {
   try {
-    const { status, referenceNumber, refNo, description } = req.body;
+    const { 
+      status, 
+      referenceNumber, 
+      refNo, 
+      description,
+      paymentMethod,
+      paymentDate,
+      upiId,
+      transactionId,
+      chequeNumber,
+      bankName,
+      accountNumber,
+      ifscCode,
+      cardLast4,
+      paymentGateway,
+      otherDetails,
+      txnNo,
+    } = req.body;
     const updateData = {};
 
     if (status) {
@@ -120,6 +142,20 @@ const updatePayment = async (req, res) => {
     if (refNo !== undefined) updateData.refNo = refNo;
     if (referenceNumber !== undefined && !refNo) updateData.refNo = referenceNumber;
     if (description !== undefined) updateData.description = description;
+    // Allow updating payment method and date when payment is received
+    if (paymentMethod !== undefined) updateData.paymentMethod = paymentMethod;
+    if (paymentDate !== undefined) updateData.paymentDate = paymentDate;
+    // Payment method specific fields
+    if (upiId !== undefined) updateData.upiId = upiId;
+    if (transactionId !== undefined) updateData.transactionId = transactionId;
+    if (chequeNumber !== undefined) updateData.chequeNumber = chequeNumber;
+    if (bankName !== undefined) updateData.bankName = bankName;
+    if (accountNumber !== undefined) updateData.accountNumber = accountNumber;
+    if (ifscCode !== undefined) updateData.ifscCode = ifscCode;
+    if (cardLast4 !== undefined) updateData.cardLast4 = cardLast4;
+    if (paymentGateway !== undefined) updateData.paymentGateway = paymentGateway;
+    if (otherDetails !== undefined) updateData.otherDetails = otherDetails;
+    if (txnNo !== undefined) updateData.txnNo = txnNo;
 
     const payment = await Payment.findByIdAndUpdate(
       req.params.id,
@@ -127,6 +163,7 @@ const updatePayment = async (req, res) => {
       { new: true }
     )
       .populate('saleId')
+      .populate('dcId')
       .populate('approvedBy', 'name email')
       .populate('rejectedBy', 'name email')
       .populate('heldBy', 'name email')
@@ -189,6 +226,7 @@ const approvePayment = async (req, res) => {
       { new: true }
     )
       .populate('saleId')
+      .populate('dcId')
       .populate('approvedBy', 'name email')
       .populate('rejectedBy', 'name email')
       .populate('heldBy', 'name email')
@@ -237,6 +275,7 @@ const exportPayments = async (req, res) => {
 
     const payments = await Payment.find(filter)
       .populate('saleId')
+      .populate('dcId')
       .populate('approvedBy', 'name email')
       .populate('rejectedBy', 'name email')
       .populate('heldBy', 'name email')
