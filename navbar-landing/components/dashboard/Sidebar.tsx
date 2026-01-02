@@ -490,10 +490,9 @@ export function Sidebar() {
         return item
       })
   } else if (isExecutiveManager) {
-    // For Executive Manager role, show Dashboard and Executive Manager menu
+    // For Executive Manager role, show My Dashboard and Executive Manager menu
     // Get the manager's own ID from user data (we'll need to store it in auth)
     finalNav = [
-      { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
       {
         label: 'My Dashboard',
         icon: LayoutDashboard,

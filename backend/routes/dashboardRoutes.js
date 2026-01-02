@@ -11,7 +11,8 @@ const {
   getExecutiveWiseLeads,
   getZoneWiseClosedLeads,
   getExecutiveWiseClosedLeads,
-  getComprehensiveAnalytics
+  getComprehensiveAnalytics,
+  getExecutiveAnalytics
 } = require('../controllers/dashboardController');
 const { authMiddleware } = require('../middleware/authMiddleware');
 
@@ -26,6 +27,7 @@ router.get('/leads-analytics/executive-wise', authMiddleware, getExecutiveWiseLe
 router.get('/leads-analytics/zone-wise-closed', authMiddleware, getZoneWiseClosedLeads);
 router.get('/leads-analytics/executive-wise-closed', authMiddleware, getExecutiveWiseClosedLeads);
 router.get('/comprehensive-analytics', authMiddleware, getComprehensiveAnalytics);
+router.get('/executive-analytics', authMiddleware, getExecutiveAnalytics);
 
 module.exports = router;
 

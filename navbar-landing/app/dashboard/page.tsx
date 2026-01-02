@@ -3,7 +3,7 @@
 import { Card } from '@/components/ui/card'
 import Link from 'next/link'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Zap, TrendingUp, DollarSign, GraduationCap, AlertTriangle, X, Minimize2 } from 'lucide-react'
+import { Zap, TrendingUp, DollarSign, GraduationCap, AlertTriangle, X, Minimize2, Calculator, MapPin, Package, ShoppingCart } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import BarGradient from '@/components/charts/BarGradient'
 import AreaGradient from '@/components/charts/AreaGradient'
@@ -15,6 +15,7 @@ import { apiRequest } from '@/lib/api'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { getCurrentUser } from '@/lib/auth'
 
 const sections = [
   { href: '/dashboard/leads', label: 'Leads' },
@@ -218,6 +219,9 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'leads' | 'analytics'>('dashboard')
   const [analyticsData, setAnalyticsData] = useState<any>(null)
   const [analyticsLoading, setAnalyticsLoading] = useState(true)
+  const [executiveAnalytics, setExecutiveAnalytics] = useState<any>(null)
+  const [executiveLoading, setExecutiveLoading] = useState(true)
+  const [currentUser, setCurrentUser] = useState<any>(null)
 
   // compute KPIs for the teal chart
   const salesArr = trends && trends.length ? trends.map(t => t.revenue) : [0]
@@ -233,6 +237,69 @@ export default function DashboardPage() {
     { label: 'Pending Services', value: stats[5]?.value || 0, color: '#f59e42' },     // Orange
     { label: 'Completed Services', value: stats[6]?.value || 0, color: '#60a5fa' },   // Blue
   ]
+
+  useEffect(() => {
+    const user = getCurrentUser()
+    setCurrentUser(user)
+  }, [])
+
+  const fetchExecutiveAnalytics = async () => {
+    setExecutiveLoading(true)
+    try {
+      const params = new URLSearchParams()
+      if (fromDate) params.append('fromDate', fromDate)
+      if (toDate) params.append('toDate', toDate)
+      const queryString = params.toString()
+      const suffix = queryString ? `?${queryString}` : ''
+      
+      const data = await apiRequest<any>(`/dashboard/executive-analytics${suffix}`)
+      setExecutiveAnalytics(data)
+    } catch (error) {
+      console.error('Error fetching executive analytics:', error)
+    } finally {
+      setExecutiveLoading(false)
+    }
+  }
+
+  const fetchComprehensiveAnalytics = async () => {
+    setAnalyticsLoading(true)
+    try {
+      const data = await apiRequest<any>('/dashboard/comprehensive-analytics')
+      setAnalyticsData(data)
+    } catch (error) {
+      console.error('Error fetching comprehensive analytics:', error)
+    } finally {
+      setAnalyticsLoading(false)
+    }
+  }
+
+  const fetchLeadsAnalytics = async () => {
+    setLeadsLoading(true)
+    try {
+      const params = new URLSearchParams()
+      if (fromDate) params.append('fromDate', fromDate)
+      if (toDate) params.append('toDate', toDate)
+      
+      const queryString = params.toString()
+      const suffix = queryString ? `?${queryString}` : ''
+
+      const [zoneWise, executiveWise, zoneClosed, executiveClosed] = await Promise.all([
+        apiRequest<ZoneWiseLeadData[]>(`/dashboard/leads-analytics/zone-wise${suffix}`).catch(() => []),
+        apiRequest<ExecutiveWiseLeadData[]>(`/dashboard/leads-analytics/executive-wise${suffix}`).catch(() => []),
+        apiRequest<ZoneWiseClosedLeadData[]>(`/dashboard/leads-analytics/zone-wise-closed${suffix}`).catch(() => []),
+        apiRequest<ExecutiveWiseClosedLeadData[]>(`/dashboard/leads-analytics/executive-wise-closed${suffix}`).catch(() => []),
+      ])
+
+      setZoneWiseLeads(zoneWise || [])
+      setExecutiveWiseLeads(executiveWise || [])
+      setZoneWiseClosedLeads(zoneClosed || [])
+      setExecutiveWiseClosedLeads(executiveClosed || [])
+    } catch (error) {
+      console.error('Error fetching leads analytics:', error)
+    } finally {
+      setLeadsLoading(false)
+    }
+  }
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -299,51 +366,18 @@ export default function DashboardPage() {
 
     fetchDashboardData()
     fetchLeadsAnalytics() // Initial load without date filter
-    fetchComprehensiveAnalytics()
-  }, [])
-
-  const fetchComprehensiveAnalytics = async () => {
-    setAnalyticsLoading(true)
-    try {
-      const data = await apiRequest<any>('/dashboard/comprehensive-analytics')
-      setAnalyticsData(data)
-    } catch (error) {
-      console.error('Error fetching comprehensive analytics:', error)
-    } finally {
-      setAnalyticsLoading(false)
+    if (currentUser?.role === 'Executive') {
+      fetchExecutiveAnalytics()
+    } else {
+      fetchComprehensiveAnalytics()
     }
-  }
-
-  const fetchLeadsAnalytics = async () => {
-    setLeadsLoading(true)
-    try {
-      const params = new URLSearchParams()
-      if (fromDate) params.append('fromDate', fromDate)
-      if (toDate) params.append('toDate', toDate)
-      
-      const queryString = params.toString()
-      const suffix = queryString ? `?${queryString}` : ''
-
-      const [zoneWise, executiveWise, zoneClosed, executiveClosed] = await Promise.all([
-        apiRequest<ZoneWiseLeadData[]>(`/dashboard/leads-analytics/zone-wise${suffix}`).catch(() => []),
-        apiRequest<ExecutiveWiseLeadData[]>(`/dashboard/leads-analytics/executive-wise${suffix}`).catch(() => []),
-        apiRequest<ZoneWiseClosedLeadData[]>(`/dashboard/leads-analytics/zone-wise-closed${suffix}`).catch(() => []),
-        apiRequest<ExecutiveWiseClosedLeadData[]>(`/dashboard/leads-analytics/executive-wise-closed${suffix}`).catch(() => []),
-      ])
-
-      setZoneWiseLeads(zoneWise || [])
-      setExecutiveWiseLeads(executiveWise || [])
-      setZoneWiseClosedLeads(zoneClosed || [])
-      setExecutiveWiseClosedLeads(executiveClosed || [])
-    } catch (error) {
-      console.error('Error fetching leads analytics:', error)
-    } finally {
-      setLeadsLoading(false)
-    }
-  }
+  }, [currentUser])
 
   const handleSearch = () => {
     fetchLeadsAnalytics()
+    if (currentUser?.role === 'Executive') {
+      fetchExecutiveAnalytics()
+    }
   }
 
   return (
@@ -424,6 +458,134 @@ export default function DashboardPage() {
       {/* Dashboard Content */}
       {activeTab === 'dashboard' && (
         <>
+          {/* Executive Summary Stats - Only for Executives */}
+          {currentUser?.role === 'Executive' && executiveAnalytics && (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+              <Card className="p-5 bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200 shadow-lg hover:shadow-xl transition-all">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-semibold text-blue-700 mb-1 uppercase tracking-wide">Total Leads</div>
+                    <div className="text-2xl font-bold text-blue-900">{executiveAnalytics.leads?.total || 0}</div>
+                    <div className="text-xs text-blue-600 mt-1">
+                      {executiveAnalytics.leads?.closed || 0} closed ({executiveAnalytics.leads?.total > 0 
+                        ? Math.round((executiveAnalytics.leads?.closed || 0) / executiveAnalytics.leads.total * 100)
+                        : 0}%)
+                    </div>
+                  </div>
+                  <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center">
+                    <TrendingUp className="w-5 h-5 text-white" />
+                  </div>
+                </div>
+              </Card>
+              <Card className="p-5 bg-gradient-to-br from-emerald-50 to-emerald-100 border-2 border-emerald-200 shadow-lg hover:shadow-xl transition-all">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-semibold text-emerald-700 mb-1 uppercase tracking-wide">Revenue</div>
+                    <div className="text-2xl font-bold text-emerald-900">{fmtINR(executiveAnalytics.payments?.totalAmount || 0)}</div>
+                    <div className="text-xs text-emerald-600 mt-1">{executiveAnalytics.payments?.total || 0} payments</div>
+                  </div>
+                  <div className="h-10 w-10 rounded-full bg-emerald-500 flex items-center justify-center">
+                    <DollarSign className="w-5 h-5 text-white" />
+                  </div>
+                </div>
+              </Card>
+              <Card className="p-5 bg-gradient-to-br from-red-50 to-red-100 border-2 border-red-200 shadow-lg hover:shadow-xl transition-all">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-semibold text-red-700 mb-1 uppercase tracking-wide">Expenses</div>
+                    <div className="text-2xl font-bold text-red-900">{fmtINR(executiveAnalytics.expenses?.totalAmount || 0)}</div>
+                    <div className="text-xs text-red-600 mt-1">{executiveAnalytics.expenses?.total || 0} expenses</div>
+                  </div>
+                  <div className="h-10 w-10 rounded-full bg-red-500 flex items-center justify-center">
+                    <Calculator className="w-5 h-5 text-white" />
+                  </div>
+                </div>
+              </Card>
+              <Card className="p-5 bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-200 shadow-lg hover:shadow-xl transition-all">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-semibold text-green-700 mb-1 uppercase tracking-wide">Net Profit</div>
+                    <div className="text-2xl font-bold text-green-900">
+                      {fmtINR((executiveAnalytics.payments?.totalAmount || 0) - (executiveAnalytics.expenses?.totalAmount || 0))}
+                    </div>
+                    <div className="text-xs text-green-600 mt-1">Revenue - Expenses</div>
+                  </div>
+                  <div className="h-10 w-10 rounded-full bg-green-500 flex items-center justify-center">
+                    <TrendingUp className="w-5 h-5 text-white" />
+                  </div>
+                </div>
+              </Card>
+              <Card className="p-5 bg-gradient-to-br from-purple-50 to-purple-100 border-2 border-purple-200 shadow-lg hover:shadow-xl transition-all">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-semibold text-purple-700 mb-1 uppercase tracking-wide">Total Sales</div>
+                    <div className="text-2xl font-bold text-purple-900">{executiveAnalytics.sales?.total || 0}</div>
+                    <div className="text-xs text-purple-600 mt-1">{executiveAnalytics.sales?.completed || 0} completed</div>
+                  </div>
+                  <div className="h-10 w-10 rounded-full bg-purple-500 flex items-center justify-center">
+                    <ShoppingCart className="w-5 h-5 text-white" />
+                  </div>
+                </div>
+              </Card>
+            </div>
+          )}
+
+          {/* Executive Leads Breakdown - Only for Executives */}
+          {currentUser?.role === 'Executive' && executiveAnalytics?.leads && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              {executiveAnalytics.leads.byPriority && executiveAnalytics.leads.byPriority.length > 0 && (
+                <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h3 className="font-semibold text-lg text-neutral-900">My Leads by Priority</h3>
+                      <p className="text-xs text-neutral-500 mt-1">Distribution of leads by priority level</p>
+                    </div>
+                    <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center">
+                      <Zap className="w-5 h-5 text-white" />
+                    </div>
+                  </div>
+                  <PieChart
+                    data={executiveAnalytics.leads.byPriority.map((item: any) => ({
+                      label: item._id || 'Unknown',
+                      value: item.count || 0,
+                      color: item._id === 'Hot' ? '#ef4444' : item._id === 'Warm' ? '#f59e0b' : '#6b7280'
+                    }))}
+                    height={280}
+                  />
+                  <div className="mt-4 grid grid-cols-3 gap-2">
+                    {executiveAnalytics.leads.byPriority.map((item: any) => (
+                      <div key={item._id} className="text-center p-2 bg-neutral-50 rounded">
+                        <div className="text-lg font-bold text-neutral-900">{item.count || 0}</div>
+                        <div className="text-xs text-neutral-600">{item._id || 'Unknown'}</div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
+              {executiveAnalytics.leads.byStatus && executiveAnalytics.leads.byStatus.length > 0 && (
+                <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h3 className="font-semibold text-lg text-neutral-900">My Leads by Status</h3>
+                      <p className="text-xs text-neutral-500 mt-1">Current status of all your leads</p>
+                    </div>
+                    <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
+                      <TrendingUp className="w-5 h-5 text-white" />
+                    </div>
+                  </div>
+                  <PieChart
+                    data={executiveAnalytics.leads.byStatus.map((item: any, idx: number) => ({
+                      label: item._id || 'Unknown',
+                      value: item.count || 0,
+                      color: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'][idx % 6]
+                    }))}
+                    height={280}
+                  />
+                </Card>
+              )}
+            </div>
+          )}
+
           {/* Premium Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* BarChart: Premium styling */}
@@ -593,21 +755,481 @@ export default function DashboardPage() {
             )}
           </div>
         </Card>
-        <div className="hidden" />
+
+        {/* Executive Sales & Payments Summary - Only for Executives */}
+        {currentUser?.role === 'Executive' && executiveAnalytics && (
+          <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <div className="font-semibold text-neutral-900 text-base">Sales & Payments Summary</div>
+                <p className="text-xs text-neutral-500 mt-1">Quick overview of your sales and payments</p>
       </div>
+              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center">
+                <ShoppingCart className="w-5 h-5 text-white" />
+              </div>
+            </div>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
+                <div>
+                  <div className="text-sm font-medium text-blue-900">Total Sales</div>
+                  <div className="text-xs text-blue-600">{executiveAnalytics.sales?.completed || 0} completed</div>
+                </div>
+                <div className="text-2xl font-bold text-blue-700">{executiveAnalytics.sales?.total || 0}</div>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-emerald-50 rounded-lg border border-emerald-200">
+                <div>
+                  <div className="text-sm font-medium text-emerald-900">Total Revenue</div>
+                  <div className="text-xs text-emerald-600">{executiveAnalytics.payments?.total || 0} payments</div>
+                </div>
+                <div className="text-xl font-bold text-emerald-700">{fmtINR(executiveAnalytics.payments?.totalAmount || 0)}</div>
+              </div>
+              {executiveAnalytics.sales?.byStatus && executiveAnalytics.sales.byStatus.length > 0 && (
+                <div className="pt-3 border-t border-neutral-200">
+                  <div className="text-xs font-semibold text-neutral-700 mb-2 uppercase">Sales Status Breakdown</div>
+                  <div className="space-y-2">
+                    {executiveAnalytics.sales.byStatus.map((item: any, idx: number) => (
+                      <div key={item._id} className="flex items-center justify-between">
+                        <span className="text-sm text-neutral-600">{item._id || 'Unknown'}</span>
+                        <span className="text-sm font-bold text-neutral-900">{item.count || 0}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
+      </div>
+
+      {/* Executive Performance Metrics - Only for Executives */}
+      {currentUser?.role === 'Executive' && executiveAnalytics && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+          {/* Conversion Metrics */}
+          <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-base text-neutral-900">Conversion Metrics</h3>
+              <TrendingUp className="w-5 h-5 text-blue-500" />
+            </div>
+            <div className="space-y-3">
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-neutral-600">Lead Conversion</span>
+                  <span className="font-bold text-neutral-900">
+                    {executiveAnalytics.leads?.total > 0 
+                      ? Math.round((executiveAnalytics.leads?.closed || 0) / executiveAnalytics.leads.total * 100)
+                      : 0}%
+                  </span>
+                </div>
+                <div className="w-full bg-neutral-200 rounded-full h-2">
+                  <div 
+                    className="bg-emerald-500 h-2 rounded-full" 
+                    style={{ width: `${executiveAnalytics.leads?.total > 0 
+                      ? Math.round((executiveAnalytics.leads?.closed || 0) / executiveAnalytics.leads.total * 100)
+                      : 0}%` }}
+                  />
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-neutral-600">Sales Completion</span>
+                  <span className="font-bold text-neutral-900">
+                    {executiveAnalytics.sales?.total > 0 
+                      ? Math.round((executiveAnalytics.sales?.completed || 0) / executiveAnalytics.sales.total * 100)
+                      : 0}%
+                  </span>
+                </div>
+                <div className="w-full bg-neutral-200 rounded-full h-2">
+                  <div 
+                    className="bg-blue-500 h-2 rounded-full" 
+                    style={{ width: `${executiveAnalytics.sales?.total > 0 
+                      ? Math.round((executiveAnalytics.sales?.completed || 0) / executiveAnalytics.sales.total * 100)
+                      : 0}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Financial Overview */}
+          <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-base text-neutral-900">Financial Overview</h3>
+              <DollarSign className="w-5 h-5 text-emerald-500" />
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 bg-emerald-50 rounded-lg">
+                <span className="text-sm font-medium text-emerald-900">Revenue</span>
+                <span className="text-lg font-bold text-emerald-700">{fmtINR(executiveAnalytics.payments?.totalAmount || 0)}</span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
+                <span className="text-sm font-medium text-red-900">Expenses</span>
+                <span className="text-lg font-bold text-red-700">{fmtINR(executiveAnalytics.expenses?.totalAmount || 0)}</span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border-2 border-green-200">
+                <span className="text-sm font-semibold text-green-900">Net Profit</span>
+                <span className="text-xl font-bold text-green-700">
+                  {fmtINR((executiveAnalytics.payments?.totalAmount || 0) - (executiveAnalytics.expenses?.totalAmount || 0))}
+                </span>
+              </div>
+            </div>
+          </Card>
+
+          {/* Training & Services Summary */}
+          <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-base text-neutral-900">Training & Services</h3>
+              <GraduationCap className="w-5 h-5 text-purple-500" />
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                <span className="text-sm font-medium text-blue-900">Total Trainings</span>
+                <span className="text-lg font-bold text-blue-700">{executiveAnalytics.training?.total || 0}</span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
+                <span className="text-sm font-medium text-purple-900">Completed</span>
+                <span className="text-lg font-bold text-purple-700">{executiveAnalytics.training?.completed || 0}</span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-teal-50 rounded-lg">
+                <span className="text-sm font-medium text-teal-900">Total Services</span>
+                <span className="text-lg font-bold text-teal-700">{executiveAnalytics.services?.total || 0}</span>
+              </div>
+              <div className="flex items-center justify-between p-3 bg-indigo-50 rounded-lg">
+                <span className="text-sm font-medium text-indigo-900">Services Completed</span>
+                <span className="text-lg font-bold text-indigo-700">{executiveAnalytics.services?.completed || 0}</span>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Executive Expenses Breakdown - Only for Executives */}
+      {currentUser?.role === 'Executive' && executiveAnalytics?.expenses?.byCategory && executiveAnalytics.expenses.byCategory.length > 0 && (
+        <Card className="p-6 bg-white shadow-lg border border-neutral-200/60 mt-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="font-semibold text-lg text-neutral-900">My Expenses by Category</h3>
+              <p className="text-xs text-neutral-500 mt-1">Breakdown of expenses by category</p>
+            </div>
+            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center">
+              <Package className="w-5 h-5 text-white" />
+            </div>
+          </div>
+          <MultiBarChart
+            labels={executiveAnalytics.expenses.byCategory.slice(0, 10).map((item: any) => item._id || 'Unknown')}
+            datasets={[{
+              label: 'Total Amount (₹)',
+              data: executiveAnalytics.expenses.byCategory.slice(0, 10).map((item: any) => item.totalAmount || 0),
+              color: '#ef4444'
+            }]}
+            height={300}
+          />
+        </Card>
+      )}
         </>
       )}
 
       {/* Premium Leads Dashboard Content */}
       {activeTab === 'leads' && (
       <div className="mt-6 space-y-6">
+        {currentUser?.role === 'Executive' ? (
+          /* Executive Leads Dashboard */
         <Card className="p-6">
           <div className="mb-6">
-            <h2 className="text-2xl font-bold text-neutral-900 mb-1">Leads Analytics Dashboard</h2>
-            <p className="text-sm text-neutral-500">Comprehensive analytics and insights for leads management</p>
+              <h2 className="text-2xl font-bold text-neutral-900 mb-1">My Leads Analytics Dashboard</h2>
+              <p className="text-sm text-neutral-500">Comprehensive analytics for all leads entered by you</p>
             
             {/* Premium Date Range Filter */}
-            <div className="flex flex-wrap items-center gap-3 mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200/60">
+              <div className="flex flex-wrap items-center gap-3 mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200/60">
+                <div className="flex items-center gap-2">
+                  <label htmlFor="execFromDate" className="text-sm font-medium text-neutral-700 whitespace-nowrap">
+                    From:
+                  </label>
+                  <Input
+                    id="execFromDate"
+                    type="date"
+                    value={fromDate}
+                    onChange={(e) => setFromDate(e.target.value)}
+                    className="w-[160px] bg-white border-blue-200"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label htmlFor="execToDate" className="text-sm font-medium text-neutral-700 whitespace-nowrap">
+                    To:
+                  </label>
+                  <Input
+                    id="execToDate"
+                    type="date"
+                    value={toDate}
+                    onChange={(e) => setToDate(e.target.value)}
+                    className="w-[160px] bg-white border-blue-200"
+                  />
+                </div>
+                <Button 
+                  onClick={handleSearch} 
+                  className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-sm hover:shadow-md transition-all"
+                >
+                  Apply Filters
+                </Button>
+              </div>
+            </div>
+
+            {executiveLoading ? (
+              <div className="text-center py-12 text-neutral-500">Loading your leads analytics...</div>
+            ) : executiveAnalytics?.leads ? (
+              <div className="space-y-8">
+                {/* Executive Summary Stats */}
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                  <Card className="p-5 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-50 border-2 border-blue-200 shadow-lg hover:shadow-xl transition-all">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-blue-700 mb-2 uppercase tracking-wide">Total Leads</div>
+                        <div className="text-3xl font-bold text-blue-900">{executiveAnalytics.leads?.total || 0}</div>
+                        <div className="text-xs text-blue-600 mt-1">Active: {(executiveAnalytics.leads?.total || 0) - (executiveAnalytics.leads?.closed || 0)}</div>
+                      </div>
+                      <div className="h-12 w-12 rounded-full bg-blue-500 flex items-center justify-center">
+                        <TrendingUp className="w-6 h-6 text-white" />
+                      </div>
+                    </div>
+                  </Card>
+                  <Card className="p-5 bg-gradient-to-br from-emerald-50 via-emerald-100 to-emerald-50 border-2 border-emerald-200 shadow-lg hover:shadow-xl transition-all">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-emerald-700 mb-2 uppercase tracking-wide">Closed Leads</div>
+                        <div className="text-3xl font-bold text-emerald-900">{executiveAnalytics.leads?.closed || 0}</div>
+                        <div className="text-xs text-emerald-600 mt-1">
+                          {executiveAnalytics.leads?.total > 0 
+                            ? Math.round((executiveAnalytics.leads?.closed || 0) / executiveAnalytics.leads.total * 100)
+                            : 0}% Conversion
+                        </div>
+                      </div>
+                      <div className="h-12 w-12 rounded-full bg-emerald-500 flex items-center justify-center">
+                        <DollarSign className="w-6 h-6 text-white" />
+                      </div>
+                    </div>
+                  </Card>
+                  <Card className="p-5 bg-gradient-to-br from-red-50 via-red-100 to-red-50 border-2 border-red-200 shadow-lg hover:shadow-xl transition-all">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-red-700 mb-2 uppercase tracking-wide">Hot Leads</div>
+                        <div className="text-3xl font-bold text-red-900">
+                          {executiveAnalytics.leads?.byPriority?.find((p: any) => p._id === 'Hot')?.count || 0}
+                        </div>
+                        <div className="text-xs text-red-600 mt-1">High Priority</div>
+                      </div>
+                      <div className="h-12 w-12 rounded-full bg-red-500 flex items-center justify-center">
+                        <Zap className="w-6 h-6 text-white" />
+                      </div>
+                    </div>
+                  </Card>
+                  <Card className="p-5 bg-gradient-to-br from-amber-50 via-amber-100 to-amber-50 border-2 border-amber-200 shadow-lg hover:shadow-xl transition-all">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-amber-700 mb-2 uppercase tracking-wide">Warm Leads</div>
+                        <div className="text-3xl font-bold text-amber-900">
+                          {executiveAnalytics.leads?.byPriority?.find((p: any) => p._id === 'Warm')?.count || 0}
+                        </div>
+                        <div className="text-xs text-amber-600 mt-1">Medium Priority</div>
+                      </div>
+                      <div className="h-12 w-12 rounded-full bg-amber-500 flex items-center justify-center">
+                        <TrendingUp className="w-6 h-6 text-white" />
+                      </div>
+                    </div>
+                  </Card>
+                  <Card className="p-5 bg-gradient-to-br from-indigo-50 via-indigo-100 to-indigo-50 border-2 border-indigo-200 shadow-lg hover:shadow-xl transition-all">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-indigo-700 mb-2 uppercase tracking-wide">Cold Leads</div>
+                        <div className="text-3xl font-bold text-indigo-900">
+                          {executiveAnalytics.leads?.byPriority?.find((p: any) => p._id === 'Cold')?.count || 0}
+                        </div>
+                        <div className="text-xs text-indigo-600 mt-1">Low Priority</div>
+                      </div>
+                      <div className="h-12 w-12 rounded-full bg-indigo-500 flex items-center justify-center">
+                        <TrendingUp className="w-6 h-6 text-white" />
+                      </div>
+                    </div>
+                  </Card>
+                </div>
+
+                {/* Leads by Status and Priority Charts */}
+                {executiveAnalytics.leads?.byStatus?.length > 0 || executiveAnalytics.leads?.byPriority?.length > 0 ? (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {executiveAnalytics.leads?.byStatus?.length > 0 && (
+                      <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                        <div className="flex items-center justify-between mb-6">
+                          <h3 className="font-semibold text-lg text-neutral-900">My Leads by Status</h3>
+                          <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
+                            <TrendingUp className="w-5 h-5 text-white" />
+                          </div>
+                        </div>
+                        <PieChart
+                          data={executiveAnalytics.leads.byStatus.map((item: any, idx: number) => ({
+                            label: item._id || 'Unknown',
+                            value: item.count || 0,
+                            color: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'][idx % 6]
+                          }))}
+                          height={320}
+                        />
+                      </Card>
+                    )}
+                    {executiveAnalytics.leads?.byPriority?.length > 0 && (
+                      <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                        <div className="flex items-center justify-between mb-6">
+                          <h3 className="font-semibold text-lg text-neutral-900">My Leads by Priority</h3>
+                          <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center">
+                            <Zap className="w-5 h-5 text-white" />
+                          </div>
+                        </div>
+                        <PieChart
+                          data={executiveAnalytics.leads.byPriority.map((item: any) => ({
+                            label: item._id || 'Unknown',
+                            value: item.count || 0,
+                            color: item._id === 'Hot' ? '#ef4444' : item._id === 'Warm' ? '#f59e0b' : '#6b7280'
+                          }))}
+                          height={320}
+                        />
+                      </Card>
+                    )}
+                  </div>
+                ) : null}
+
+                {/* Leads by Zone Chart */}
+                {executiveAnalytics.leads?.byZone?.length > 0 && (
+                  <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="font-semibold text-lg text-neutral-900">My Leads by Zone</h3>
+                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center">
+                        <MapPin className="w-5 h-5 text-white" />
+                      </div>
+                    </div>
+                    <MultiBarChart
+                      labels={executiveAnalytics.leads.byZone.map((item: any) => item._id || 'Unassigned')}
+                      datasets={[{
+                        label: 'Leads',
+                        data: executiveAnalytics.leads.byZone.map((item: any) => item.count || 0),
+                        color: '#3b82f6'
+                      }]}
+                      height={350}
+                    />
+                  </Card>
+                )}
+
+                {/* Priority Distribution Bar Chart */}
+                {executiveAnalytics.leads?.byPriority?.length > 0 && (
+                  <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="font-semibold text-lg text-neutral-900">Priority Distribution</h3>
+                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-rose-500 to-rose-600 flex items-center justify-center">
+                        <TrendingUp className="w-5 h-5 text-white" />
+                      </div>
+                    </div>
+                    <MultiBarChart
+                      labels={executiveAnalytics.leads.byPriority.map((item: any) => item._id || 'Unknown')}
+                      datasets={[{
+                        label: 'Number of Leads',
+                        data: executiveAnalytics.leads.byPriority.map((item: any) => item.count || 0),
+                        color: '#8b5cf6'
+                      }]}
+                      height={350}
+                    />
+                  </Card>
+                )}
+
+                {/* Status Distribution Bar Chart */}
+                {executiveAnalytics.leads?.byStatus?.length > 0 && (
+                  <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="font-semibold text-lg text-neutral-900">Status Distribution</h3>
+                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-teal-500 to-teal-600 flex items-center justify-center">
+                        <TrendingUp className="w-5 h-5 text-white" />
+                      </div>
+                    </div>
+                    <MultiBarChart
+                      labels={executiveAnalytics.leads.byStatus.map((item: any) => item._id || 'Unknown')}
+                      datasets={[{
+                        label: 'Number of Leads',
+                        data: executiveAnalytics.leads.byStatus.map((item: any) => item.count || 0),
+                        color: '#10b981'
+                      }]}
+                      height={350}
+                    />
+                  </Card>
+                )}
+
+                {/* Combined Priority and Status View */}
+                {executiveAnalytics.leads?.byStatus?.length > 0 && executiveAnalytics.leads?.byPriority?.length > 0 && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                      <div className="flex items-center justify-between mb-6">
+                        <h3 className="font-semibold text-lg text-neutral-900">Leads Overview</h3>
+                        <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-cyan-500 to-cyan-600 flex items-center justify-center">
+                          <TrendingUp className="w-5 h-5 text-white" />
+                        </div>
+                      </div>
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg border border-blue-200">
+                          <span className="text-sm font-medium text-blue-900">Total Leads</span>
+                          <span className="text-2xl font-bold text-blue-700">{executiveAnalytics.leads?.total || 0}</span>
+                        </div>
+                        <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+                          <span className="text-sm font-medium text-emerald-900">Closed Leads</span>
+                          <span className="text-2xl font-bold text-emerald-700">{executiveAnalytics.leads?.closed || 0}</span>
+                        </div>
+                        <div className="flex items-center justify-between p-4 bg-purple-50 rounded-lg border border-purple-200">
+                          <span className="text-sm font-medium text-purple-900">Conversion Rate</span>
+                          <span className="text-2xl font-bold text-purple-700">
+                            {executiveAnalytics.leads?.total > 0 
+                              ? Math.round((executiveAnalytics.leads?.closed || 0) / executiveAnalytics.leads.total * 100)
+                              : 0}%
+                          </span>
+                        </div>
+                      </div>
+                    </Card>
+                    <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                      <div className="flex items-center justify-between mb-6">
+                        <h3 className="font-semibold text-lg text-neutral-900">Priority Breakdown</h3>
+                        <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-violet-500 to-violet-600 flex items-center justify-center">
+                          <Zap className="w-5 h-5 text-white" />
+                        </div>
+                      </div>
+                      <div className="space-y-4">
+                        {executiveAnalytics.leads.byPriority.map((item: any) => {
+                          const total = executiveAnalytics.leads?.total || 1
+                          const percentage = Math.round((item.count || 0) / total * 100)
+                          const bgColor = item._id === 'Hot' ? 'bg-red-500' : item._id === 'Warm' ? 'bg-amber-500' : 'bg-gray-500'
+                          return (
+                            <div key={item._id} className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-neutral-700">{item._id || 'Unknown'}</span>
+                                <span className="text-sm font-bold text-neutral-900">{item.count || 0} ({percentage}%)</span>
+                              </div>
+                              <div className="w-full bg-neutral-200 rounded-full h-2.5">
+                                <div
+                                  className={`h-2.5 rounded-full ${bgColor}`}
+                                  style={{ width: `${percentage}%` }}
+                                />
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </Card>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-12 text-neutral-500">No leads data available</div>
+            )}
+          </Card>
+        ) : (
+          /* Regular Leads Dashboard for non-executives */
+          <Card className="p-6">
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold text-neutral-900 mb-1">Leads Analytics Dashboard</h2>
+              <p className="text-sm text-neutral-500">Comprehensive analytics and insights for leads management</p>
+              
+              {/* Premium Date Range Filter */}
+              <div className="flex flex-wrap items-center gap-3 mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200/60">
               <div className="flex items-center gap-2">
                 <label htmlFor="fromDate" className="text-sm font-medium text-neutral-700 whitespace-nowrap">
                   From:
@@ -617,7 +1239,7 @@ export default function DashboardPage() {
                   type="date"
                   value={fromDate}
                   onChange={(e) => setFromDate(e.target.value)}
-                  className="w-[160px] bg-white border-blue-200"
+                    className="w-[160px] bg-white border-blue-200"
                 />
               </div>
               <div className="flex items-center gap-2">
@@ -629,14 +1251,14 @@ export default function DashboardPage() {
                   type="date"
                   value={toDate}
                   onChange={(e) => setToDate(e.target.value)}
-                  className="w-[160px] bg-white border-blue-200"
+                    className="w-[160px] bg-white border-blue-200"
                 />
               </div>
               <Button 
                 onClick={handleSearch} 
                 className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-sm hover:shadow-md transition-all"
               >
-                Apply Filters
+                  Apply Filters
               </Button>
             </div>
           </div>
@@ -1108,141 +1730,470 @@ export default function DashboardPage() {
             </Card>
           </div>
         </Card>
+        )}
       </div>
       )}
 
       {/* Comprehensive Analytics Tab */}
       {activeTab === 'analytics' && (
         <div className="space-y-8">
-          {analyticsLoading ? (
-            <div className="text-center py-12">
-              <div className="text-neutral-400">Loading comprehensive analytics...</div>
-            </div>
-          ) : analyticsData ? (
-            <>
-              {/* Leads Analytics */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card className="p-6">
-                  <h3 className="font-semibold text-lg text-neutral-900 mb-6">Leads by Status</h3>
-                  <PieChart
-                    data={analyticsData.leads?.byStatus?.map((item: any, idx: number) => ({
-                      label: item._id || 'Unknown',
-                      value: item.count || 0,
-                      color: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'][idx % 4]
-                    })) || []}
-                    height={300}
-                  />
-                </Card>
-                <Card className="p-6">
-                  <h3 className="font-semibold text-lg text-neutral-900 mb-6">Leads by Priority</h3>
-                  <PieChart
-                    data={analyticsData.leads?.byPriority?.map((item: any, idx: number) => ({
-                      label: item._id || 'Unknown',
-                      value: item.count || 0,
-                      color: ['#ef4444', '#f59e0b', '#6b7280'][idx % 3]
-                    })) || []}
-                    height={300}
-                  />
-                </Card>
+          {currentUser?.role === 'Executive' ? (
+            /* Executive Analytics */
+            executiveLoading ? (
+              <div className="text-center py-12">
+                <div className="text-neutral-400">Loading your analytics...</div>
               </div>
+            ) : executiveAnalytics ? (
+              <>
+                {/* Executive Leads Analytics */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="font-semibold text-lg text-neutral-900">My Leads by Status</h3>
+                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
+                        <TrendingUp className="w-5 h-5 text-white" />
+                      </div>
+                    </div>
+                    <PieChart
+                      data={executiveAnalytics.leads?.byStatus?.map((item: any, idx: number) => ({
+                        label: item._id || 'Unknown',
+                        value: item.count || 0,
+                        color: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'][idx % 6]
+                      })) || []}
+                      height={300}
+                    />
+                  </Card>
+                  <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="font-semibold text-lg text-neutral-900">My Leads by Priority</h3>
+                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center">
+                        <Zap className="w-5 h-5 text-white" />
+                      </div>
+                    </div>
+                    <PieChart
+                      data={executiveAnalytics.leads?.byPriority?.map((item: any) => ({
+                        label: item._id || 'Unknown',
+                        value: item.count || 0,
+                        color: item._id === 'Hot' ? '#ef4444' : item._id === 'Warm' ? '#f59e0b' : '#6b7280'
+                      })) || []}
+                      height={300}
+                    />
+                  </Card>
+                </div>
 
-              {/* Payments Analytics */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card className="p-6">
-                  <h3 className="font-semibold text-lg text-neutral-900 mb-6">Payments by Status</h3>
-                  <PieChart
-                    data={analyticsData.payments?.byStatus?.map((item: any, idx: number) => ({
-                      label: item._id || 'Unknown',
-                      value: item.count || 0,
-                      color: ['#10b981', '#f59e0b', '#ef4444', '#6b7280'][idx % 4]
-                    })) || []}
-                    height={300}
-                  />
-                </Card>
-                <Card className="p-6">
-                  <h3 className="font-semibold text-lg text-neutral-900 mb-6">Payments by Method</h3>
-                  <MultiBarChart
-                    labels={analyticsData.payments?.byMethod?.map((item: any) => item._id || 'Unknown') || []}
-                    datasets={[{
-                      label: 'Count',
-                      data: analyticsData.payments?.byMethod?.map((item: any) => item.count || 0) || [],
-                      color: '#3b82f6'
-                    }]}
-                    height={300}
-                  />
-                </Card>
-              </div>
-
-              {/* Monthly Payments Trend */}
-              {analyticsData.payments?.monthly && analyticsData.payments.monthly.length > 0 && (
-                <Card className="p-6">
-                  <h3 className="font-semibold text-lg text-neutral-900 mb-6">Monthly Payments Trend</h3>
-                  <LineChart
-                    labels={analyticsData.payments.monthly.map((item: any) => item._id || '')}
-                    datasets={[
-                      {
+                {/* Executive Payments Analytics */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="font-semibold text-lg text-neutral-900">My Payments by Status</h3>
+                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center">
+                        <DollarSign className="w-5 h-5 text-white" />
+                      </div>
+                    </div>
+                    <PieChart
+                      data={executiveAnalytics.payments?.byStatus?.map((item: any, idx: number) => ({
+                        label: item._id || 'Unknown',
+                        value: item.count || 0,
+                        color: ['#f59e0b', '#10b981', '#ef4444', '#6b7280', '#3b82f6'][idx % 5]
+                      })) || []}
+                      height={300}
+                    />
+                  </Card>
+                  <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="font-semibold text-lg text-neutral-900">My Payments by Method</h3>
+                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center">
+                        <DollarSign className="w-5 h-5 text-white" />
+                      </div>
+                    </div>
+                    <MultiBarChart
+                      labels={executiveAnalytics.payments?.byMethod?.map((item: any) => item._id || 'Unknown') || []}
+                      datasets={[{
                         label: 'Total Amount (₹)',
-                        data: analyticsData.payments.monthly.map((item: any) => item.totalAmount || 0),
+                        data: executiveAnalytics.payments?.byMethod?.map((item: any) => item.totalAmount || 0) || [],
                         color: '#10b981'
-                      },
-                      {
-                        label: 'Count',
-                        data: analyticsData.payments.monthly.map((item: any) => item.count || 0),
-                        color: '#3b82f6'
-                      }
-                    ]}
-                    height={350}
-                  />
-                </Card>
-              )}
+                      }]}
+                      height={300}
+                    />
+                  </Card>
+                </div>
 
-              {/* Expenses Analytics */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card className="p-6">
-                  <h3 className="font-semibold text-lg text-neutral-900 mb-6">Expenses by Status</h3>
-                  <PieChart
-                    data={analyticsData.expenses?.byStatus?.map((item: any, idx: number) => ({
-                      label: item._id || 'Unknown',
-                      value: item.count || 0,
-                      color: ['#f59e0b', '#10b981', '#ef4444', '#3b82f6', '#6b7280'][idx % 5]
-                    })) || []}
-                    height={300}
-                  />
-                </Card>
-                <Card className="p-6">
-                  <h3 className="font-semibold text-lg text-neutral-900 mb-6">Expenses by Category</h3>
-                  <MultiBarChart
-                    labels={analyticsData.expenses?.byCategory?.map((item: any) => item._id || 'Unknown') || []}
-                    datasets={[{
-                      label: 'Total Amount (₹)',
-                      data: analyticsData.expenses?.byCategory?.map((item: any) => item.totalAmount || 0) || [],
-                      color: '#ef4444'
-                    }]}
-                    height={300}
-                  />
-                </Card>
-              </div>
-
-              {/* Monthly Expenses Trend */}
-              {analyticsData.expenses?.monthly && analyticsData.expenses.monthly.length > 0 && (
-                <Card className="p-6">
-                  <h3 className="font-semibold text-lg text-neutral-900 mb-6">Monthly Expenses Trend</h3>
-                  <LineChart
-                    labels={analyticsData.expenses.monthly.map((item: any) => item._id || '')}
-                    datasets={[
-                      {
+                {/* Executive Monthly Payments Trend */}
+                {executiveAnalytics.payments?.monthly && executiveAnalytics.payments.monthly.length > 0 && (
+                  <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="font-semibold text-lg text-neutral-900">My Monthly Payments Trend</h3>
+                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center">
+                        <TrendingUp className="w-5 h-5 text-white" />
+                      </div>
+                    </div>
+                    <LineChart
+                      labels={executiveAnalytics.payments.monthly.map((item: any) => item._id || '')}
+                      datasets={[{
                         label: 'Total Amount (₹)',
-                        data: analyticsData.expenses.monthly.map((item: any) => item.totalAmount || 0),
-                        color: '#ef4444'
-                      }
-                    ]}
-                    height={350}
-                  />
-                </Card>
-              )}
+                        data: executiveAnalytics.payments.monthly.map((item: any) => item.totalAmount || 0),
+                        color: '#10b981'
+                      }]}
+                      height={350}
+                    />
+                  </Card>
+                )}
 
-              {/* Training & Services Analytics */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Sales/DCs Analytics */}
+                {executiveAnalytics.sales?.byStatus && executiveAnalytics.sales.byStatus.length > 0 && (
+                  <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="font-semibold text-lg text-neutral-900">My Sales (DCs) by Status</h3>
+                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center">
+                        <ShoppingCart className="w-5 h-5 text-white" />
+                      </div>
+                    </div>
+                    <PieChart
+                      data={executiveAnalytics.sales.byStatus.map((item: any, idx: number) => ({
+                        label: item._id || 'Unknown',
+                        value: item.count || 0,
+                        color: ['#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#6b7280'][idx % 5]
+                      }))}
+                      height={300}
+                    />
+                  </Card>
+                )}
+
+                {/* Expenses Analytics */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {executiveAnalytics.expenses?.byStatus && executiveAnalytics.expenses.byStatus.length > 0 && (
+                    <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                      <div className="flex items-center justify-between mb-6">
+                        <h3 className="font-semibold text-lg text-neutral-900">My Expenses by Status</h3>
+                        <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center">
+                          <Calculator className="w-5 h-5 text-white" />
+                        </div>
+                      </div>
+                      <PieChart
+                        data={executiveAnalytics.expenses.byStatus.map((item: any, idx: number) => ({
+                          label: item._id || 'Unknown',
+                          value: item.count || 0,
+                          color: ['#f59e0b', '#10b981', '#ef4444', '#3b82f6', '#6b7280'][idx % 5]
+                        }))}
+                        height={300}
+                      />
+                    </Card>
+                  )}
+                  {executiveAnalytics.expenses?.byCategory && executiveAnalytics.expenses.byCategory.length > 0 && (
+                    <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                      <div className="flex items-center justify-between mb-6">
+                        <h3 className="font-semibold text-lg text-neutral-900">My Expenses by Category</h3>
+                        <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center">
+                          <Package className="w-5 h-5 text-white" />
+                        </div>
+                      </div>
+                      <MultiBarChart
+                        labels={executiveAnalytics.expenses.byCategory.map((item: any) => item._id || 'Unknown')}
+                        datasets={[{
+                          label: 'Total Amount (₹)',
+                          data: executiveAnalytics.expenses.byCategory.map((item: any) => item.totalAmount || 0),
+                          color: '#ef4444'
+                        }]}
+                        height={300}
+                      />
+                    </Card>
+                  )}
+                </div>
+
+                {/* Monthly Expenses Trend */}
+                {executiveAnalytics.expenses?.monthly && executiveAnalytics.expenses.monthly.length > 0 && (
+                  <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="font-semibold text-lg text-neutral-900">My Monthly Expenses Trend</h3>
+                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center">
+                        <TrendingUp className="w-5 h-5 text-white" />
+                      </div>
+                    </div>
+                    <LineChart
+                      labels={executiveAnalytics.expenses.monthly.map((item: any) => item._id || '')}
+                      datasets={[{
+                        label: 'Total Amount (₹)',
+                        data: executiveAnalytics.expenses.monthly.map((item: any) => item.totalAmount || 0),
+                        color: '#ef4444'
+                      }]}
+                      height={350}
+                    />
+                  </Card>
+                )}
+
+                {/* Revenue vs Expenses Comparison */}
+                {executiveAnalytics.payments?.monthly && executiveAnalytics.expenses?.monthly && 
+                 executiveAnalytics.payments.monthly.length > 0 && executiveAnalytics.expenses.monthly.length > 0 && (
+                  <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="font-semibold text-lg text-neutral-900">My Revenue vs Expenses</h3>
+                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center">
+                        <TrendingUp className="w-5 h-5 text-white" />
+                      </div>
+                    </div>
+                    <LineChart
+                      labels={executiveAnalytics.payments.monthly.map((item: any) => item._id || '')}
+                      datasets={[
+                        {
+                          label: 'Revenue (₹)',
+                          data: executiveAnalytics.payments.monthly.map((item: any) => item.totalAmount || 0),
+                          color: '#10b981'
+                        },
+                        {
+                          label: 'Expenses (₹)',
+                          data: executiveAnalytics.expenses.monthly.map((item: any) => item.totalAmount || 0),
+                          color: '#ef4444'
+                        }
+                      ]}
+                      height={350}
+                    />
+                  </Card>
+                )}
+
+                {/* Training Analytics */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {executiveAnalytics.training?.byStatus && executiveAnalytics.training.byStatus.length > 0 && (
+                    <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                      <div className="flex items-center justify-between mb-6">
+                        <h3 className="font-semibold text-lg text-neutral-900">My Training by Status</h3>
+                        <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
+                          <GraduationCap className="w-5 h-5 text-white" />
+                        </div>
+                      </div>
+                      <PieChart
+                        data={executiveAnalytics.training.byStatus.map((item: any, idx: number) => ({
+                          label: item._id || 'Unknown',
+                          value: item.count || 0,
+                          color: ['#3b82f6', '#10b981', '#ef4444', '#f59e0b'][idx % 4]
+                        }))}
+                        height={300}
+                      />
+                    </Card>
+                  )}
+                  {executiveAnalytics.training?.bySubject && executiveAnalytics.training.bySubject.length > 0 && (
+                    <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                      <div className="flex items-center justify-between mb-6">
+                        <h3 className="font-semibold text-lg text-neutral-900">My Training by Subject</h3>
+                        <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-cyan-500 to-cyan-600 flex items-center justify-center">
+                          <GraduationCap className="w-5 h-5 text-white" />
+                        </div>
+                      </div>
+                      <MultiBarChart
+                        labels={executiveAnalytics.training.bySubject.slice(0, 8).map((item: any) => item._id || 'Unknown')}
+                        datasets={[{
+                          label: 'Count',
+                          data: executiveAnalytics.training.bySubject.slice(0, 8).map((item: any) => item.count || 0),
+                          color: '#8b5cf6'
+                        }]}
+                        height={300}
+                      />
+                    </Card>
+                  )}
+                </div>
+
+                {/* Services Analytics */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {executiveAnalytics.services?.byStatus && executiveAnalytics.services.byStatus.length > 0 && (
+                    <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                      <div className="flex items-center justify-between mb-6">
+                        <h3 className="font-semibold text-lg text-neutral-900">My Services by Status</h3>
+                        <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-teal-500 to-teal-600 flex items-center justify-center">
+                          <Package className="w-5 h-5 text-white" />
+                        </div>
+                      </div>
+                      <PieChart
+                        data={executiveAnalytics.services.byStatus.map((item: any, idx: number) => ({
+                          label: item._id || 'Unknown',
+                          value: item.count || 0,
+                          color: ['#3b82f6', '#10b981', '#ef4444', '#f59e0b'][idx % 4]
+                        }))}
+                        height={300}
+                      />
+                    </Card>
+                  )}
+                  {executiveAnalytics.services?.bySubject && executiveAnalytics.services.bySubject.length > 0 && (
+                    <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
+                      <div className="flex items-center justify-between mb-6">
+                        <h3 className="font-semibold text-lg text-neutral-900">My Services by Subject</h3>
+                        <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center">
+                          <Package className="w-5 h-5 text-white" />
+                        </div>
+                      </div>
+                      <MultiBarChart
+                        labels={executiveAnalytics.services.bySubject.slice(0, 8).map((item: any) => item._id || 'Unknown')}
+                        datasets={[{
+                          label: 'Count',
+                          data: executiveAnalytics.services.bySubject.slice(0, 8).map((item: any) => item.count || 0),
+                          color: '#06b6d4'
+                        }]}
+                        height={300}
+                      />
+                    </Card>
+                  )}
+                </div>
+
+                {/* Performance Summary Cards */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <Card className="p-5 bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200">
+                    <div className="text-sm font-semibold text-blue-700 mb-2">Total Revenue</div>
+                    <div className="text-2xl font-bold text-blue-900">{fmtINR(executiveAnalytics.payments?.totalAmount || 0)}</div>
+                    <div className="text-xs text-blue-600 mt-1">{executiveAnalytics.payments?.total || 0} payments</div>
+                  </Card>
+                  <Card className="p-5 bg-gradient-to-br from-red-50 to-red-100 border-2 border-red-200">
+                    <div className="text-sm font-semibold text-red-700 mb-2">Total Expenses</div>
+                    <div className="text-2xl font-bold text-red-900">{fmtINR(executiveAnalytics.expenses?.totalAmount || 0)}</div>
+                    <div className="text-xs text-red-600 mt-1">{executiveAnalytics.expenses?.total || 0} expenses</div>
+                  </Card>
+                  <Card className="p-5 bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-200">
+                    <div className="text-sm font-semibold text-green-700 mb-2">Net Profit</div>
+                    <div className="text-2xl font-bold text-green-900">
+                      {fmtINR((executiveAnalytics.payments?.totalAmount || 0) - (executiveAnalytics.expenses?.totalAmount || 0))}
+                    </div>
+                    <div className="text-xs text-green-600 mt-1">Revenue - Expenses</div>
+                  </Card>
+                  <Card className="p-5 bg-gradient-to-br from-purple-50 to-purple-100 border-2 border-purple-200">
+                    <div className="text-sm font-semibold text-purple-700 mb-2">Total Sales</div>
+                    <div className="text-2xl font-bold text-purple-900">{executiveAnalytics.sales?.total || 0}</div>
+                    <div className="text-xs text-purple-600 mt-1">{executiveAnalytics.sales?.completed || 0} completed</div>
+                  </Card>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-12">
+                <div className="text-neutral-400">No analytics data available</div>
+    </div>
+  )
+          ) : (
+            /* Regular Analytics for non-executives */
+            analyticsLoading ? (
+              <div className="text-center py-12">
+                <div className="text-neutral-400">Loading comprehensive analytics...</div>
+              </div>
+            ) : analyticsData ? (
+              <>
+                {/* Leads Analytics */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Card className="p-6">
+                    <h3 className="font-semibold text-lg text-neutral-900 mb-6">Leads by Status</h3>
+                    <PieChart
+                      data={analyticsData.leads?.byStatus?.map((item: any, idx: number) => ({
+                        label: item._id || 'Unknown',
+                        value: item.count || 0,
+                        color: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'][idx % 4]
+                      })) || []}
+                      height={300}
+                    />
+                  </Card>
+                  <Card className="p-6">
+                    <h3 className="font-semibold text-lg text-neutral-900 mb-6">Leads by Priority</h3>
+                    <PieChart
+                      data={analyticsData.leads?.byPriority?.map((item: any, idx: number) => ({
+                        label: item._id || 'Unknown',
+                        value: item.count || 0,
+                        color: ['#ef4444', '#f59e0b', '#6b7280'][idx % 3]
+                      })) || []}
+                      height={300}
+                    />
+                  </Card>
+                </div>
+
+                {/* Payments Analytics */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Card className="p-6">
+                    <h3 className="font-semibold text-lg text-neutral-900 mb-6">Payments by Status</h3>
+                    <PieChart
+                      data={analyticsData.payments?.byStatus?.map((item: any, idx: number) => ({
+                        label: item._id || 'Unknown',
+                        value: item.count || 0,
+                        color: ['#10b981', '#f59e0b', '#ef4444', '#6b7280'][idx % 4]
+                      })) || []}
+                      height={300}
+                    />
+                  </Card>
+                  <Card className="p-6">
+                    <h3 className="font-semibold text-lg text-neutral-900 mb-6">Payments by Method</h3>
+                    <MultiBarChart
+                      labels={analyticsData.payments?.byMethod?.map((item: any) => item._id || 'Unknown') || []}
+                      datasets={[{
+                        label: 'Count',
+                        data: analyticsData.payments?.byMethod?.map((item: any) => item.count || 0) || [],
+                        color: '#3b82f6'
+                      }]}
+                      height={300}
+                    />
+                  </Card>
+                </div>
+
+                {/* Monthly Payments Trend */}
+                {analyticsData.payments?.monthly && analyticsData.payments.monthly.length > 0 && (
+                  <Card className="p-6">
+                    <h3 className="font-semibold text-lg text-neutral-900 mb-6">Monthly Payments Trend</h3>
+                    <LineChart
+                      labels={analyticsData.payments.monthly.map((item: any) => item._id || '')}
+                      datasets={[
+                        {
+                          label: 'Total Amount (₹)',
+                          data: analyticsData.payments.monthly.map((item: any) => item.totalAmount || 0),
+                          color: '#10b981'
+                        },
+                        {
+                          label: 'Count',
+                          data: analyticsData.payments.monthly.map((item: any) => item.count || 0),
+                          color: '#3b82f6'
+                        }
+                      ]}
+                      height={350}
+                    />
+                  </Card>
+                )}
+
+                {/* Expenses Analytics */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Card className="p-6">
+                    <h3 className="font-semibold text-lg text-neutral-900 mb-6">Expenses by Status</h3>
+                    <PieChart
+                      data={analyticsData.expenses?.byStatus?.map((item: any, idx: number) => ({
+                        label: item._id || 'Unknown',
+                        value: item.count || 0,
+                        color: ['#f59e0b', '#10b981', '#ef4444', '#3b82f6', '#6b7280'][idx % 5]
+                      })) || []}
+                      height={300}
+                    />
+                  </Card>
+                  <Card className="p-6">
+                    <h3 className="font-semibold text-lg text-neutral-900 mb-6">Expenses by Category</h3>
+                    <MultiBarChart
+                      labels={analyticsData.expenses?.byCategory?.map((item: any) => item._id || 'Unknown') || []}
+                      datasets={[{
+                        label: 'Total Amount (₹)',
+                        data: analyticsData.expenses?.byCategory?.map((item: any) => item.totalAmount || 0) || [],
+                        color: '#ef4444'
+                      }]}
+                      height={300}
+                    />
+                  </Card>
+                </div>
+
+                {/* Monthly Expenses Trend */}
+                {analyticsData.expenses?.monthly && analyticsData.expenses.monthly.length > 0 && (
+                  <Card className="p-6">
+                    <h3 className="font-semibold text-lg text-neutral-900 mb-6">Monthly Expenses Trend</h3>
+                    <LineChart
+                      labels={analyticsData.expenses.monthly.map((item: any) => item._id || '')}
+                      datasets={[
+                        {
+                          label: 'Total Amount (₹)',
+                          data: analyticsData.expenses.monthly.map((item: any) => item.totalAmount || 0),
+                          color: '#ef4444'
+                        }
+                      ]}
+                      height={350}
+                    />
+                  </Card>
+                )}
+
+                {/* Training & Services Analytics */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <Card className="p-6">
                   <h3 className="font-semibold text-lg text-neutral-900 mb-6">Training by Status</h3>
                   <PieChart
@@ -1277,56 +2228,57 @@ export default function DashboardPage() {
                     height={280}
                   />
                 </Card>
-              </div>
+                </div>
 
-              {/* Sales & Employees Analytics */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card className="p-6">
-                  <h3 className="font-semibold text-lg text-neutral-900 mb-6">Sales (DCs) by Status</h3>
-                  <PieChart
-                    data={analyticsData.sales?.byStatus?.map((item: any, idx: number) => ({
-                      label: item._id || 'Unknown',
-                      value: item.count || 0,
-                      color: ['#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#6b7280'][idx % 5]
-                    })) || []}
-                    height={300}
-                  />
-                </Card>
-                <Card className="p-6">
-                  <h3 className="font-semibold text-lg text-neutral-900 mb-6">Employees by Role</h3>
-                  <MultiBarChart
-                    labels={analyticsData.employees?.byRole?.map((item: any) => item._id || 'Unknown') || []}
-                    datasets={[{
-                      label: 'Count',
-                      data: analyticsData.employees?.byRole?.map((item: any) => item.count || 0) || [],
-                      color: '#06b6d4'
-                    }]}
-                    height={300}
-                  />
-                </Card>
-              </div>
+                {/* Sales & Employees Analytics */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Card className="p-6">
+                    <h3 className="font-semibold text-lg text-neutral-900 mb-6">Sales (DCs) by Status</h3>
+                    <PieChart
+                      data={analyticsData.sales?.byStatus?.map((item: any, idx: number) => ({
+                        label: item._id || 'Unknown',
+                        value: item.count || 0,
+                        color: ['#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#6b7280'][idx % 5]
+                      })) || []}
+                      height={300}
+                    />
+                  </Card>
+                  <Card className="p-6">
+                    <h3 className="font-semibold text-lg text-neutral-900 mb-6">Employees by Role</h3>
+                    <MultiBarChart
+                      labels={analyticsData.employees?.byRole?.map((item: any) => item._id || 'Unknown') || []}
+                      datasets={[{
+                        label: 'Count',
+                        data: analyticsData.employees?.byRole?.map((item: any) => item.count || 0) || [],
+                        color: '#06b6d4'
+                      }]}
+                      height={300}
+                    />
+                  </Card>
+                </div>
 
-              {/* Products Analytics */}
-              {analyticsData.products?.byStatus && analyticsData.products.byStatus.length > 0 && (
-                <Card className="p-6">
-                  <h3 className="font-semibold text-lg text-neutral-900 mb-6">Products by Status</h3>
-                  <PieChart
-                    data={analyticsData.products.byStatus.map((item: any, idx: number) => ({
-                      label: item._id === 1 ? 'Active' : item._id === 0 ? 'Inactive' : `Status ${item._id}`,
-                      value: item.count || 0,
-                      color: ['#10b981', '#ef4444', '#6b7280'][idx % 3]
-                    }))}
-                    height={300}
-                  />
-                </Card>
-              )}
+                {/* Products Analytics */}
+                {analyticsData.products?.byStatus && analyticsData.products.byStatus.length > 0 && (
+                  <Card className="p-6">
+                    <h3 className="font-semibold text-lg text-neutral-900 mb-6">Products by Status</h3>
+                    <PieChart
+                      data={analyticsData.products.byStatus.map((item: any, idx: number) => ({
+                        label: item._id === 1 ? 'Active' : item._id === 0 ? 'Inactive' : `Status ${item._id}`,
+                        value: item.count || 0,
+                        color: ['#10b981', '#ef4444', '#6b7280'][idx % 3]
+                      }))}
+                      height={300}
+                    />
+                  </Card>
+                )}
             </>
           ) : (
             <div className="text-center py-12">
               <div className="text-neutral-400">No analytics data available</div>
             </div>
-          )}
-        </div>
+          )
+        )}
+      </div>
       )}
     </div>
   )
