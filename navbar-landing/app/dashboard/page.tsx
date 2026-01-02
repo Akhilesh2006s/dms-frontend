@@ -67,6 +67,15 @@ const accentHex: Record<string, string> = {
   yellow: '#ca8a04',
   teal: '#0d9488',
 }
+const cardColorMap: Record<string, { bg: string; border: string; text: string; icon: string }> = {
+  sky: { bg: 'from-blue-50 to-blue-100', border: 'border-blue-200', text: 'text-blue-700', icon: 'text-blue-500' },
+  rose: { bg: 'from-rose-50 to-rose-100', border: 'border-rose-200', text: 'text-rose-700', icon: 'text-rose-500' },
+  orange: { bg: 'from-orange-50 to-orange-100', border: 'border-orange-200', text: 'text-orange-700', icon: 'text-orange-500' },
+  amber: { bg: 'from-amber-50 to-amber-100', border: 'border-amber-200', text: 'text-amber-700', icon: 'text-amber-500' },
+  emerald: { bg: 'from-emerald-50 to-emerald-100', border: 'border-emerald-200', text: 'text-emerald-700', icon: 'text-emerald-500' },
+  yellow: { bg: 'from-yellow-50 to-yellow-100', border: 'border-yellow-200', text: 'text-yellow-700', icon: 'text-yellow-500' },
+  teal: { bg: 'from-teal-50 to-teal-100', border: 'border-teal-200', text: 'text-teal-700', icon: 'text-teal-500' },
+}
 
 const MOCK_STATS = [
   { value: 128 },
@@ -385,25 +394,17 @@ export default function DashboardPage() {
       {/* Premium Stat Cards - Minimal, elegant design */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {STAT_CONFIG.map((stat, i) => {
-          const cls = accentToClasses[stat.accent]
-          const grad = gradientMap[stat.accent]
+          const colors = cardColorMap[stat.accent]
           return (
-            <div
-              key={stat.label}
-              className="group relative overflow-hidden rounded-xl border border-neutral-200/60 bg-white/90 backdrop-blur-sm p-6 shadow-sm hover:shadow-md transition-all duration-300 hover:border-neutral-300/60"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-2">{stat.label}</div>
-                  <div className="text-3xl md:text-4xl font-bold text-neutral-900 leading-none mb-1">{stats[i]?.value ?? '0'}</div>
+            <Card key={stat.label} className={`p-5 bg-gradient-to-br ${colors.bg} border-2 ${colors.border} shadow-lg`}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className={`text-xs font-semibold ${colors.text} mb-1 uppercase`}>{stat.label}</div>
+                  <div className={`text-2xl font-bold ${colors.text.replace('700', '900')}`}>{stats[i]?.value ?? '0'}</div>
                 </div>
-                <div className={`h-12 w-12 rounded-lg flex items-center justify-center bg-gradient-to-br ${grad} shadow-sm group-hover:shadow-md transition-shadow`}>
-                  <stat.icon className="w-5 h-5 text-white" />
-                </div>
+                <stat.icon className={`w-8 h-8 ${colors.icon}`} />
               </div>
-              {/* Subtle gradient accent */}
-              <div className={`absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r ${grad} opacity-60`} />
-            </div>
+            </Card>
           )
         })}
       </div>

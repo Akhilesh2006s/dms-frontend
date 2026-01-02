@@ -41,20 +41,29 @@ export default function TrainingPage() {
     }
   }
 
-  const StatCard = ({ title, value, icon: Icon, color, subtitle, bgColor }: { title: string; value: number; icon: any; color: string; subtitle?: string; bgColor?: string }) => (
-    <Card className="p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-neutral-600 mb-1">{title}</p>
-          <p className={`text-3xl font-bold ${color}`}>{value.toLocaleString()}</p>
-          {subtitle && <p className="text-xs text-neutral-500 mt-1">{subtitle}</p>}
+  const StatCard = ({ title, value, icon: Icon, color, subtitle, bgColor }: { title: string; value: number; icon: any; color: string; subtitle?: string; bgColor?: string }) => {
+    // Map bgColor to gradient and border colors
+    const colorMap: Record<string, { bg: string; border: string; text: string; icon: string }> = {
+      'bg-blue-100': { bg: 'from-blue-50 to-blue-100', border: 'border-blue-200', text: 'text-blue-700', icon: 'text-blue-500' },
+      'bg-yellow-100': { bg: 'from-amber-50 to-amber-100', border: 'border-amber-200', text: 'text-amber-700', icon: 'text-amber-500' },
+      'bg-green-100': { bg: 'from-emerald-50 to-emerald-100', border: 'border-emerald-200', text: 'text-emerald-700', icon: 'text-emerald-500' },
+      'bg-orange-100': { bg: 'from-orange-50 to-orange-100', border: 'border-orange-200', text: 'text-orange-700', icon: 'text-orange-500' },
+    }
+    const colors = colorMap[bgColor || 'bg-blue-100'] || colorMap['bg-blue-100']
+    
+    return (
+      <Card className={`p-5 bg-gradient-to-br ${colors.bg} border-2 ${colors.border} shadow-lg`}>
+        <div className="flex items-center justify-between">
+          <div>
+            <div className={`text-xs font-semibold ${colors.text} mb-1 uppercase`}>{title}</div>
+            <div className={`text-2xl font-bold ${colors.text.replace('700', '900')}`}>{value.toLocaleString()}</div>
+            {subtitle && <div className={`text-xs ${colors.text.replace('700', '600')} mt-1`}>{subtitle}</div>}
+          </div>
+          <Icon className={`w-8 h-8 ${colors.icon}`} />
         </div>
-        <div className={`p-3 rounded-lg ${bgColor || 'bg-blue-100'}`}>
-          <Icon className={`w-6 h-6 ${color}`} />
-        </div>
-      </div>
-    </Card>
-  )
+      </Card>
+    )
+  }
 
   if (loading) {
     return <div className="space-y-6"><h1 className="text-2xl md:text-3xl font-semibold text-neutral-900">Trainings & Services</h1><Card className="p-4">Loading...</Card></div>

@@ -25,9 +25,15 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
     try {
-      await login(email, password)
+      const user = await login(email, password)
       toast.success('Welcome back! Redirecting…')
-      router.push('/dashboard')
+      
+      // Redirect Executive Managers to their specific dashboard
+      if (user.role === 'Executive Manager') {
+        router.push(`/dashboard/executive-managers/${user._id}/dashboard`)
+      } else {
+        router.push('/dashboard')
+      }
     } catch (err: any) {
       toast.error(err?.message || 'Login failed')
     } finally {
