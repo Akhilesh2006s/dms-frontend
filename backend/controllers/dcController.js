@@ -237,6 +237,10 @@ const raiseDC = async (req, res) => {
       if (req.body.productDetails && Array.isArray(req.body.productDetails)) {
         dc.productDetails = req.body.productDetails;
       }
+      // Update status if provided (for Closed Sales - should be pending_dc)
+      if (req.body.status) {
+        dc.status = req.body.status;
+      }
     }
     
     if (!dc) {
@@ -336,6 +340,11 @@ const raiseDC = async (req, res) => {
     }
     // Explicitly provided requestedQuantity takes priority
     if (requestedQuantity) dc.requestedQuantity = requestedQuantity;
+    
+    // Update status if provided (for Closed Sales - should be pending_dc)
+    if (req.body.status) {
+      dc.status = req.body.status;
+    }
     
     // If PO photo is provided and DC is new, set it
     if (req.body.poPhotoUrl && !dc.poPhotoUrl) {
@@ -918,20 +927,164 @@ const managerRequestWarehouse = async (req, res) => {
     }
 
     // Check if DC is in correct status
-    if (dc.status !== 'sent_to_manager') {
-      return res.status(400).json({ message: `DC must be in 'sent_to_manager' status. Current status: ${dc.status}` });
+    if (dc.status !== 'pending_dc') {
+      return res.status(400).json({ message: `DC must be in 'pending_dc' status. Current status: ${dc.status}` });
     }
 
-    // Update DC with requested quantity and move to pending_dc
-    dc.requestedQuantity = requestedQuantity;
-    dc.status = 'pending_dc';
-    dc.managerId = req.user._id;
-    dc.managerRequestedAt = new Date();
-    dc.managerRequestedBy = req.user._id;
-    if (remarks) {
-      dc.deliveryNotes = remarks;
+    // Check product terms to determine if DC should split or what status to assign
+    const productDetails = dc.productDetails || [];
+    if (productDetails.length > 0) {
+      const terms = productDetails.map(p => p.term || 'Term 1');
+      const uniqueTerms = [...new Set(terms)];
+      
+      if (uniqueTerms.length > 1) {
+        // Case 3: Mixed terms (some Term 1, some Term 2) - Split DC into two
+        const term1Products = productDetails.filter(p => (p.term || 'Term 1') === 'Term 1');
+        const term2Products = productDetails.filter(p => (p.term || 'Term 1') === 'Term 2');
+        
+        // Generate cluster ID (use original DC ID or generate new one)
+        const clusterId = dc.clusterId || dc._id.toString();
+        
+        // Calculate requested quantities for each term
+        const term1Quantity = term1Products.reduce((sum, p) => sum + (p.quantity || 0), 0);
+        const term2Quantity = term2Products.reduce((sum, p) => sum + (p.quantity || 0), 0);
+        
+        // Create Term 1 DC (status: sent_to_manager - shown in DC @ Warehouse)
+        const term1DC = await DC.create({
+          dcOrderId: dc.dcOrderId,
+          saleId: dc.saleId,
+          employeeId: dc.employeeId,
+          customerName: dc.customerName,
+          customerEmail: dc.customerEmail,
+          customerAddress: dc.customerAddress,
+          customerPhone: dc.customerPhone,
+          product: dc.product,
+          requestedQuantity: term1Quantity,
+          deliverableQuantity: 0,
+          status: 'sent_to_manager',
+          poPhotoUrl: dc.poPhotoUrl,
+          poDocument: dc.poDocument,
+          dcDate: dc.dcDate,
+          dcRemarks: dc.dcRemarks,
+          dcCategory: dc.dcCategory,
+          dcNotes: dc.dcNotes,
+          financeRemarks: dc.financeRemarks,
+          splApproval: dc.splApproval,
+          smeRemarks: dc.smeRemarks,
+          productDetails: term1Products,
+          managerId: req.user._id,
+          managerRequestedAt: new Date(),
+          managerRequestedBy: req.user._id,
+          sentToManagerAt: new Date(),
+          createdBy: dc.createdBy,
+          clusterId: clusterId,
+        });
+        
+        // Create Term 2 DC (status: scheduled_for_later - shown in Term-Wise DC)
+        const term2DC = await DC.create({
+          dcOrderId: dc.dcOrderId,
+          saleId: dc.saleId,
+          employeeId: dc.employeeId,
+          customerName: dc.customerName,
+          customerEmail: dc.customerEmail,
+          customerAddress: dc.customerAddress,
+          customerPhone: dc.customerPhone,
+          product: dc.product,
+          requestedQuantity: term2Quantity,
+          deliverableQuantity: 0,
+          status: 'scheduled_for_later',
+          poPhotoUrl: dc.poPhotoUrl,
+          poDocument: dc.poDocument,
+          dcDate: dc.dcDate,
+          dcRemarks: dc.dcRemarks,
+          dcCategory: dc.dcCategory,
+          dcNotes: dc.dcNotes,
+          financeRemarks: dc.financeRemarks,
+          splApproval: dc.splApproval,
+          smeRemarks: dc.smeRemarks,
+          productDetails: term2Products,
+          managerId: req.user._id,
+          managerRequestedAt: new Date(),
+          managerRequestedBy: req.user._id,
+          createdBy: dc.createdBy,
+          clusterId: clusterId,
+        });
+        
+        // Delete the original DC
+        await DC.findByIdAndDelete(dc._id);
+        
+        // Populate and return both DCs
+        const populatedTerm1DC = await DC.findById(term1DC._id)
+          .populate('saleId', 'customerName product quantity status poDocument')
+          .populate('employeeId', 'name email')
+          .populate('managerId', 'name email')
+          .populate('managerRequestedBy', 'name email');
+        
+        const populatedTerm2DC = await DC.findById(term2DC._id)
+          .populate('saleId', 'customerName product quantity status poDocument')
+          .populate('employeeId', 'name email')
+          .populate('managerId', 'name email')
+          .populate('managerRequestedBy', 'name email');
+        
+        return res.json({
+          message: 'DC split into two DCs based on terms',
+          term1DC: populatedTerm1DC,
+          term2DC: populatedTerm2DC,
+        });
+      } else {
+        // Case 1 or 2: All products have the same term
+        const allTerm = uniqueTerms[0] || 'Term 1';
+        
+        if (allTerm === 'Term 1') {
+          // Case 1: All products are Term 1 - No split, status: sent_to_manager (shown in DC @ Warehouse)
+          dc.requestedQuantity = requestedQuantity;
+          dc.status = 'sent_to_manager';
+          dc.managerId = req.user._id;
+          dc.managerRequestedAt = new Date();
+          dc.managerRequestedBy = req.user._id;
+          dc.sentToManagerAt = new Date();
+          if (remarks) {
+            dc.deliveryNotes = remarks;
+          }
+          await dc.save();
+        } else if (allTerm === 'Term 2') {
+          // Case 2: All products are Term 2 - No split, status: scheduled_for_later (shown in Term-Wise DC)
+          dc.requestedQuantity = requestedQuantity;
+          dc.status = 'scheduled_for_later';
+          dc.managerId = req.user._id;
+          dc.managerRequestedAt = new Date();
+          dc.managerRequestedBy = req.user._id;
+          if (remarks) {
+            dc.deliveryNotes = remarks;
+          }
+          await dc.save();
+        } else {
+          // Fallback: Default to sent_to_manager if term is unknown
+          dc.requestedQuantity = requestedQuantity;
+          dc.status = 'sent_to_manager';
+          dc.managerId = req.user._id;
+          dc.managerRequestedAt = new Date();
+          dc.managerRequestedBy = req.user._id;
+          dc.sentToManagerAt = new Date();
+          if (remarks) {
+            dc.deliveryNotes = remarks;
+          }
+          await dc.save();
+        }
+      }
+    } else {
+      // No product details - default to sent_to_manager
+      dc.requestedQuantity = requestedQuantity;
+      dc.status = 'sent_to_manager';
+      dc.managerId = req.user._id;
+      dc.managerRequestedAt = new Date();
+      dc.managerRequestedBy = req.user._id;
+      dc.sentToManagerAt = new Date();
+      if (remarks) {
+        dc.deliveryNotes = remarks;
+      }
+      await dc.save();
     }
-    await dc.save();
 
     const populatedDC = await DC.findById(dc._id)
       .populate('saleId', 'customerName product quantity status poDocument')
@@ -957,9 +1110,9 @@ const warehouseProcess = async (req, res) => {
       return res.status(404).json({ message: 'DC not found' });
     }
 
-    // Check if DC is in correct status (allow both pending_dc and warehouse_processing)
-    if (dc.status !== 'pending_dc' && dc.status !== 'warehouse_processing') {
-      return res.status(400).json({ message: `DC must be in 'pending_dc' or 'warehouse_processing' status. Current status: ${dc.status}` });
+    // Check if DC is in correct status (allow both sent_to_manager and warehouse_processing)
+    if (dc.status !== 'sent_to_manager' && dc.status !== 'warehouse_processing') {
+      return res.status(400).json({ message: `DC must be in 'sent_to_manager' or 'warehouse_processing' status. Current status: ${dc.status}` });
     }
 
     // Update quantities
@@ -1120,12 +1273,25 @@ const getSentToManagerDCs = async (req, res) => {
 // @access  Private (Warehouse)
 const getPendingWarehouseDCs = async (req, res) => {
   try {
-    const dcs = await DC.find({ status: 'pending_dc' })
+    // Fetch all DCs with status 'sent_to_manager'
+    let dcs = await DC.find({ status: 'sent_to_manager' })
       .populate('saleId', 'customerName product quantity status poDocument')
       .populate('employeeId', 'name email')
       .populate('managerId', 'name email')
       .populate('managerRequestedBy', 'name email')
       .sort({ managerRequestedAt: -1 });
+
+    // Filter to show only DCs where all products have Term 1
+    // (These are DCs that came from the split where Term 1 DCs have status 'sent_to_manager')
+    dcs = dcs.filter(dc => {
+      if (!dc.productDetails || !Array.isArray(dc.productDetails) || dc.productDetails.length === 0) {
+        // If no productDetails, include it (for backward compatibility)
+        return true;
+      }
+      // Check if all products have Term 1
+      const allTerm1 = dc.productDetails.every(p => (p.term || 'Term 1') === 'Term 1');
+      return allTerm1;
+    });
 
     // Ensure productDetails always have specs and subject fields
     // Only set defaults if they're actually missing (undefined/null), not if they're empty strings
@@ -1450,6 +1616,7 @@ const updateDC = async (req, res) => {
           level: p.level || 'L2',
           specs: p.specs || 'Regular', // Preserve specs
           subject: p.subject || undefined, // Preserve subject
+          term: p.term || 'Term 1', // Preserve term
           availableQuantity: p.availableQuantity !== undefined && p.availableQuantity !== null ? Number(p.availableQuantity) : undefined,
           deliverableQuantity: p.deliverableQuantity !== undefined && p.deliverableQuantity !== null ? Number(p.deliverableQuantity) : undefined,
           remainingQuantity: p.remainingQuantity !== undefined && p.remainingQuantity !== null ? Number(p.remainingQuantity) : undefined,

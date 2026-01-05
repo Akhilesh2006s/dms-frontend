@@ -449,42 +449,42 @@ export default function ExecutiveManagerDashboardPage() {
           {/* Summary KPI Cards */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <Card className="p-5 bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200 shadow-lg">
-              <div className="flex items-center justify-between">
-                <div>
+          <div className="flex items-center justify-between">
+            <div>
                   <div className="text-xs font-semibold text-blue-700 mb-1 uppercase">Total Employees</div>
                   <div className="text-2xl font-bold text-blue-900">{dashboardData.totalEmployees}</div>
-                </div>
-                <Users className="w-8 h-8 text-blue-500" />
-              </div>
-            </Card>
+            </div>
+            <Users className="w-8 h-8 text-blue-500" />
+          </div>
+        </Card>
             <Card className="p-5 bg-gradient-to-br from-emerald-50 to-emerald-100 border-2 border-emerald-200 shadow-lg">
-              <div className="flex items-center justify-between">
-                <div>
+          <div className="flex items-center justify-between">
+            <div>
                   <div className="text-xs font-semibold text-emerald-700 mb-1 uppercase">Total Leads</div>
                   <div className="text-2xl font-bold text-emerald-900">{dashboardData.totalLeads}</div>
                   <div className="text-xs text-emerald-600 mt-1">{leadConversionRate}% converted</div>
-                </div>
+            </div>
                 <TrendingUp className="w-8 h-8 text-emerald-500" />
-              </div>
-            </Card>
+          </div>
+        </Card>
             <Card className="p-5 bg-gradient-to-br from-orange-50 to-orange-100 border-2 border-orange-200 shadow-lg">
-              <div className="flex items-center justify-between">
-                <div>
+          <div className="flex items-center justify-between">
+            <div>
                   <div className="text-xs font-semibold text-orange-700 mb-1 uppercase">Total DCs</div>
                   <div className="text-2xl font-bold text-orange-900">{dashboardData.totalDCs}</div>
-                </div>
-                <Package className="w-8 h-8 text-orange-500" />
-              </div>
-            </Card>
+            </div>
+            <Package className="w-8 h-8 text-orange-500" />
+          </div>
+        </Card>
             <Card className="p-5 bg-gradient-to-br from-purple-50 to-purple-100 border-2 border-purple-200 shadow-lg">
-              <div className="flex items-center justify-between">
-                <div>
+          <div className="flex items-center justify-between">
+            <div>
                   <div className="text-xs font-semibold text-purple-700 mb-1 uppercase">Total Sales</div>
                   <div className="text-2xl font-bold text-purple-900">{dashboardData.totalSales}</div>
-                </div>
-                <ShoppingCart className="w-8 h-8 text-purple-500" />
-              </div>
-            </Card>
+            </div>
+            <ShoppingCart className="w-8 h-8 text-purple-500" />
+          </div>
+        </Card>
             <Card className="p-5 bg-gradient-to-br from-red-50 to-red-100 border-2 border-red-200 shadow-lg">
               <div className="flex items-center justify-between">
                 <div>
@@ -507,9 +507,9 @@ export default function ExecutiveManagerDashboardPage() {
                   <div className="text-xs text-cyan-600 mt-1">{avgSalesPerEmployee} Sales</div>
                 </div>
                 <BarChart3 className="w-8 h-8 text-cyan-500" />
-              </div>
-            </Card>
           </div>
+        </Card>
+      </div>
 
           {/* Executive Activity Overview - Real-time Analysis */}
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
@@ -857,7 +857,7 @@ export default function ExecutiveManagerDashboardPage() {
                   <div className="text-center py-12 text-neutral-400">No DC data available</div>
                 )}
               </Card>
-            </div>
+                </div>
           )}
 
           {/* Top Performing Employees */}
@@ -869,7 +869,7 @@ export default function ExecutiveManagerDashboardPage() {
                   <div>
                     <h3 className="font-semibold text-base text-neutral-900">Top Employees by Leads</h3>
                     <p className="text-xs text-neutral-500 mt-1">Leading lead generators</p>
-                  </div>
+          </div>
                   <TrendingUp className="w-5 h-5 text-blue-500" />
                 </div>
                 <MultiBarChart
@@ -881,7 +881,7 @@ export default function ExecutiveManagerDashboardPage() {
                   }]}
                   height={250}
                 />
-              </Card>
+        </Card>
             )}
 
             {/* Top Employees by Sales */}
@@ -891,7 +891,7 @@ export default function ExecutiveManagerDashboardPage() {
                   <div>
                     <h3 className="font-semibold text-base text-neutral-900">Top Employees by Sales</h3>
                     <p className="text-xs text-neutral-500 mt-1">Best sales performers</p>
-                  </div>
+      </div>
                   <ShoppingCart className="w-5 h-5 text-purple-500" />
                 </div>
                 <MultiBarChart
@@ -1363,30 +1363,30 @@ export default function ExecutiveManagerDashboardPage() {
           {/* Employee Performance Table */}
           <Card className="p-6 bg-white shadow-lg border border-neutral-200/60">
             <h3 className="font-semibold text-lg text-neutral-900 mb-4">Employee Performance Details</h3>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Zone</TableHead>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Zone</TableHead>
                     <TableHead>Area</TableHead>
-                    <TableHead>Leads</TableHead>
-                    <TableHead>DCs</TableHead>
-                    <TableHead>Sales</TableHead>
-                    <TableHead>Leaves</TableHead>
+                <TableHead>Leads</TableHead>
+                <TableHead>DCs</TableHead>
+                <TableHead>Sales</TableHead>
+                <TableHead>Leaves</TableHead>
                     <TableHead>Total Activity</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {dashboardData.employeeDetails.length === 0 ? (
-                    <TableRow>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {dashboardData.employeeDetails.length === 0 ? (
+                <TableRow>
                       <TableCell colSpan={11} className="text-center text-neutral-500">
                         No executives assigned yet
-                      </TableCell>
-                    </TableRow>
-                  ) : (
+                  </TableCell>
+                </TableRow>
+              ) : (
                     dashboardData.employeeDetails
                       .map(emp => ({
                         ...emp,
@@ -1395,7 +1395,7 @@ export default function ExecutiveManagerDashboardPage() {
                       .sort((a, b) => b.totalActivity - a.totalActivity)
                       .map((employee, index) => (
                       <TableRow key={employee._id} className={index < 3 ? 'bg-amber-50/50' : ''}>
-                        <TableCell>
+                    <TableCell>
                           <div className="flex items-center gap-2">
                             {index < 3 && (
                               <Award className={`w-4 h-4 ${
@@ -1437,23 +1437,23 @@ export default function ExecutiveManagerDashboardPage() {
                             <span className="font-bold text-neutral-900">{employee.totalActivity}</span>
                             <span className="text-xs text-neutral-500">Total Activity</span>
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openAssignZoneDialog(employee)}
-                          >
-                            Assign Zone
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </Card>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openAssignZoneDialog(employee)}
+                      >
+                        Assign Zone
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </Card>
         </div>
       )}
 

@@ -58,9 +58,10 @@ const dcSchema = new mongoose.Schema({
     required: false,
   },
   // DC status transitions: created -> po_submitted -> sent_to_manager -> pending_dc -> warehouse_processing -> completed/hold
+  // scheduled_for_later: Used for Term 2 DCs when DC is split by terms
   status: {
     type: String,
-    enum: ['created', 'po_submitted', 'sent_to_manager', 'pending_dc', 'warehouse_processing', 'completed', 'hold'],
+    enum: ['created', 'po_submitted', 'sent_to_manager', 'pending_dc', 'warehouse_processing', 'completed', 'hold', 'scheduled_for_later'],
     default: 'created',
     index: true,
   },
@@ -255,6 +256,11 @@ const dcSchema = new mongoose.Schema({
     subject: {
       type: String,
     },
+    term: {
+      type: String,
+      enum: ['Term 1', 'Term 2'],
+      default: 'Term 1',
+    },
   }],
   // Location tracking for mobile app
   latitude: {
@@ -268,6 +274,16 @@ const dcSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Attendance',
   },
+  // DC code for unique identification
+  dc_code: {
+    type: String,
+    unique: true,
+    sparse: true,
+  },
+  // Cluster ID to group related DCs (for split DCs)
+  clusterId: {
+    type: String,
+  },
 }, {
   timestamps: true,
 });
@@ -278,6 +294,19 @@ dcSchema.index({ employeeId: 1 }); // Single index for queries filtering only by
 dcSchema.index({ saleId: 1 });
 dcSchema.index({ dcOrderId: 1 });
 dcSchema.index({ employeeId: 1, createdAt: -1 }); // Compound index for sorting by createdAt
+dcSchema.index({ clusterId: 1 }); // Index for cluster ID queries
+
+// Pre-save hook to generate DC code if not provided
+dcSchema.pre('save', async function (next) {
+  if (!this.dc_code && this.isNew) {
+    // Generate unique DC code: DC-{timestamp}-{random}
+    const timestamp = Date.now().toString().slice(-8);
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    this.dc_code = `DC-${timestamp}-${random}`;
+  }
+  next();
+});
+
 // Ensure at least one of saleId or dcOrderId is provided (only on creation)
 dcSchema.pre('validate', function(next) {
   // Only validate on new documents, not on updates

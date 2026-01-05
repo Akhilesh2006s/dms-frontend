@@ -403,7 +403,7 @@ export default function DashboardPage() {
                   <div className={`text-2xl font-bold ${colors.text.replace('700', '900')}`}>{stats[i]?.value ?? '0'}</div>
                 </div>
                 <stat.icon className={`w-8 h-8 ${colors.icon}`} />
-              </div>
+                </div>
             </Card>
           )
         })}

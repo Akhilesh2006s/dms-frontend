@@ -128,6 +128,7 @@ const NAV: NavItem[] = [
       { label: 'Saved DC', href: '/dashboard/dc/saved', icon: Save },
       { label: 'Pending DC', href: '/dashboard/dc/pending', icon: Clock },
       { label: 'EMP DC', href: '/dashboard/dc/emp', icon: UserCircle2 },
+      { label: 'Term-Wise DC', href: '/dashboard/dc/term-wise', icon: FileText },
     ],
   },
   {
@@ -308,7 +309,10 @@ export function Sidebar() {
       {
         label: 'My Clients',
         icon: Users,
-        href: '/dashboard/dc/client-dc',
+        children: [
+          { label: 'My Clients', href: '/dashboard/dc/client-dc', icon: Users },
+          { label: 'Term-Wise DC', href: '/dashboard/dc/client-dc/term-wise', icon: FileText },
+        ],
       },
       {
         label: 'Payments',

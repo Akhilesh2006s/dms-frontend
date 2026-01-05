@@ -68,6 +68,7 @@ export default function ClientDCPage() {
     quantity: number
     strength: number
     level: string
+    term: string
   }>>([])
   const [dcDate, setDcDate] = useState('')
   const [dcRemarks, setDcRemarks] = useState('')
@@ -129,6 +130,7 @@ export default function ClientDCPage() {
     product_name: string
     quantity: number
     unit_price: number
+    term: string
   }>>([])
   const [addProductDialogOpen, setAddProductDialogOpen] = useState(false)
   const [originalPOProducts, setOriginalPOProducts] = useState<string[]>([])
@@ -472,7 +474,10 @@ export default function ClientDCPage() {
             const total = unitPrice * strength
             totalAmount += total
             
-            console.log(`Invoice Product[${index}]: ${pd.product}, UnitPrice: ₹${unitPrice}, Strength: ${strength}, Total: ₹${total}, MatchedIndex: ${matchingIndex}`)
+            // Prioritize term from DcOrder product if available (more up-to-date), otherwise use DC productDetails term
+            const term = matchingProduct?.term || pd.term || 'Term 1'
+            
+            console.log(`Invoice Product[${index}]: ${pd.product}, UnitPrice: ₹${unitPrice}, Strength: ${strength}, Total: ₹${total}, MatchedIndex: ${matchingIndex}, Term: ${term}`)
             
             return {
               product: pd.product || '',
@@ -485,6 +490,7 @@ export default function ClientDCPage() {
               level: pd.level || 'L2',
               unitPrice: unitPrice,
               total: total,
+              term: term,
             }
           })
         } else {
@@ -507,6 +513,7 @@ export default function ClientDCPage() {
               level: p.level || 'L2',
               unitPrice: price,
               total: total,
+              term: p.term || 'Term 1',
             }
           })
         }
@@ -538,6 +545,7 @@ export default function ClientDCPage() {
               level: pd.level || 'L2',
               unitPrice: estimatedUnitPrice,
               total: total,
+              term: pd.term || 'Term 1',
             }
           })
         }
@@ -681,6 +689,7 @@ export default function ClientDCPage() {
           quantity: Number(p.quantity) || 0,
           strength: Number(p.quantity) || 0, // Use quantity as strength
           level: getDefaultLevel(p.product_name || 'Abacus'),
+          term: p.term || 'Term 1',
         }))
       }
       
@@ -705,6 +714,7 @@ export default function ClientDCPage() {
               quantity: quantityNum,
               strength: strengthNum,
               level: p.level || getDefaultLevel(p.product || 'Abacus'),
+              term: p.term || 'Term 1',
             }
             console.log(`Client DC Product ${idx + 1} - Specs/Subject:`, {
               raw: { specs: p.specs, subject: p.subject, product: p.product },
@@ -762,6 +772,7 @@ export default function ClientDCPage() {
             quantity: Number(row.quantity) || 0,
             strength: Number(row.strength) || 0,
             level: row.level || getDefaultLevel(row.product || 'Abacus'),
+            term: row.term || 'Term 1',
           }))
         : undefined
 
@@ -827,6 +838,7 @@ export default function ClientDCPage() {
         quantity: Number(row.quantity) || 0,
         strength: Number(row.strength) || 0,
         level: row.level || getDefaultLevel(row.product || 'Abacus'),
+        term: row.term || 'Term 1',
       }))
 
       const totalQuantity = dcProductRows.reduce((sum, p) => sum + (p.quantity || 0), 0)
@@ -1258,6 +1270,7 @@ export default function ClientDCPage() {
           product_name: p.product_name || '',
           quantity: p.quantity || 0,
           unit_price: p.unit_price || 0,
+          term: p.term || 'Term 1',
         }))
       )
       
@@ -1299,6 +1312,7 @@ export default function ClientDCPage() {
         product_name: row.product_name,
         quantity: row.quantity,
         unit_price: row.unit_price,
+        term: row.term || 'Term 1',
       }))
 
       // Calculate total amount
@@ -1523,18 +1537,7 @@ export default function ClientDCPage() {
                           )}
                         </TableCell>
                         <TableCell className="text-center">
-                          {status === 'pending_dc' || status === 'warehouse_processing' || status === 'completed' ? (
-                            <div className="flex items-center gap-2 justify-center">
-                              <Button 
-                                size="sm" 
-                                variant="outline"
-                                onClick={() => openInvoiceView(d)}
-                              >
-                                <CreditCard className="w-4 h-4 mr-2" />
-                                View Invoice
-                              </Button>
-                            </div>
-                          ) : (
+                          {status === 'created' || status === 'po_submitted' ? (
                             <div className="flex items-center gap-2 justify-center">
                               {d.poPhotoUrl && (
                                 <Button 
@@ -1563,6 +1566,17 @@ export default function ClientDCPage() {
                               >
                                 <Package className="w-4 h-4 mr-2" />
                                 Request DC
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 justify-center">
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => openInvoiceView(d)}
+                              >
+                                <CreditCard className="w-4 h-4 mr-2" />
+                                View Invoice
                               </Button>
                             </div>
                           )}
@@ -1932,6 +1946,7 @@ export default function ClientDCPage() {
                   <thead>
                     <tr className="bg-neutral-100 border-b">
                       <th className="py-3 px-4 text-left text-sm font-semibold border-r">Product</th>
+                      <th className="py-3 px-4 text-left text-sm font-semibold border-r">Term</th>
                       <th className="py-3 px-4 text-left text-sm font-semibold border-r">Class</th>
                       <th className="py-3 px-4 text-left text-sm font-semibold border-r">Category</th>
                       <th className="py-3 px-4 text-left text-sm font-semibold border-r">Specs</th>
@@ -1948,6 +1963,15 @@ export default function ClientDCPage() {
                             type="text"
                             className="h-10 text-sm bg-neutral-50"
                             value={row.product}
+                            readOnly
+                            disabled
+                          />
+                        </td>
+                        <td className="py-3 px-4 border-r">
+                          <Input
+                            type="text"
+                            className="h-10 text-sm bg-neutral-50"
+                            value={row.term || 'Term 1'}
                             readOnly
                             disabled
                           />
@@ -2016,7 +2040,7 @@ export default function ClientDCPage() {
                     ))}
                     {/* Total Row */}
                     <tr className="border-t-2 border-neutral-300 bg-neutral-100 font-semibold">
-                      <td colSpan={4} className="px-3 py-3 text-right">
+                      <td colSpan={5} className="px-3 py-3 text-right">
                         <span className="text-neutral-700">Total:</span>
                       </td>
                       <td className="px-3 py-3"></td>
@@ -2239,6 +2263,7 @@ export default function ClientDCPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Product Name</TableHead>
+                        <TableHead>Term</TableHead>
                         <TableHead>Quantity</TableHead>
                         <TableHead>Unit Price</TableHead>
                         <TableHead>Total</TableHead>
@@ -2254,6 +2279,24 @@ export default function ClientDCPage() {
                               readOnly
                               className="bg-neutral-50 cursor-not-allowed"
                             />
+                          </TableCell>
+                          <TableCell>
+                            <Select
+                              value={row.term || 'Term 1'}
+                              onValueChange={(value) => {
+                                const updated = [...editProductRows]
+                                updated[idx].term = value
+                                setEditProductRows(updated)
+                              }}
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Select term" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Term 1">Term 1</SelectItem>
+                                <SelectItem value="Term 2">Term 2</SelectItem>
+                              </SelectContent>
+                            </Select>
                           </TableCell>
                           <TableCell>
                             <Input
@@ -2388,6 +2431,7 @@ export default function ClientDCPage() {
                               product_name: product,
                               quantity: 0,
                               unit_price: 0,
+                              term: 'Term 1',
                             }
                             setEditProductRows([...editProductRows, newRow])
                             setAddProductDialogOpen(false)
@@ -2482,6 +2526,7 @@ export default function ClientDCPage() {
                     <thead>
                       <tr className="bg-neutral-50 border-b">
                         <th className="py-3 px-4 text-left font-semibold">Product</th>
+                        <th className="py-3 px-4 text-left font-semibold">Term</th>
                         <th className="py-3 px-4 text-left font-semibold">Class</th>
                         <th className="py-3 px-4 text-left font-semibold">Category</th>
                         <th className="py-3 px-4 text-left font-semibold">Specs</th>
@@ -2497,6 +2542,7 @@ export default function ClientDCPage() {
                       {invoiceData.paymentBreakdown.map((item, idx) => (
                         <tr key={idx} className="border-b hover:bg-neutral-50">
                           <td className="py-3 px-4 font-medium">{item.product}</td>
+                          <td className="py-3 px-4">{item.term || 'Term 1'}</td>
                           <td className="py-3 px-4">{item.class}</td>
                           <td className="py-3 px-4">{item.category}</td>
                           <td className="py-3 px-4">{item.specs}</td>
@@ -2509,7 +2555,7 @@ export default function ClientDCPage() {
                         </tr>
                       ))}
                       <tr className="bg-neutral-100 border-t-2 border-neutral-400 font-bold">
-                        <td colSpan={9} className="py-4 px-4 text-right">
+                        <td colSpan={10} className="py-4 px-4 text-right">
                           Grand Total:
                         </td>
                         <td className="py-4 px-4 text-right text-lg">

@@ -122,6 +122,7 @@ const paymentSchema = new mongoose.Schema({
     level: String,
     unitPrice: Number,
     total: Number,
+    term: String,
   }],
   // Auto-created flag (true if created automatically from DC request)
   autoCreated: {

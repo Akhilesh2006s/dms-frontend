@@ -117,6 +117,7 @@ type ProductRow = {
   level: string
   productName?: string
   quantity?: number
+  term: string
 }
 
 export default function PendingDCPage() {
@@ -153,10 +154,12 @@ export default function PendingDCPage() {
   const load = async () => {
     setLoading(true)
     try {
-      const data = await apiRequest<DC[]>(`/dc/sent-to-manager`)
+      const data = await apiRequest<DC[]>(`/dc?status=pending_dc`)
       // Ensure data is an array before setting
       const dataArray = Array.isArray(data) ? data : []
-      setItems(dataArray)
+      // Filter out DCs that have been submitted to warehouse (status: sent_to_manager)
+      const filteredDCs = dataArray.filter(dc => dc.status !== 'sent_to_manager')
+      setItems(filteredDCs)
     } catch (e: any) {
       console.error('Failed to load DCs:', e)
       alert(`Error loading DCs: ${e?.message || 'Unknown error'}`)
@@ -244,6 +247,7 @@ export default function PendingDCPage() {
           subject: p.subject || undefined,
           price: p.price || 0,
           total: p.total || 0,
+          term: p.term || 'Term 1',
           }
         }))
       } else if (dcOrderData?.products && Array.isArray(dcOrderData.products) && dcOrderData.products.length > 0) {
@@ -270,6 +274,7 @@ export default function PendingDCPage() {
           subject: undefined,
           price: 0,
           total: 0,
+          term: p.term || 'Term 1',
           }
         }))
       } else {
@@ -295,6 +300,7 @@ export default function PendingDCPage() {
           subject: undefined,
           price: 0,
           total: 0,
+          term: 'Term 1',
         }])
       }
     } catch (e: any) {
@@ -328,6 +334,7 @@ export default function PendingDCPage() {
             level: row.level,
             specs: row.specs || 'Regular',
             subject: row.subject || undefined,
+            term: row.term || 'Term 1',
           })),
         }),
       })
@@ -373,12 +380,13 @@ export default function PendingDCPage() {
             level: row.level,
             specs: row.specs || 'Regular',
             subject: row.subject || undefined,
+            term: row.term || 'Term 1',
           })),
         }),
       })
       
       // Then submit to warehouse
-      await apiRequest(`/dc/${selectedDC._id}/manager-request`, {
+      const response = await apiRequest(`/dc/${selectedDC._id}/manager-request`, {
         method: 'POST',
         body: JSON.stringify({
           requestedQuantity: totalQuantity,
@@ -386,7 +394,12 @@ export default function PendingDCPage() {
         }),
       })
       
-      alert('DC submitted to Warehouse successfully!')
+      // Check if DC was split
+      if (response.term1DC && response.term2DC) {
+        alert(`DC split into two DCs:\n- Term 1 DC: ${response.term1DC.dc_code || response.term1DC._id} (Status: ${response.term1DC.status})\n- Term 2 DC: ${response.term2DC.dc_code || response.term2DC._id} (Status: ${response.term2DC.status})`)
+      } else {
+        alert('DC submitted to Warehouse successfully!')
+      }
       load()
       setSelectedDC(null)
     } catch (e: any) {
@@ -724,7 +737,8 @@ export default function PendingDCPage() {
                     category: 'New Students',
                     productName: 'ABACUS',
                     quantity: 0,
-                    strength: 0
+                    strength: 0,
+                    term: 'Term 1'
                   }])
                 }}
               >
@@ -732,168 +746,453 @@ export default function PendingDCPage() {
               </Button>
             </div>
             
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                    <tr className="bg-gray-100 border-b">
-                      <th className="py-2 px-3 text-left border-r text-gray-900">Product</th>
-                      <th className="py-2 px-3 text-left border-r text-gray-900">Class</th>
-                      <th className="py-2 px-3 text-left border-r text-gray-900">Category</th>
-                      <th className="py-2 px-3 text-left border-r text-gray-900">Specs</th>
-                      <th className="py-2 px-3 text-left border-r text-gray-900">Subject</th>
-                      <th className="py-2 px-3 text-left border-r text-gray-900">Strength</th>
-                      <th className="py-2 px-3 text-left border-r text-gray-900">Level</th>
-                      <th className="py-2 px-3 text-center text-gray-900">Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                  {productRows.map((row, idx) => (
-                    <tr key={row.id} className="border-b bg-white">
-                      <td className="py-2 px-3 border-r">
-                        <Select value={row.product} onValueChange={(v) => {
-                          const updated = [...productRows]
-                          updated[idx].product = v
-                          updated[idx].level = getDefaultLevel(v)
+            {(() => {
+              // Check if products have different terms
+              const terms = productRows.map(row => row.term || 'Term 1')
+              const uniqueTerms = Array.from(new Set(terms))
+              const hasDifferentTerms = uniqueTerms.length > 1
+              
+              // If all products have the same term, show single table with term column
+              if (!hasDifferentTerms) {
+                return (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm border-collapse">
+                      <thead>
+                        <tr className="bg-gray-100 border-b">
+                          <th className="py-2 px-3 text-left border-r text-gray-900">Product</th>
+                          <th className="py-2 px-3 text-left border-r text-gray-900">Term</th>
+                          <th className="py-2 px-3 text-left border-r text-gray-900">Class</th>
+                          <th className="py-2 px-3 text-left border-r text-gray-900">Category</th>
+                          <th className="py-2 px-3 text-left border-r text-gray-900">Specs</th>
+                          <th className="py-2 px-3 text-left border-r text-gray-900">Subject</th>
+                          <th className="py-2 px-3 text-left border-r text-gray-900">Strength</th>
+                          <th className="py-2 px-3 text-left border-r text-gray-900">Level</th>
+                          <th className="py-2 px-3 text-center text-gray-900">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {productRows.map((row, idx) => (
+                          <tr key={row.id} className="border-b bg-white">
+                            <td className="py-2 px-3 border-r">
+                              <Select value={row.product} onValueChange={(v) => {
+                                const updated = [...productRows]
+                                updated[idx].product = v
+                                updated[idx].level = getDefaultLevel(v)
+                                setProductRows(updated)
+                              }}>
+                                <SelectTrigger className="h-8 text-xs bg-white">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {availableProducts.map(p => (
+                                    <SelectItem key={p} value={p}>{p}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className="py-2 px-3 border-r">
+                              <Select value={row.term || 'Term 1'} onValueChange={(v) => {
+                                const updated = [...productRows]
+                                updated[idx].term = v
+                                setProductRows(updated)
+                              }}>
+                                <SelectTrigger className="h-8 text-xs bg-white">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Term 1">Term 1</SelectItem>
+                                  <SelectItem value="Term 2">Term 2</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className="py-2 px-3 border-r">
+                              <Select value={row.class} onValueChange={(v) => {
+                                const updated = [...productRows]
+                                updated[idx].class = v
+                                setProductRows(updated)
+                              }}>
+                                <SelectTrigger className="h-8 text-xs bg-white">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {availableClasses.map(c => (
+                                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className="py-2 px-3 border-r">
+                              <Select value={row.category} onValueChange={(v) => {
+                                const updated = [...productRows]
+                                updated[idx].category = v
+                                setProductRows(updated)
+                              }}>
+                                <SelectTrigger className="h-8 text-xs bg-white">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {availableCategories.map(cat => (
+                                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className="py-2 px-3 border-r">
+                              <Select value={row.specs || 'Regular'} onValueChange={(v) => {
+                                const updated = [...productRows]
+                                updated[idx].specs = v
+                                setProductRows(updated)
+                              }}>
+                                <SelectTrigger className="h-8 text-xs bg-white">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {getProductSpecs(row.product).map(spec => (
+                                    <SelectItem key={spec} value={spec}>{spec}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className="py-2 px-3 border-r">
+                              {getProductSubjects(row.product).length > 0 ? (
+                                <Select value={row.subject || ''} onValueChange={(v) => {
+                                  const updated = [...productRows]
+                                  updated[idx].subject = v
+                                  setProductRows(updated)
+                                }}>
+                                  <SelectTrigger className="h-8 text-xs bg-white">
+                                    <SelectValue placeholder="Select Subject" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {getProductSubjects(row.product).map(subject => (
+                                      <SelectItem key={subject} value={subject}>{subject}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <span className="text-neutral-400 text-xs">-</span>
+                              )}
+                            </td>
+                            <td className="py-2 px-3 border-r">
+                              <Input
+                                type="number"
+                                className="h-8 text-xs bg-white"
+                                value={row.strength || ''}
+                                onChange={(e) => {
+                                  const updated = [...productRows]
+                                  updated[idx].strength = Number(e.target.value) || 0
+                                  setProductRows(updated)
+                                }}
+                                placeholder="0"
+                                min="0"
+                              />
+                            </td>
+                            <td className="py-2 px-3 border-r">
+                              <Select value={row.level || getDefaultLevel(row.product)} onValueChange={(v) => {
+                                const updated = [...productRows]
+                                updated[idx].level = v
+                                setProductRows(updated)
+                              }}>
+                                <SelectTrigger className="h-8 text-xs bg-white">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {getProductLevels(row.product).map(level => (
+                                    <SelectItem key={level} value={level}>{level}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              {productRows.length > 1 && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50 h-8 w-8 p-0"
+                                  onClick={() => {
+                                    setProductRows(productRows.filter((_, i) => i !== idx))
+                                  }}
+                                >
+                                  ×
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                        {/* Total Row */}
+                        <tr className="border-t-2 border-gray-300 bg-gray-100 font-semibold">
+                          <td colSpan={7} className="px-3 py-3 text-right">
+                            <span className="text-gray-700">Total:</span>
+                          </td>
+                          <td className="px-3 py-3 text-right font-bold text-lg">
+                            {productRows.reduce((sum, row) => sum + (Number(row.strength) || 0), 0)}
+                          </td>
+                          <td className="px-3 py-3"></td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )
+              }
+              
+              // If products have different terms, show separate tables for Term 1 and Term 2
+              const term1Products = productRows.filter(row => (row.term || 'Term 1') === 'Term 1')
+              const term2Products = productRows.filter(row => (row.term || 'Term 1') === 'Term 2')
+              
+              const renderProductRow = (row: ProductRow) => {
+                const globalIdx = productRows.findIndex(r => r.id === row.id)
+                return (
+                  <tr key={row.id} className="border-b bg-white">
+                    <td className="py-2 px-3 border-r">
+                      <Select value={row.product} onValueChange={(v) => {
+                        const updated = [...productRows]
+                        if (globalIdx !== -1) {
+                          updated[globalIdx].product = v
+                          updated[globalIdx].level = getDefaultLevel(v)
                           setProductRows(updated)
-                        }}>
-                          <SelectTrigger className="h-8 text-xs bg-white">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableProducts.map(p => (
-                              <SelectItem key={p} value={p}>{p}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="py-2 px-3 border-r">
-                        <Select value={row.class} onValueChange={(v) => {
-                          const updated = [...productRows]
-                          updated[idx].class = v
+                        }
+                      }}>
+                      <SelectTrigger className="h-8 text-xs bg-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableProducts.map(p => (
+                          <SelectItem key={p} value={p}>{p}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="py-2 px-3 border-r">
+                    <Select value={row.term || 'Term 1'} onValueChange={(v) => {
+                      const updated = [...productRows]
+                      if (globalIdx !== -1) {
+                        updated[globalIdx].term = v
+                        setProductRows(updated)
+                      }
+                    }}>
+                      <SelectTrigger className="h-8 text-xs bg-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Term 1">Term 1</SelectItem>
+                        <SelectItem value="Term 2">Term 2</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="py-2 px-3 border-r">
+                    <Select value={row.class} onValueChange={(v) => {
+                      const updated = [...productRows]
+                      const globalIdx = productRows.findIndex(r => r.id === row.id)
+                      if (globalIdx !== -1) {
+                        updated[globalIdx].class = v
+                        setProductRows(updated)
+                      }
+                    }}>
+                      <SelectTrigger className="h-8 text-xs bg-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableClasses.map(c => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="py-2 px-3 border-r">
+                    <Select value={row.category} onValueChange={(v) => {
+                      const updated = [...productRows]
+                      const globalIdx = productRows.findIndex(r => r.id === row.id)
+                      if (globalIdx !== -1) {
+                        updated[globalIdx].category = v
+                        setProductRows(updated)
+                      }
+                    }}>
+                      <SelectTrigger className="h-8 text-xs bg-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableCategories.map(cat => (
+                          <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="py-2 px-3 border-r">
+                    <Select value={row.specs || 'Regular'} onValueChange={(v) => {
+                      const updated = [...productRows]
+                      const globalIdx = productRows.findIndex(r => r.id === row.id)
+                      if (globalIdx !== -1) {
+                        updated[globalIdx].specs = v
+                        setProductRows(updated)
+                      }
+                    }}>
+                      <SelectTrigger className="h-8 text-xs bg-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {getProductSpecs(row.product).map(spec => (
+                          <SelectItem key={spec} value={spec}>{spec}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="py-2 px-3 border-r">
+                    {getProductSubjects(row.product).length > 0 ? (
+                      <Select value={row.subject || ''} onValueChange={(v) => {
+                        const updated = [...productRows]
+                        const globalIdx = productRows.findIndex(r => r.id === row.id)
+                        if (globalIdx !== -1) {
+                          updated[globalIdx].subject = v
                           setProductRows(updated)
-                        }}>
-                          <SelectTrigger className="h-8 text-xs bg-white">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableClasses.map(c => (
-                              <SelectItem key={c} value={c}>{c}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="py-2 px-3 border-r">
-                        <Select value={row.category} onValueChange={(v) => {
-                          const updated = [...productRows]
-                          updated[idx].category = v
+                        }
+                      }}>
+                        <SelectTrigger className="h-8 text-xs bg-white">
+                          <SelectValue placeholder="Select Subject" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {getProductSubjects(row.product).map(subject => (
+                            <SelectItem key={subject} value={subject}>{subject}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <span className="text-neutral-400 text-xs">-</span>
+                    )}
+                  </td>
+                  <td className="py-2 px-3 border-r">
+                    <Input
+                      type="number"
+                      className="h-8 text-xs bg-white"
+                      value={row.strength || ''}
+                      onChange={(e) => {
+                        const updated = [...productRows]
+                        const globalIdx = productRows.findIndex(r => r.id === row.id)
+                        if (globalIdx !== -1) {
+                          updated[globalIdx].strength = Number(e.target.value) || 0
                           setProductRows(updated)
-                        }}>
-                          <SelectTrigger className="h-8 text-xs bg-white">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableCategories.map(cat => (
-                              <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="py-2 px-3 border-r">
-                        <Select value={row.specs || 'Regular'} onValueChange={(v) => {
-                          const updated = [...productRows]
-                          updated[idx].specs = v
-                          setProductRows(updated)
-                        }}>
-                          <SelectTrigger className="h-8 text-xs bg-white">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {getProductSpecs(row.product).map(spec => (
-                              <SelectItem key={spec} value={spec}>{spec}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="py-2 px-3 border-r">
-                        {getProductSubjects(row.product).length > 0 ? (
-                          <Select value={row.subject || ''} onValueChange={(v) => {
-                            const updated = [...productRows]
-                            updated[idx].subject = v
-                            setProductRows(updated)
-                          }}>
-                            <SelectTrigger className="h-8 text-xs bg-white">
-                              <SelectValue placeholder="Select Subject" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {getProductSubjects(row.product).map(subject => (
-                                <SelectItem key={subject} value={subject}>{subject}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <span className="text-neutral-400 text-xs">-</span>
-                        )}
-                      </td>
-                      <td className="py-2 px-3 border-r">
-                        <Input
-                          type="number"
-                          className="h-8 text-xs bg-white"
-                          value={row.strength || ''}
-                          onChange={(e) => {
-                            const updated = [...productRows]
-                            updated[idx].strength = Number(e.target.value) || 0
-                            setProductRows(updated)
-                          }}
-                          placeholder="0"
-                          min="0"
-                        />
-                      </td>
-                      <td className="py-2 px-3 border-r">
-                        <Select value={row.level || getDefaultLevel(row.product)} onValueChange={(v) => {
-                          const updated = [...productRows]
-                          updated[idx].level = v
-                          setProductRows(updated)
-                        }}>
-                          <SelectTrigger className="h-8 text-xs bg-white">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {getProductLevels(row.product).map(level => (
-                              <SelectItem key={level} value={level}>{level}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="py-2 px-3 text-center">
-                        {productRows.length > 1 && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50 h-8 w-8 p-0"
-                            onClick={() => {
-                              setProductRows(productRows.filter((_, i) => i !== idx))
-                            }}
-                          >
-                            ×
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                  {/* Total Row */}
-                  <tr className="border-t-2 border-gray-300 bg-gray-100 font-semibold">
-                    <td colSpan={5} className="px-3 py-3 text-right">
-                      <span className="text-gray-700">Total:</span>
-                    </td>
-                    <td className="px-3 py-3 text-right font-bold text-lg">
-                      {productRows.reduce((sum, row) => sum + (Number(row.strength) || 0), 0)}
-                    </td>
-                    <td colSpan={2} className="px-3 py-3"></td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+                        }
+                      }}
+                      placeholder="0"
+                      min="0"
+                    />
+                  </td>
+                  <td className="py-2 px-3 border-r">
+                    <Select value={row.level || getDefaultLevel(row.product)} onValueChange={(v) => {
+                      const updated = [...productRows]
+                      const globalIdx = productRows.findIndex(r => r.id === row.id)
+                      if (globalIdx !== -1) {
+                        updated[globalIdx].level = v
+                        setProductRows(updated)
+                      }
+                    }}>
+                      <SelectTrigger className="h-8 text-xs bg-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {getProductLevels(row.product).map(level => (
+                          <SelectItem key={level} value={level}>{level}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="py-2 px-3 text-center">
+                    {productRows.length > 1 && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50 h-8 w-8 p-0"
+                        onClick={() => {
+                          setProductRows(productRows.filter(r => r.id !== row.id))
+                        }}
+                      >
+                        ×
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+                )
+              }
+              
+              return (
+                <div className="space-y-6">
+                  {/* Term 1 Table */}
+                  {term1Products.length > 0 && (
+                    <div>
+                      <h4 className="text-md font-semibold text-gray-900 mb-2">Term 1</h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm border-collapse">
+                          <thead>
+                            <tr className="bg-gray-100 border-b">
+                              <th className="py-2 px-3 text-left border-r text-gray-900">Product</th>
+                              <th className="py-2 px-3 text-left border-r text-gray-900">Term</th>
+                              <th className="py-2 px-3 text-left border-r text-gray-900">Class</th>
+                              <th className="py-2 px-3 text-left border-r text-gray-900">Category</th>
+                              <th className="py-2 px-3 text-left border-r text-gray-900">Specs</th>
+                              <th className="py-2 px-3 text-left border-r text-gray-900">Subject</th>
+                              <th className="py-2 px-3 text-left border-r text-gray-900">Strength</th>
+                              <th className="py-2 px-3 text-left border-r text-gray-900">Level</th>
+                              <th className="py-2 px-3 text-center text-gray-900">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {term1Products.map((row) => renderProductRow(row))}
+                            {/* Total Row for Term 1 */}
+                            <tr className="border-t-2 border-gray-300 bg-gray-100 font-semibold">
+                              <td colSpan={6} className="px-3 py-3 text-right">
+                                <span className="text-gray-700">Total:</span>
+                              </td>
+                              <td className="px-3 py-3 text-right font-bold text-lg">
+                                {term1Products.reduce((sum, row) => sum + (Number(row.strength) || 0), 0)}
+                              </td>
+                              <td colSpan={2} className="px-3 py-3"></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Term 2 Table */}
+                  {term2Products.length > 0 && (
+                    <div>
+                      <h4 className="text-md font-semibold text-gray-900 mb-2">Term 2</h4>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm border-collapse">
+                          <thead>
+                            <tr className="bg-gray-100 border-b">
+                              <th className="py-2 px-3 text-left border-r text-gray-900">Product</th>
+                              <th className="py-2 px-3 text-left border-r text-gray-900">Term</th>
+                              <th className="py-2 px-3 text-left border-r text-gray-900">Class</th>
+                              <th className="py-2 px-3 text-left border-r text-gray-900">Category</th>
+                              <th className="py-2 px-3 text-left border-r text-gray-900">Specs</th>
+                              <th className="py-2 px-3 text-left border-r text-gray-900">Subject</th>
+                              <th className="py-2 px-3 text-left border-r text-gray-900">Strength</th>
+                              <th className="py-2 px-3 text-left border-r text-gray-900">Level</th>
+                              <th className="py-2 px-3 text-center text-gray-900">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {term2Products.map((row) => renderProductRow(row))}
+                            {/* Total Row for Term 2 */}
+                            <tr className="border-t-2 border-gray-300 bg-gray-100 font-semibold">
+                              <td colSpan={6} className="px-3 py-3 text-right">
+                                <span className="text-gray-700">Total:</span>
+                              </td>
+                              <td className="px-3 py-3 text-right font-bold text-lg">
+                                {term2Products.reduce((sum, row) => sum + (Number(row.strength) || 0), 0)}
+                              </td>
+                              <td colSpan={2} className="px-3 py-3"></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
           </div>
 
           {/* Action Buttons */}

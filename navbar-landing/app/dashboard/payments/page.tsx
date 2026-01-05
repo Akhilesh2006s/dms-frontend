@@ -38,6 +38,7 @@ type Payment = {
     level: string
     unitPrice: number
     total: number
+    term?: string
   }>
 }
 
@@ -495,6 +496,7 @@ export default function PaymentsPage() {
                       <thead>
                         <tr className="bg-neutral-50 border-b">
                           <th className="py-3 px-4 text-left font-semibold">Product</th>
+                          <th className="py-3 px-4 text-left font-semibold">Term</th>
                           <th className="py-3 px-4 text-left font-semibold">Class</th>
                           <th className="py-3 px-4 text-left font-semibold">Category</th>
                           <th className="py-3 px-4 text-left font-semibold">Specs</th>
@@ -510,6 +512,7 @@ export default function PaymentsPage() {
                         {selectedPaymentForInvoice.paymentBreakdown.map((item, idx) => (
                           <tr key={idx} className="border-b hover:bg-neutral-50">
                             <td className="py-3 px-4 font-medium">{item.product}</td>
+                            <td className="py-3 px-4">{item.term || 'Term 1'}</td>
                             <td className="py-3 px-4">{item.class}</td>
                             <td className="py-3 px-4">{item.category}</td>
                             <td className="py-3 px-4">{item.specs}</td>
@@ -522,7 +525,7 @@ export default function PaymentsPage() {
                           </tr>
                         ))}
                         <tr className="bg-neutral-100 border-t-2 border-neutral-400 font-bold">
-                          <td colSpan={9} className="py-4 px-4 text-right">
+                          <td colSpan={10} className="py-4 px-4 text-right">
                             Grand Total:
                           </td>
                           <td className="py-4 px-4 text-right text-lg">

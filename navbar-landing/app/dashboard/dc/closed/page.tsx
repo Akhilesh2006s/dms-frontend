@@ -134,9 +134,10 @@ export default function ClosedSalesPage() {
     subject?: string
     strength: number
     level: string
+    term: string
   }
   const [productRows, setProductRows] = useState<ProductRow[]>([
-    { id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1' }
+    { id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1', term: 'Term 1' }
   ])
   
   const availableClasses = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']
@@ -539,9 +540,10 @@ export default function ClosedSalesPage() {
             subject: p.subject || undefined,
             strength: Number(p.strength) || 0,
             level: p.level || getDefaultLevel(p.product || 'Abacus'),
+            term: p.term || 'Term 1',
           })))
         } else {
-          setProductRows([{ id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1' }])
+          setProductRows([{ id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1', term: 'Term 1' }])
         }
       } else if (existingDCForDeal) {
         // Load full DC details to get all fields
@@ -608,6 +610,7 @@ export default function ClosedSalesPage() {
                 subject: p.subject || undefined,
                 strength: strengthNum,
                 level: rawLevel,
+                term: p.term || 'Term 1',
               }
               
               console.log(`Product ${idx + 1} - Product dropdown matching:`, {
@@ -653,6 +656,7 @@ export default function ClosedSalesPage() {
                 subject: undefined,
               strength: p.strength || 0,
                 level: p.level || getDefaultLevel(p.product || 'Abacus'),
+                term: p.term || 'Term 1',
               }
             }))
           } else {
@@ -675,9 +679,10 @@ export default function ClosedSalesPage() {
               subject: undefined,
               strength: p.strength || 0,
               level: p.level || 'L2',
+              term: p.term || 'Term 1',
             })))
           } else {
-            setProductRows([{ id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1' }])
+            setProductRows([{ id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1', term: 'Term 1' }])
           }
         }
       } else {
@@ -699,7 +704,7 @@ export default function ClosedSalesPage() {
             level: p.level || 'L2',
           })))
         } else {
-          setProductRows([{ id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1' }])
+          setProductRows([{ id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1', term: 'Term 1' }])
         }
       }
       setOpenRaiseDCDialog(true)
@@ -727,6 +732,7 @@ export default function ClosedSalesPage() {
           subject: undefined,
           strength: p.strength || 0,
           level: p.level || 'L2',
+          term: p.term || 'Term 1',
         })))
       } else {
         setProductRows([{ id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1' }])
@@ -803,7 +809,12 @@ export default function ClosedSalesPage() {
         strength: Number(row.strength) || 0,
         quantity: Number(row.strength) || 0, // Quantity should match strength
         level: row.level || 'L2',
+        term: row.term || 'Term 1',
       }))
+
+      // Set status to pending_dc when raising from Closed Sales
+      // Status will only change to sent_to_manager when "Submit to Warehouse" is pressed in Pending DC page
+      raisePayload.status = 'pending_dc'
 
       let dc: DC
       
@@ -821,6 +832,7 @@ export default function ClosedSalesPage() {
             dcRemarks: raisePayload.dcRemarks,
             dcCategory: raisePayload.dcCategory,
             productDetails: raisePayload.productDetails,
+            status: 'pending_dc', // Set status to pending_dc
           }),
         })
         dc = existingDC
@@ -832,16 +844,7 @@ export default function ClosedSalesPage() {
         })
       }
 
-      // Then submit to manager (moves to sent_to_manager, then appears in Pending DC)
-      await apiRequest(`/dc/${dc._id}/submit-to-manager`, {
-        method: 'POST',
-        body: JSON.stringify({
-          requestedQuantity: totalQuantity || 1,
-          remarks: dcRemarks || undefined,
-        }),
-      })
-
-      alert(existingDC ? 'DC updated and submitted to Senior Coordinator successfully!' : 'DC created and submitted to Senior Coordinator successfully! It will appear in Pending DC list.')
+      alert(existingDC ? 'DC updated and sent to Senior Coordinator successfully! It will appear in Pending DC list.' : 'DC created and sent to Senior Coordinator successfully! It will appear in Pending DC list.')
       setOpenRaiseDCDialog(false)
       // Reload to refresh the DC map
       load()
@@ -899,6 +902,7 @@ export default function ClosedSalesPage() {
           strength: Number(row.strength) || 0,
           quantity: Number(row.strength) || 0, // Quantity should match strength
           level: row.level || getDefaultLevel(row.product || 'Abacus'),
+          term: row.term || 'Term 1',
         })),
         employeeId: employeeId,
       }
@@ -949,6 +953,7 @@ export default function ClosedSalesPage() {
           strength: Number(row.strength) || 0,
           quantity: Number(row.strength) || 0, // Quantity should match strength
           level: row.level || getDefaultLevel(row.product || 'Abacus'),
+          term: row.term || 'Term 1',
         }))
       } else if (dcRequestData.productDetails && Array.isArray(dcRequestData.productDetails) && dcRequestData.productDetails.length > 0) {
         finalProductDetails = dcRequestData.productDetails
@@ -1047,28 +1052,38 @@ export default function ClosedSalesPage() {
       const dcRequestData = (selectedDeal as any).dcRequestData || {}
       
       // Prepare payload to create DC and submit to manager
+      // Always use current productRows to ensure term changes are saved
       const raisePayload: any = {
         dcOrderId: selectedDeal._id,
         dcDate: dcRequestData.dcDate || dcDate || undefined,
         dcRemarks: dcRequestData.dcRemarks || dcRemarks || undefined,
         dcCategory: dcRequestData.dcCategory || dcCategory || undefined,
-        requestedQuantity: dcRequestData.requestedQuantity || 1,
-        productDetails: dcRequestData.productDetails || productRows.map(row => ({
-          product: row.product,
-          class: row.class,
-          category: row.category,
-          specs: row.specs || 'Regular',
-          subject: row.subject || undefined,
-          strength: Number(row.strength) || 0,
-          quantity: Number(row.strength) || 0, // Quantity should match strength
-          level: row.level || getDefaultLevel(row.product || 'Abacus'),
-        })),
+        requestedQuantity: productRows.length > 0 
+          ? productRows.reduce((sum, row) => sum + (row.strength || 0), 0) || 1
+          : (dcRequestData.requestedQuantity || 1),
+        productDetails: productRows.length > 0 
+          ? productRows.map(row => ({
+              product: row.product,
+              class: row.class,
+              category: row.category,
+              specs: row.specs || 'Regular',
+              subject: row.subject || undefined,
+              strength: Number(row.strength) || 0,
+              quantity: Number(row.strength) || 0, // Quantity should match strength
+              level: row.level || getDefaultLevel(row.product || 'Abacus'),
+              term: row.term || 'Term 1',
+            }))
+          : (dcRequestData.productDetails || []),
       }
 
       // Include employeeId from request data
       if (dcRequestData.employeeId) {
         raisePayload.employeeId = dcRequestData.employeeId
       }
+
+      // Set status to pending_dc when raising from Closed Sales
+      // Status will only change to sent_to_manager when "Submit to Warehouse" is pressed in Pending DC page
+      raisePayload.status = 'pending_dc'
 
       // Create or update DC
       let dc: DC
@@ -1084,15 +1099,6 @@ export default function ClosedSalesPage() {
           body: JSON.stringify(raisePayload),
         })
       }
-
-      // Submit DC to manager (moves to sent_to_manager, then appears in Pending DC)
-      await apiRequest(`/dc/${dc._id}/submit-to-manager`, {
-        method: 'POST',
-        body: JSON.stringify({
-          requestedQuantity: raisePayload.requestedQuantity || 1,
-          remarks: raisePayload.dcRemarks || undefined,
-        }),
-      })
 
       // Update DcOrder status to 'dc_sent_to_senior' (removes from closed sales)
       await apiRequest(`/dc-orders/${selectedDeal._id}`, {
@@ -1583,7 +1589,8 @@ export default function ClosedSalesPage() {
                         specs: 'Regular',
                         subject: undefined,
                         strength: 0,
-                        level: getDefaultLevel(defaultProduct)
+                        level: getDefaultLevel(defaultProduct),
+                        term: 'Term 1'
                       }])
                     }}
                   >
@@ -1597,6 +1604,7 @@ export default function ClosedSalesPage() {
                     <thead>
                       <tr className="bg-gradient-to-r from-slate-50 to-slate-100 border-b-2 border-slate-300">
                         <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Product</th>
+                        <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Term</th>
                         <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Class</th>
                         <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Category</th>
                         <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Specs</th>
@@ -1630,6 +1638,21 @@ export default function ClosedSalesPage() {
                                 {availableProducts.map(p => (
                                   <SelectItem key={p} value={p}>{p}</SelectItem>
                                 ))}
+                              </SelectContent>
+                            </Select>
+                          </td>
+                          <td className="py-4 px-5">
+                            <Select value={row.term || 'Term 1'} onValueChange={(v) => {
+                              const updated = [...productRows]
+                              updated[idx].term = v
+                              setProductRows(updated)
+                            }}>
+                              <SelectTrigger className="h-9 text-sm border-slate-200 hover:border-blue-400 focus:border-blue-500 focus:ring-blue-500">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Term 1">Term 1</SelectItem>
+                                <SelectItem value="Term 2">Term 2</SelectItem>
                               </SelectContent>
                             </Select>
                           </td>
@@ -1756,7 +1779,7 @@ export default function ClosedSalesPage() {
                       ))}
                       {/* Total Row */}
                       <tr className="bg-gradient-to-r from-slate-100 to-slate-200 border-t-2 border-slate-400 font-bold">
-                        <td colSpan={5} className="px-5 py-4 text-right">
+                        <td colSpan={6} className="px-5 py-4 text-right">
                           <span className="text-slate-800 text-base">Grand Total:</span>
                         </td>
                         <td className="px-5 py-4 text-right">
