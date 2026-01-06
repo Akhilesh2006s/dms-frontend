@@ -390,6 +390,13 @@ export default function TermWiseDCPage() {
 
     setSavingDC(true)
     try {
+      const dcOrderId = typeof selectedDC.dcOrderId === 'object' ? selectedDC.dcOrderId._id : selectedDC.dcOrderId
+      
+      if (!dcOrderId) {
+        toast.error('Cannot request DC: DC Order not found')
+        return
+      }
+
       // Convert product rows to productDetails format (only Term 2 products)
       const productDetails = requestDCProductRows
         .filter(row => (row.term || 'Term 1') === 'Term 2')
@@ -405,23 +412,53 @@ export default function TermWiseDCPage() {
           term: 'Term 2', // Ensure Term 2
         }))
 
-      const payload = {
-        dcOrderId: typeof selectedDC.dcOrderId === 'object' ? selectedDC.dcOrderId._id : selectedDC.dcOrderId,
+      // Update DC - keep status as 'scheduled_for_later' so it still appears in Term-Wise DC
+      const dcPayload = {
+        dcOrderId: dcOrderId,
         customerName: requestDCFormData.school_name || selectedDC.customerName || '',
         customerPhone: requestDCFormData.contact_mobile || selectedDC.customerPhone || '',
         productDetails,
         dcDate: new Date().toISOString().split('T')[0],
         dcRemarks: requestDCFormData.remarks,
         dcCategory: requestDCFormData.school_type === 'Existing' ? 'Existing School' : 'New School',
-        status: 'po_submitted',
+        status: 'scheduled_for_later', // Keep as scheduled_for_later so it appears in Term-Wise DC
       }
 
       await apiRequest(`/dc/${selectedDC._id}`, {
         method: 'PUT',
-        body: JSON.stringify(payload),
+        body: JSON.stringify(dcPayload),
       })
 
-      toast.success('DC requested successfully!')
+      // Update DcOrder status to 'dc_requested' so it appears in Closed Sales page
+      try {
+        const updateResponse = await apiRequest(`/dc-orders/${dcOrderId}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            status: 'dc_requested',
+          }),
+        })
+        console.log('✅ DcOrder status updated to dc_requested:', {
+          dcOrderId,
+          response: updateResponse,
+          status: updateResponse?.status
+        })
+        
+        // Verify the status was actually updated
+        if (updateResponse?.status !== 'dc_requested') {
+          console.warn('⚠️ DcOrder status may not have been updated correctly:', updateResponse?.status)
+          toast.warning('DC updated, but DcOrder status may not have been updated. Please check Closed Sales page.')
+        }
+      } catch (dcOrderError: any) {
+        console.error('❌ Failed to update DcOrder status:', {
+          dcOrderId,
+          error: dcOrderError?.message,
+          fullError: dcOrderError
+        })
+        // Still show success for DC update, but warn about DcOrder
+        toast.error(`Failed to update DcOrder status: ${dcOrderError?.message || 'Unknown error'}. Please refresh Closed Sales page manually.`)
+      }
+
+      toast.success('DC requested successfully! It will appear in Closed Sales page.')
       setRequestDCDialogOpen(false)
       load()
     } catch (e: any) {

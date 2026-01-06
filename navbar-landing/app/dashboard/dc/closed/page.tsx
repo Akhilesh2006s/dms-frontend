@@ -168,18 +168,95 @@ export default function ClosedSalesPage() {
         }
         
         // Reduced limit for faster initial load - can be increased if needed
-        const [completedRes, savedRes, dcRequestedRes, dcAcceptedRes] = await Promise.all([
+        // Also fetch Term 2 split DCs (scheduled_for_later) that are linked to dc_requested DcOrders
+        const [completedRes, savedRes, dcRequestedRes, dcAcceptedRes, term2DCsRes] = await Promise.all([
           apiCallWithTimeout(`/dc-orders?status=completed&limit=500`),
           apiCallWithTimeout(`/dc-orders?status=saved&limit=500`),
           apiCallWithTimeout(`/dc-orders?status=dc_requested&limit=500`),
-          apiCallWithTimeout(`/dc-orders?status=dc_accepted&limit=500`)
+          apiCallWithTimeout(`/dc-orders?status=dc_accepted&limit=500`),
+          apiCallWithTimeout(`/dc?status=scheduled_for_later&limit=500`).catch(() => ({ data: [] })) // Don't fail if this fails
         ])
         // Extract data array from paginated response or use direct array
         const completedArray = Array.isArray(completedRes) ? completedRes : (completedRes?.data || [])
         const savedArray = Array.isArray(savedRes) ? savedRes : (savedRes?.data || [])
         const dcRequestedArray = Array.isArray(dcRequestedRes) ? dcRequestedRes : (dcRequestedRes?.data || [])
         const dcAcceptedArray = Array.isArray(dcAcceptedRes) ? dcAcceptedRes : (dcAcceptedRes?.data || [])
-        data = [...completedArray, ...savedArray, ...dcRequestedArray, ...dcAcceptedArray].filter((d: any) => 
+        const term2DCsArray = Array.isArray(term2DCsRes) ? term2DCsRes : (term2DCsRes?.data || [])
+        
+        console.log('📊 Loaded DcOrders:', {
+          completed: completedArray.length,
+          saved: savedArray.length,
+          dc_requested: dcRequestedArray.length,
+          dc_accepted: dcAcceptedArray.length,
+          term2_split_dcs: term2DCsArray.length
+        })
+        console.log('📋 dc_requested items:', dcRequestedArray.map((d: any) => ({
+          id: d._id,
+          school_name: d.school_name,
+          status: d.status,
+          updatedAt: d.updatedAt || d.updated_at
+        })))
+        console.log('📋 Term 2 split DCs:', term2DCsArray.map((d: any) => ({
+          id: d._id,
+          dcOrderId: d.dcOrderId?._id || d.dcOrderId,
+          customerName: d.customerName,
+          status: d.status
+        })))
+        
+        // Get DcOrder IDs that have Term 2 split DCs
+        const dcOrderIdsWithTerm2DC = new Set(
+          term2DCsArray
+            .map((dc: any) => {
+              const dcOrderId = dc.dcOrderId?._id || dc.dcOrderId
+              return dcOrderId ? String(dcOrderId) : null
+            })
+            .filter(Boolean)
+        )
+        
+        console.log('🔗 DcOrder IDs with Term 2 split DCs:', Array.from(dcOrderIdsWithTerm2DC))
+        
+        // Filter out DcOrders that have Term 2 split DCs - we'll show the DCs instead
+        const dcRequestedWithoutTerm2 = dcRequestedArray.filter((d: any) => {
+          const hasTerm2DC = dcOrderIdsWithTerm2DC.has(String(d._id))
+          if (hasTerm2DC) {
+            console.log(`⚠️ Filtering out DcOrder ${d._id} (${d.school_name}) - has Term 2 split DC`)
+          }
+          return !hasTerm2DC
+        })
+        
+        // Convert Term 2 DCs to DcOrder-like format for display in Closed Sales
+        const term2DCsAsDeals: DcOrder[] = term2DCsArray.map((dc: any) => {
+          const dcOrderId = dc.dcOrderId?._id || dc.dcOrderId
+          // Find the original DcOrder to get school details
+          const originalDcOrder = dcRequestedArray.find((d: any) => String(d._id) === String(dcOrderId))
+          
+          return {
+            _id: dc._id, // Use DC ID as the unique identifier
+            dcOrderId: dcOrderId, // Keep reference to original DcOrder
+            school_name: dc.customerName || originalDcOrder?.school_name || '',
+            contact_person: originalDcOrder?.contact_person || '',
+            contact_mobile: dc.customerPhone || originalDcOrder?.contact_mobile || '',
+            email: dc.customerEmail || originalDcOrder?.email || '',
+            address: dc.customerAddress || originalDcOrder?.address || '',
+            location: originalDcOrder?.location || '',
+            zone: originalDcOrder?.zone || '',
+            school_type: originalDcOrder?.school_type || '',
+            products: dc.productDetails || originalDcOrder?.products || [],
+            assigned_to: originalDcOrder?.assigned_to || undefined,
+            created_at: dc.createdAt || originalDcOrder?.created_at,
+            createdAt: dc.createdAt || originalDcOrder?.createdAt,
+            remarks: dc.dcRemarks || originalDcOrder?.remarks || '',
+            status: 'dc_requested', // Show as dc_requested since DcOrder has this status
+            dc_code: originalDcOrder?.dc_code || undefined,
+            pod_proof_url: dc.poPhotoUrl || dc.poDocument || originalDcOrder?.pod_proof_url || undefined,
+            isTerm2SplitDC: true, // Flag to identify this is a Term 2 split DC
+            term2DCId: dc._id, // Store the actual DC ID
+          } as DcOrder
+        })
+        
+        console.log(`✅ Converted ${term2DCsAsDeals.length} Term 2 split DCs to DcOrder format`)
+        
+        data = [...completedArray, ...savedArray, ...dcRequestedWithoutTerm2, ...dcAcceptedArray, ...term2DCsAsDeals].filter((d: any) => 
           d.status !== 'dc_approved' && d.status !== 'dc_sent_to_senior'
         )
       } catch (e) {
@@ -284,22 +361,50 @@ export default function ClosedSalesPage() {
           const leadIds = data.filter((d: any) => d.isLead).map((d: any) => d._id)
           
           // Fetch DCs with timeout and reasonable limit
-          const allDCsRes = await Promise.race([
-            apiRequest<any>(`/dc?limit=2000`),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Request timeout')), 8000)
-            )
+          // Also fetch Term 2 DCs (scheduled_for_later) that might be split from original DCs
+          const [allDCsRes, term2DCsRes] = await Promise.all([
+            Promise.race([
+              apiRequest<any>(`/dc?limit=2000`),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Request timeout')), 8000)
+              )
+            ]),
+            Promise.race([
+              apiRequest<any>(`/dc?status=scheduled_for_later&limit=500`),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Request timeout')), 8000)
+              )
+            ]).catch(() => ({ data: [] })) // Don't fail if this query fails
           ])
           const allDCsArray = Array.isArray(allDCsRes) ? allDCsRes : (allDCsRes?.data || [])
+          const term2DCsArray = Array.isArray(term2DCsRes) ? term2DCsRes : (term2DCsRes?.data || [])
+          
+          console.log('📦 Loaded DCs:', {
+            all: allDCsArray.length,
+            term2_split: term2DCsArray.length
+          })
         
-          // Build map for DcOrders
+          // Build map for DcOrders - prioritize Term 2 split DCs (scheduled_for_later)
           dealIds.forEach((dealId: string) => {
-            const relatedDC = allDCsArray.find((dc: any) => {
+            // First, check for Term 2 split DC (scheduled_for_later) - these are the split DCs
+            const term2DC = term2DCsArray.find((dc: any) => {
               const dcOrderId = dc.dcOrderId?._id || dc.dcOrderId
               return dcOrderId === dealId || (typeof dcOrderId === 'string' && dcOrderId === dealId)
             })
-            if (relatedDC) {
-              dcMap[dealId] = relatedDC
+            
+            if (term2DC) {
+              // Use Term 2 split DC if it exists
+              dcMap[dealId] = term2DC
+              console.log(`✅ Found Term 2 split DC for DcOrder ${dealId}:`, term2DC._id)
+            } else {
+              // Otherwise, use any other DC linked to this DcOrder
+              const relatedDC = allDCsArray.find((dc: any) => {
+                const dcOrderId = dc.dcOrderId?._id || dc.dcOrderId
+                return dcOrderId === dealId || (typeof dcOrderId === 'string' && dcOrderId === dealId)
+              })
+              if (relatedDC) {
+                dcMap[dealId] = relatedDC
+              }
             }
           })
           
@@ -373,14 +478,30 @@ export default function ClosedSalesPage() {
         }
       })
       
-      // Sort by creation date (most recent first)
+      // Sort: dc_requested items first (by updatedAt), then others by creation date (most recent first)
       const sortedData = normalizedData.sort((a: any, b: any) => {
+        const aIsRequested = a.status === 'dc_requested'
+        const bIsRequested = b.status === 'dc_requested'
+        
+        // If one is dc_requested and the other isn't, prioritize dc_requested
+        if (aIsRequested && !bIsRequested) return -1
+        if (!aIsRequested && bIsRequested) return 1
+        
+        // If both are dc_requested, sort by updatedAt (most recent first)
+        if (aIsRequested && bIsRequested) {
+          const dateA = new Date(a.updatedAt || a.updated_at || a.createdAt || a.created_at || 0).getTime()
+          const dateB = new Date(b.updatedAt || b.updated_at || b.createdAt || b.created_at || 0).getTime()
+          return dateB - dateA
+        }
+        
+        // Otherwise, sort by creation date (most recent first)
         const dateA = new Date(a.createdAt || a.created_at || 0).getTime()
         const dateB = new Date(b.createdAt || b.created_at || 0).getTime()
-        return dateB - dateA // Most recent first
+        return dateB - dateA
       })
       
       // Remove duplicates based on school_name + contact_mobile
+      // Prioritize: dc_requested > dc_accepted > other statuses
       // Keep the most recent entry (already sorted, so first occurrence is most recent)
       const seen = new Map<string, DcOrder>()
       const uniqueData: DcOrder[] = []
@@ -396,7 +517,30 @@ export default function ClosedSalesPage() {
           seen.set(uniqueKey, item)
           uniqueData.push(item)
         } else {
-          console.log(`Removing duplicate: ${item.school_name} - ${item.contact_mobile}`)
+          // Check if the new item has a higher priority status than the existing one
+          const existing = seen.get(uniqueKey)!
+          const existingPriority = existing.status === 'dc_requested' ? 3 : 
+                                   existing.status === 'dc_accepted' ? 2 : 
+                                   existing.status === 'Closed' ? 0 : 1
+          const newPriority = item.status === 'dc_requested' ? 3 : 
+                              item.status === 'dc_accepted' ? 2 : 
+                              item.status === 'Closed' ? 0 : 1
+          
+          // Replace if new item has higher priority (dc_requested > dc_accepted > others > Closed)
+          if (newPriority > existingPriority) {
+            console.log(`Replacing duplicate with higher priority: ${item.school_name} - ${item.contact_mobile} (${existing.status} -> ${item.status})`)
+            const index = uniqueData.findIndex(d => {
+              const dSchoolName = (d.school_name || '').toLowerCase().trim()
+              const dContactMobile = (d.contact_mobile || '').trim()
+              return `${dSchoolName}|${dContactMobile}` === uniqueKey
+            })
+            if (index !== -1) {
+              uniqueData[index] = item
+              seen.set(uniqueKey, item)
+            }
+          } else {
+            console.log(`Removing duplicate (lower priority): ${item.school_name} - ${item.contact_mobile} (${item.status} vs ${existing.status})`)
+          }
         }
       }
       
@@ -435,13 +579,63 @@ export default function ClosedSalesPage() {
 
   const openRaiseDC = async (deal: DcOrder) => {
     try {
+      // Check if this is a Term 2 split DC
+      const isTerm2SplitDC = (deal as any).isTerm2SplitDC
+      const term2DCId = (deal as any).term2DCId
+      
       // Check if DC already exists for this deal
       const existingDCForDeal = dealDCs[deal._id]
       setExistingDC(existingDCForDeal || null)
       
-      // For closed leads (isLead flag), skip fetching from dc-orders endpoint
+      // For Term 2 split DCs, fetch the actual DC data instead of DcOrder
       let fullDeal: DcOrder
-      if ((deal as any).isLead) {
+      if (isTerm2SplitDC && term2DCId) {
+        console.log('📦 Loading Term 2 split DC:', term2DCId)
+        try {
+          const term2DC = await apiRequest<DC>(`/dc/${term2DCId}`)
+          console.log('✅ Loaded Term 2 split DC:', term2DC)
+          
+          // Convert DC to DcOrder-like format for the dialog
+          const dcOrderId = typeof term2DC.dcOrderId === 'object' ? term2DC.dcOrderId?._id : term2DC.dcOrderId
+          
+          // Fetch the original DcOrder for additional details
+          let originalDcOrder: any = null
+          if (dcOrderId) {
+            try {
+              originalDcOrder = await apiRequest<any>(`/dc-orders/${dcOrderId}`)
+            } catch (e) {
+              console.warn('Could not fetch original DcOrder:', e)
+            }
+          }
+          
+          // Merge DC data with DcOrder data
+          fullDeal = {
+            ...deal,
+            _id: dcOrderId || deal._id, // Use DcOrder ID for operations
+            school_name: term2DC.customerName || deal.school_name || '',
+            contact_person: originalDcOrder?.contact_person || deal.contact_person || '',
+            contact_mobile: term2DC.customerPhone || originalDcOrder?.contact_mobile || deal.contact_mobile || '',
+            email: term2DC.customerEmail || originalDcOrder?.email || deal.email || '',
+            address: term2DC.customerAddress || originalDcOrder?.address || deal.address || '',
+            location: originalDcOrder?.location || deal.location || '',
+            zone: originalDcOrder?.zone || deal.zone || '',
+            school_type: originalDcOrder?.school_type || deal.school_type || '',
+            products: term2DC.productDetails || originalDcOrder?.products || deal.products || [],
+            assigned_to: originalDcOrder?.assigned_to || deal.assigned_to,
+            remarks: term2DC.dcRemarks || originalDcOrder?.remarks || deal.remarks || '',
+            pod_proof_url: term2DC.poPhotoUrl || term2DC.poDocument || originalDcOrder?.pod_proof_url || deal.pod_proof_url,
+            status: 'dc_requested', // Keep as dc_requested
+            term2DCId: term2DC._id, // Store the actual DC ID
+            isTerm2SplitDC: true,
+          } as DcOrder
+          
+          // Set the existing DC to the Term 2 DC
+          setExistingDC(term2DC)
+        } catch (fetchError: any) {
+          console.error('Could not fetch Term 2 split DC, using deal data:', fetchError?.message)
+          fullDeal = deal
+        }
+      } else if ((deal as any).isLead) {
         // This is a closed lead, not a dc-order, so use the deal data directly
         fullDeal = deal
       } else {
@@ -1048,13 +1242,17 @@ export default function ClosedSalesPage() {
 
     setSaving(true)
     try {
+      // Check if this is a Term 2 split DC
+      const isTerm2SplitDC = (selectedDeal as any).isTerm2SplitDC
+      const term2DCId = (selectedDeal as any).term2DCId
+      
       // Get DC request data from DcOrder
       const dcRequestData = (selectedDeal as any).dcRequestData || {}
       
       // Prepare payload to create DC and submit to manager
       // Always use current productRows to ensure term changes are saved
       const raisePayload: any = {
-        dcOrderId: selectedDeal._id,
+        dcOrderId: selectedDeal._id, // Use DcOrder ID (will be resolved from term2DCId if needed)
         dcDate: dcRequestData.dcDate || dcDate || undefined,
         dcRemarks: dcRequestData.dcRemarks || dcRemarks || undefined,
         dcCategory: dcRequestData.dcCategory || dcCategory || undefined,
@@ -1087,7 +1285,18 @@ export default function ClosedSalesPage() {
 
       // Create or update DC
       let dc: DC
-      if (existingDC) {
+      if (isTerm2SplitDC && term2DCId && existingDC) {
+        // This is a Term 2 split DC - update the existing Term 2 DC
+        console.log('📦 Updating Term 2 split DC:', term2DCId)
+        await apiRequest(`/dc/${term2DCId}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            ...raisePayload,
+            status: 'pending_dc', // Change from scheduled_for_later to pending_dc
+          }),
+        })
+        dc = existingDC
+      } else if (existingDC) {
         await apiRequest(`/dc/${existingDC._id}`, {
           method: 'PUT',
           body: JSON.stringify(raisePayload),
