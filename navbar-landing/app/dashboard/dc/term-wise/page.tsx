@@ -331,6 +331,9 @@ export default function TermWiseDCPage() {
     }
 
     try {
+      // Fetch the full DC data to get productDetails (most accurate)
+      const fullDC = await apiRequest<any>(`/dc/${dc._id}`).catch(() => dc)
+      
       // Fetch the latest DC Order data (includes changes from Edit PO)
       const dcOrder = await apiRequest<any>(`/dc-orders/${dcOrderId}`)
       
@@ -361,8 +364,54 @@ export default function TermWiseDCPage() {
       
       setRequestDCFormData(formData)
       
-      // Load only Term 2 products from DC Order (includes changes from Edit PO)
-      const term2Products = (dcOrder.products || []).filter((p: any) => (p.term || 'Term 1') === 'Term 2')
+      // Load Term 2 products - prioritize DC's productDetails (has all details), then DcOrder products
+      let term2Products: any[] = []
+      
+      // First try to get from full DC's productDetails (most accurate - has all product details)
+      if (fullDC.productDetails && Array.isArray(fullDC.productDetails) && fullDC.productDetails.length > 0) {
+        const dcTerm2Products = fullDC.productDetails.filter((p: any) => (p.term || 'Term 1') === 'Term 2')
+        if (dcTerm2Products.length > 0) {
+          // Get unit prices from DcOrder products if available, otherwise use from productDetails
+          term2Products = dcTerm2Products.map((p: any) => {
+            // Try to match with DcOrder product to get unit_price
+            const matchingDcOrderProduct = (dcOrder.products || []).find((op: any) => {
+              const orderProductName = (op.product_name || '').toLowerCase().trim()
+              const dcProductName = (p.product || p.product_name || '').toLowerCase().trim()
+              return orderProductName === dcProductName && (op.term || 'Term 1') === 'Term 2'
+            })
+            
+            return {
+              product_name: p.product || p.product_name || '',
+              quantity: p.quantity || p.strength || 0,
+              unit_price: matchingDcOrderProduct?.unit_price || p.unit_price || p.price || 0,
+              term: p.term || 'Term 2',
+            }
+          })
+        }
+      }
+      
+      // Fallback to DcOrder products if DC productDetails not available or no Term 2 products found
+      if (term2Products.length === 0) {
+        const dcOrderTerm2Products = (dcOrder.products || []).filter((p: any) => (p.term || 'Term 1') === 'Term 2')
+        term2Products = dcOrderTerm2Products.map((p: any) => ({
+          product_name: p.product_name || '',
+          quantity: p.quantity || 0,
+          unit_price: p.unit_price || 0,
+          term: p.term || 'Term 2',
+        }))
+      }
+      
+      console.log('📦 Loaded Term 2 products for Request DC:', {
+        fromDCProductDetails: fullDC.productDetails?.length || 0,
+        term2ProductsCount: term2Products.length,
+        products: term2Products
+      })
+      
+      if (term2Products.length === 0) {
+        console.warn('⚠️ No Term 2 products found for Request DC dialog')
+        toast.warning('No Term 2 products found. Please ensure products are added with Term 2.')
+      }
+      
       setRequestDCProductRows(
         term2Products.map((p: any, idx: number) => ({
           id: String(idx + 1),
@@ -573,13 +622,21 @@ export default function TermWiseDCPage() {
                 const customerName = d.customerName || d.saleId?.customerName || (typeof d.dcOrderId === 'object' && d.dcOrderId?.school_name) || 'Unknown Client'
                 const phone = d.customerPhone || (typeof d.dcOrderId === 'object' && d.dcOrderId?.contact_mobile) || '-'
                 
-                // Get products - prioritize productDetails (Term 2 only), then dcOrderId products (Term 2 only), then fallback
+                // Get products with quantities and unit prices - prioritize productDetails (Term 2 only), then dcOrderId products (Term 2 only), then fallback
                 let product = '-'
+                let productDetails: any[] = []
+                
                 if (d.productDetails && Array.isArray(d.productDetails) && d.productDetails.length > 0) {
                   // Filter to only Term 2 products
                   const term2Products = d.productDetails.filter((p: any) => (p.term || 'Term 1') === 'Term 2')
                   if (term2Products.length > 0) {
-                    product = term2Products.map((p: any) => p.product || p.productName || '').filter(Boolean).join(', ')
+                    productDetails = term2Products
+                    product = term2Products.map((p: any) => {
+                      const name = p.product || p.productName || ''
+                      const qty = p.quantity || p.strength || 0
+                      const price = p.unit_price || p.price || 0
+                      return `${name}${qty ? ` (Qty: ${qty})` : ''}${price ? ` @ ₹${price}` : ''}`
+                    }).filter(Boolean).join(', ')
                   }
                 }
                 
@@ -587,7 +644,13 @@ export default function TermWiseDCPage() {
                   // Filter to only Term 2 products
                   const term2Products = d.dcOrderId.products.filter((p: any) => (p.term || 'Term 1') === 'Term 2')
                   if (term2Products.length > 0) {
-                    product = term2Products.map((p: any) => p.product_name || p.product || '').filter(Boolean).join(', ')
+                    productDetails = term2Products
+                    product = term2Products.map((p: any) => {
+                      const name = p.product_name || p.product || ''
+                      const qty = p.quantity || 0
+                      const price = p.unit_price || 0
+                      return `${name}${qty ? ` (Qty: ${qty})` : ''}${price ? ` @ ₹${price}` : ''}`
+                    }).filter(Boolean).join(', ')
                   }
                 }
                 

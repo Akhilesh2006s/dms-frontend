@@ -381,8 +381,39 @@ export default function TermWiseDCPage() {
       
       setEditFormData(formData)
       
+      // Load products - prioritize DC's productDetails (has all details), then DcOrder products
+      let productsToShow: any[] = []
+      
+      // First try to get from DC's productDetails (most accurate - has all product details)
+      if (dc.productDetails && Array.isArray(dc.productDetails) && dc.productDetails.length > 0) {
+        // Get unit prices from DcOrder products if available
+        productsToShow = dc.productDetails.map((p: any) => {
+          // Try to match with DcOrder product to get unit_price
+          const matchingDcOrderProduct = (dcOrder.products || []).find((op: any) => {
+            const orderProductName = (op.product_name || '').toLowerCase().trim()
+            const dcProductName = (p.product || p.product_name || '').toLowerCase().trim()
+            return orderProductName === dcProductName
+          })
+          
+          return {
+            product_name: p.product || p.product_name || '',
+            quantity: p.quantity || p.strength || 0,
+            unit_price: matchingDcOrderProduct?.unit_price || p.unit_price || p.price || 0,
+            term: p.term || 'Term 1',
+          }
+        })
+      } else if (dcOrder.products && Array.isArray(dcOrder.products) && dcOrder.products.length > 0) {
+        // Fallback to DcOrder products (initial values)
+        productsToShow = dcOrder.products.map((p: any) => ({
+          product_name: p.product_name || '',
+          quantity: p.quantity || 0,
+          unit_price: p.unit_price || 0,
+          term: p.term || 'Term 1',
+        }))
+      }
+      
       setEditProductRows(
-        (dcOrder.products || []).map((p: any, idx: number) => ({
+        productsToShow.map((p: any, idx: number) => ({
           id: String(idx + 1),
           product_name: p.product_name || '',
           quantity: p.quantity || 0,
@@ -464,6 +495,9 @@ export default function TermWiseDCPage() {
     }
 
     try {
+      // Fetch the full DC data to get productDetails (most accurate)
+      const fullDC = await apiRequest<any>(`/dc/${dc._id}`).catch(() => dc)
+      
       // Fetch the latest DC Order data (includes changes from Edit PO)
       const dcOrder = await apiRequest<any>(`/dc-orders/${dcOrderId}`)
       
@@ -491,8 +525,49 @@ export default function TermWiseDCPage() {
       
       setRequestDCFormData(formData)
       
-      // Load only Term 2 products from DC Order (includes changes from Edit PO)
-      const term2Products = (dcOrder.products || []).filter((p: any) => (p.term || 'Term 1') === 'Term 2')
+      // Load Term 2 products - prioritize DC's productDetails (has all details), then DcOrder products
+      let term2Products: any[] = []
+      
+      // First try to get from full DC's productDetails (most accurate - has all product details)
+      if (fullDC.productDetails && Array.isArray(fullDC.productDetails) && fullDC.productDetails.length > 0) {
+        const dcTerm2Products = fullDC.productDetails.filter((p: any) => (p.term || 'Term 1') === 'Term 2')
+        if (dcTerm2Products.length > 0) {
+          // Get unit prices from DcOrder products if available
+          term2Products = dcTerm2Products.map((p: any) => {
+            // Try to match with DcOrder product to get unit_price
+            const matchingDcOrderProduct = (dcOrder.products || []).find((op: any) => {
+              const orderProductName = (op.product_name || '').toLowerCase().trim()
+              const dcProductName = (p.product || p.product_name || '').toLowerCase().trim()
+              return orderProductName === dcProductName && (op.term || 'Term 1') === 'Term 2'
+            })
+            
+            return {
+              product_name: p.product || p.product_name || '',
+              quantity: p.quantity || p.strength || 0,
+              unit_price: matchingDcOrderProduct?.unit_price || p.unit_price || p.price || 0,
+              term: p.term || 'Term 2',
+            }
+          })
+        }
+      }
+      
+      // Fallback to DcOrder products if DC productDetails not available or no Term 2 products found
+      if (term2Products.length === 0) {
+        const dcOrderTerm2Products = (dcOrder.products || []).filter((p: any) => (p.term || 'Term 1') === 'Term 2')
+        term2Products = dcOrderTerm2Products.map((p: any) => ({
+          product_name: p.product_name || '',
+          quantity: p.quantity || 0,
+          unit_price: p.unit_price || 0,
+          term: p.term || 'Term 2',
+        }))
+      }
+      
+      console.log('📦 Loaded Term 2 products for Request DC:', {
+        fromDCProductDetails: fullDC.productDetails?.length || 0,
+        term2ProductsCount: term2Products.length,
+        products: term2Products
+      })
+      
       setRequestDCProductRows(
         term2Products.map((p: any, idx: number) => ({
           id: String(idx + 1),
@@ -528,6 +603,7 @@ export default function TermWiseDCPage() {
       }
 
       // Convert product rows to productDetails format (only Term 2 products)
+      // Include unit_price so it's preserved when DC goes to Closed Sales
       const productDetails = requestDCProductRows
         .filter(row => (row.term || 'Term 1') === 'Term 2')
         .map(row => ({
@@ -540,6 +616,7 @@ export default function TermWiseDCPage() {
           strength: row.quantity,
           level: 'L2',
           term: 'Term 2', // Ensure Term 2
+          unit_price: row.unit_price || 0, // Preserve unit price from Edit PO
         }))
 
       // Update DC - keep status as 'scheduled_for_later' so it still appears in Term-Wise DC
@@ -559,12 +636,17 @@ export default function TermWiseDCPage() {
         body: JSON.stringify(dcPayload),
       })
 
-      // Update DcOrder status to 'dc_requested' so it appears in Closed Sales page
+      // Update DcOrder status to 'dc_requested' and store request data with unit prices
       try {
         const updateResponse = await apiRequest(`/dc-orders/${dcOrderId}`, {
           method: 'PUT',
           body: JSON.stringify({
             status: 'dc_requested',
+            dcRequestData: {
+              productDetails: productDetails, // Includes unit_price
+              requestedQuantity: totalQuantity,
+              requestedAt: new Date().toISOString(),
+            },
           }),
         })
         console.log('✅ DcOrder status updated to dc_requested:', {
@@ -1157,15 +1239,9 @@ export default function TermWiseDCPage() {
                             <Input
                               type="number"
                               value={row.unit_price}
-                              onChange={(e) => {
-                                const updated = [...editProductRows]
-                                updated[idx].unit_price = Number(e.target.value) || 0
-                                setEditProductRows(updated)
-                                // Update total amount
-                                const newTotal = updated.reduce((sum, p) => sum + (p.quantity * p.unit_price), 0)
-                                setEditFormData({ ...editFormData, total_amount: newTotal })
-                              }}
-                              className="h-9"
+                              readOnly
+                              disabled
+                              className="h-9 bg-neutral-50"
                             />
                           </TableCell>
                           <TableCell>

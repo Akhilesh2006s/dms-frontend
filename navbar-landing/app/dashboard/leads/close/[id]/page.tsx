@@ -231,6 +231,10 @@ export default function CloseLeadPage() {
             const productData = leadData.products?.find((p: any) => 
               (p.product_name || p.product || p) === product
             )
+            // Load saved quantity and unit_price if available
+            const savedQuantity = productData?.quantity || 0
+            const savedUnitPrice = productData?.unit_price || 0
+            
             return {
               id: Date.now().toString() + productIdx,
               product: product,
@@ -240,10 +244,10 @@ export default function CloseLeadPage() {
               category: hasProductCategories(product)
                 ? (getProductCategories(product)[0] || '')
                 : (leadData.school_type === 'Existing' ? 'Existing Students' : 'New Students'),
-              quantity: 1,
-              strength: 0,
-              price: 0,
-              total: 0,
+              quantity: savedQuantity || 1,
+              strength: savedQuantity || 0, // Use saved quantity as default strength
+              price: savedUnitPrice || 0, // Use saved unit_price as default price
+              total: (savedQuantity || 0) * (savedUnitPrice || 0),
               level: productData?.level || getDefaultLevel(product),
               specs: 'Regular',
               isParentRow: true,
@@ -258,9 +262,10 @@ export default function CloseLeadPage() {
           setProductDetails(parentRows)
           
           // Auto-generate rows for each parent after a short delay
+          // Pass saved quantity and unit_price to be used as defaults
           setTimeout(() => {
             parentRows.forEach(parent => {
-              generateRowsFromRange(parent.id, parent.fromClass || '1', parent.toClass || '10')
+              generateRowsFromRange(parent.id, parent.fromClass || '1', parent.toClass || '10', parent.strength, parent.price)
             })
           }, 100)
         }
@@ -384,7 +389,8 @@ export default function CloseLeadPage() {
   }
   
   // Function to generate rows when From/To class range changes
-  const generateRowsFromRange = (parentId: string, fromClass: string, toClass: string) => {
+  // Optional defaultStrength and defaultPrice can be passed to populate saved values
+  const generateRowsFromRange = (parentId: string, fromClass: string, toClass: string, defaultStrength: number = 0, defaultPrice: number = 0) => {
     setProductDetails(currentDetails => {
       const parentRow = currentDetails.find(p => p.id === parentId)
       if (!parentRow || !parentRow.isParentRow) return currentDetails
@@ -422,10 +428,10 @@ export default function CloseLeadPage() {
               product: parentRow.product,
               class: classNum.toString(),
               category: category,
-              quantity: 1,
-              strength: 0,
-              price: 0,
-              total: 0,
+              quantity: defaultStrength || 1,
+              strength: defaultStrength || 0, // Use default strength if provided
+              price: defaultPrice || 0, // Use default price if provided
+              total: (defaultStrength || 0) * (defaultPrice || 0),
               level: parentRow.level,
               specs: spec,
               subject: subjectDisplay, // Combined subjects or undefined
@@ -582,9 +588,16 @@ export default function CloseLeadPage() {
     }
     
     // Validate product details (excluding parent rows)
-    const invalidProducts = actualProductDetails.filter(p => !p.product || !p.strength)
+    // Check for product, strength (quantity), and price (unit price)
+    const invalidProducts = actualProductDetails.filter(p => 
+      !p.product || 
+      !p.strength || 
+      p.strength <= 0 || 
+      !p.price || 
+      p.price <= 0
+    )
     if (invalidProducts.length > 0) {
-      toast.error('Please fill in Product and Strength for all products')
+      toast.error('Please fill in Product, Quantity (Strength), and Unit Price for all products. Both Quantity and Unit Price are mandatory and must be greater than 0.')
       return
     }
     
@@ -1329,8 +1342,8 @@ export default function CloseLeadPage() {
                         <th className="px-3 py-2 text-left">Category</th>
                         <th className="px-3 py-2 text-left">Specs</th>
                         <th className="px-3 py-2 text-left">Subject</th>
-                        <th className="px-3 py-2 text-left">Strength</th>
-                        <th className="px-3 py-2 text-left">Price</th>
+                        <th className="px-3 py-2 text-left">Quantity (Strength) *</th>
+                        <th className="px-3 py-2 text-left">Unit Price *</th>
                         <th className="px-3 py-2 text-left">Total</th>
                         <th className="px-3 py-2 text-left">Level</th>
                         <th className="px-3 py-2 text-left">Action</th>
@@ -1369,8 +1382,9 @@ export default function CloseLeadPage() {
                               value={pd.strength}
                               onChange={(e) => updateProductDetail(pd.id, 'strength', Number(e.target.value))}
                               className="w-20 h-8"
-                              min="0"
+                              min="1"
                               placeholder="0"
+                              required
                             />
                           </td>
                           <td className="px-3 py-2">
@@ -1379,9 +1393,10 @@ export default function CloseLeadPage() {
                               value={pd.price}
                               onChange={(e) => updateProductDetail(pd.id, 'price', Number(e.target.value))}
                               className="w-24 h-8"
-                              min="0"
+                              min="0.01"
                               placeholder="0"
                               step="0.01"
+                              required
                             />
                           </td>
                           <td className="px-3 py-2 font-medium">

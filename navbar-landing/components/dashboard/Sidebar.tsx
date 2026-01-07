@@ -17,7 +17,7 @@ import {
   CalendarCheck2,
   GraduationCap,
   Boxes,
-  RotateCcw,
+  RefreshCw,
   CreditCard,
   Calculator,
   BarChart3,
@@ -105,7 +105,7 @@ function HoverTooltip({ item, pathname, onClose }: { item: NavItem; pathname: st
                       : 'text-neutral-700 hover:bg-neutral-50 hover:text-neutral-900'
                   }`}
                 >
-                  {c.icon && <c.icon size={14} className="flex-shrink-0" />}
+                  {c.icon && typeof c.icon === 'function' && <c.icon size={14} className="flex-shrink-0" />}
                   <span>{c.label}</span>
                 </Link>
               </li>
@@ -184,7 +184,7 @@ const NAV: NavItem[] = [
   },
   {
     label: 'Stock Returns',
-    icon: RotateCcw,
+    icon: RefreshCw,
     children: [
       { label: 'Employee Returns List', href: '/dashboard/returns/employees' },
       { label: 'Warehouse Returns List', href: '/dashboard/returns/warehouse' },
@@ -282,6 +282,8 @@ export function Sidebar() {
   const isExecutiveManager = user?.role === 'Executive Manager'
   const isExecutive = user?.role === 'Executive'
   const isTrainer = user?.role === 'Trainer'
+  const isWarehouseExecutive = user?.role === 'Warehouse Executive'
+  const isWarehouseManager = user?.role === 'Warehouse Manager'
 
   // Add employee leave menu if employee, replace admin Leave Management
   const employeeLeavesMenu: NavItem = {
@@ -294,7 +296,7 @@ export function Sidebar() {
   }
 
   const leaveManagementIndex = NAV.findIndex(i => i.label === 'Leave Management')
-  let finalNav: NavItem[]
+  let finalNav: NavItem[] = []
   if (isEmployee) {
     finalNav = [
       { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
@@ -335,6 +337,11 @@ export function Sidebar() {
         label: 'Employee Sample',
         icon: Package,
         href: '/dashboard/samples/request',
+      },
+      {
+        label: 'Stock Returns',
+        icon: RefreshCw,
+        href: '/dashboard/returns/executive',
       },
       employeeLeavesMenu,
       { label: 'Sign out', icon: LogOut, href: '/auth/login' },
@@ -577,6 +584,28 @@ export function Sidebar() {
       },
       { label: 'Sign out', icon: LogOut, href: '/auth/login' },
     ]
+  } else if (isWarehouseExecutive) {
+    // For Warehouse Executive role, show only Dashboard and Stock Returns
+    finalNav = [
+      { label: 'My Dashboard', icon: LayoutDashboard, href: '/dashboard' },
+      {
+        label: 'Stock Returns',
+        icon: RefreshCw,
+        href: '/dashboard/returns/warehouse-executive',
+      },
+      { label: 'Sign out', icon: LogOut, href: '/auth/login' },
+    ]
+  } else if (isWarehouseManager) {
+    // For Warehouse Manager role, show only Dashboard and Stock Returns
+    finalNav = [
+      { label: 'My Dashboard', icon: LayoutDashboard, href: '/dashboard' },
+      {
+        label: 'Stock Returns',
+        icon: RefreshCw,
+        href: '/dashboard/returns/warehouse-manager',
+      },
+      { label: 'Sign out', icon: LogOut, href: '/auth/login' },
+    ]
   } else {
     // For all other roles (Admin, Super Admin, etc.), show all menu items except "DC listed" (only for Manager and Coordinator) and "Term-Wise DC"
     finalNav = NAV.map(item => {
@@ -739,7 +768,7 @@ export function Sidebar() {
                     }`}
                     title={!sidebarOpen ? item.label : ''}
                   >
-                    {item.icon && <item.icon size={18} className="text-white/60 group-hover:text-white flex-shrink-0 transition-colors" />}
+                    {item.icon && typeof item.icon === 'function' && <item.icon size={18} className="text-white/60 group-hover:text-white flex-shrink-0 transition-colors" />}
                     {sidebarOpen && (
                       <span className="text-[13px] text-white/70 group-hover:text-white transition-colors">{item.label}</span>
                     )}
@@ -770,7 +799,7 @@ export function Sidebar() {
                                     : 'text-white/50 hover:bg-white/5 hover:text-white/80'
                                 }`}
                               >
-                                {c.icon && <c.icon size={14} className="flex-shrink-0" />}
+                                {c.icon && typeof c.icon === 'function' && <c.icon size={14} className="flex-shrink-0" />}
                                 <span>{c.label}</span>
                               </Link>
                             </li>
@@ -794,7 +823,7 @@ export function Sidebar() {
                       }`}
                       title={!sidebarOpen ? item.label : ''}
                     >
-                      {item.icon && <item.icon size={18} className="text-red-400/60 group-hover:text-red-400 flex-shrink-0 transition-colors" />}
+                      {item.icon && typeof item.icon === 'function' && <item.icon size={18} className="text-red-400/60 group-hover:text-red-400 flex-shrink-0 transition-colors" />}
                       {sidebarOpen && (
                         <span className="text-[13px] text-red-400/70 group-hover:text-red-400 transition-colors">{item.label}</span>
                       )}
@@ -826,7 +855,7 @@ export function Sidebar() {
                       }`}
                       title={!sidebarOpen ? item.label : ''}
                     >
-                      {item.icon && <item.icon size={18} className={`flex-shrink-0 transition-colors ${
+                      {item.icon && typeof item.icon === 'function' && <item.icon size={18} className={`flex-shrink-0 transition-colors ${
                         pathname === item.href ? 'text-white' : 'text-white/60 group-hover:text-white'
                       }`} />}
                       {sidebarOpen && (

@@ -40,21 +40,15 @@ type DcOrder = {
   status?: string
   dcRequestData?: any
   isLead?: boolean // Flag to identify if this is a converted lead
-  // Delivery and Address fields
-  property_number?: string
-  floor?: string
-  tower_block?: string
-  nearby_landmark?: string
-  area?: string
-  city?: string
+  // Transport fields
+  transport_name?: string
+  transport_location?: string
+  transportation_landmark?: string
   pincode?: string
   pendingEdit?: {
-    property_number?: string
-    floor?: string
-    tower_block?: string
-    nearby_landmark?: string
-    area?: string
-    city?: string
+    transport_name?: string
+    transport_location?: string
+    transportation_landmark?: string
     pincode?: string
     status?: string
   }
@@ -135,9 +129,10 @@ export default function ClosedSalesPage() {
     strength: number
     level: string
     term: string
+    unit_price: number
   }
   const [productRows, setProductRows] = useState<ProductRow[]>([
-    { id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1', term: 'Term 1' }
+    { id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1', term: 'Term 1', unit_price: 0 }
   ])
   
   const availableClasses = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']
@@ -168,103 +163,39 @@ export default function ClosedSalesPage() {
         }
         
         // Reduced limit for faster initial load - can be increased if needed
-        // Also fetch Term 2 split DCs (scheduled_for_later) that are linked to dc_requested DcOrders
-        const [completedRes, savedRes, dcRequestedRes, dcAcceptedRes, term2DCsRes] = await Promise.all([
+        // Fetch DcOrders with various statuses that should appear in Closed Sales
+        // Note: Term 2 split DCs (status 'scheduled_for_later') are NOT fetched here - they only appear in Term-Wise DC
+        const [completedRes, savedRes, dcRequestedRes, dcAcceptedRes] = await Promise.all([
           apiCallWithTimeout(`/dc-orders?status=completed&limit=500`),
           apiCallWithTimeout(`/dc-orders?status=saved&limit=500`),
           apiCallWithTimeout(`/dc-orders?status=dc_requested&limit=500`),
           apiCallWithTimeout(`/dc-orders?status=dc_accepted&limit=500`),
-          apiCallWithTimeout(`/dc?status=scheduled_for_later&limit=500`).catch(() => ({ data: [] })) // Don't fail if this fails
         ])
         // Extract data array from paginated response or use direct array
         const completedArray = Array.isArray(completedRes) ? completedRes : (completedRes?.data || [])
         const savedArray = Array.isArray(savedRes) ? savedRes : (savedRes?.data || [])
         const dcRequestedArray = Array.isArray(dcRequestedRes) ? dcRequestedRes : (dcRequestedRes?.data || [])
         const dcAcceptedArray = Array.isArray(dcAcceptedRes) ? dcAcceptedRes : (dcAcceptedRes?.data || [])
-        const term2DCsArray = Array.isArray(term2DCsRes) ? term2DCsRes : (term2DCsRes?.data || [])
         
-        console.log('📊 Loaded DcOrders:', {
+        console.log('📊 Loaded DcOrders for Closed Sales:', {
           completed: completedArray.length,
           saved: savedArray.length,
           dc_requested: dcRequestedArray.length,
-          dc_accepted: dcAcceptedArray.length,
-          term2_split_dcs: term2DCsArray.length
+          dc_accepted: dcAcceptedArray.length
         })
-        console.log('📋 dc_requested items:', dcRequestedArray.map((d: any) => ({
+        console.log('📋 dc_requested items (includes Term 1 DCs from split DCs):', dcRequestedArray.map((d: any) => ({
           id: d._id,
           school_name: d.school_name,
           status: d.status,
           updatedAt: d.updatedAt || d.updated_at
         })))
-        console.log('📋 Term 2 split DCs:', term2DCsArray.map((d: any) => ({
-          id: d._id,
-          dcOrderId: d.dcOrderId?._id || d.dcOrderId,
-          customerName: d.customerName,
-          status: d.status
-        })))
         
-        // Get DcOrder IDs that have Term 2 split DCs
-        const dcOrderIdsWithTerm2DC = new Set(
-          term2DCsArray
-            .map((dc: any) => {
-              const dcOrderId = dc.dcOrderId?._id || dc.dcOrderId
-              return dcOrderId ? String(dcOrderId) : null
-            })
-            .filter(Boolean)
-        )
-        
-        console.log('🔗 DcOrder IDs with Term 2 split DCs:', Array.from(dcOrderIdsWithTerm2DC))
-        
-        // Filter out DcOrders that have Term 2 split DCs - we'll show the DCs instead
-        const dcRequestedWithoutTerm2 = dcRequestedArray.filter((d: any) => {
-          const hasTerm2DC = dcOrderIdsWithTerm2DC.has(String(d._id))
-          if (hasTerm2DC) {
-            console.log(`⚠️ Filtering out DcOrder ${d._id} (${d.school_name}) - has Term 2 split DC`)
-          }
-          return !hasTerm2DC
-        })
-        
-        // Convert Term 2 DCs to DcOrder-like format for display in Closed Sales
-        const term2DCsAsDeals: DcOrder[] = term2DCsArray.map((dc: any) => {
-          const dcOrderId = dc.dcOrderId?._id || dc.dcOrderId
-          // Find the original DcOrder to get school details
-          const originalDcOrder = dcRequestedArray.find((d: any) => String(d._id) === String(dcOrderId))
-          
-          // Convert DC productDetails to DcOrder products format
-          const products = (dc.productDetails || []).map((p: any) => ({
-            product_name: p.product || p.product_name || 'Unknown',
-            quantity: p.quantity || p.strength || 0,
-            unit_price: p.unit_price || 0,
-            term: p.term || 'Term 2',
-          }))
-          
-          return {
-            _id: dc._id, // Use DC ID as the unique identifier
-            dcOrderId: dcOrderId, // Keep reference to original DcOrder
-            school_name: dc.customerName || originalDcOrder?.school_name || '',
-            contact_person: originalDcOrder?.contact_person || '',
-            contact_mobile: dc.customerPhone || originalDcOrder?.contact_mobile || '',
-            email: dc.customerEmail || originalDcOrder?.email || '',
-            address: dc.customerAddress || originalDcOrder?.address || '',
-            location: originalDcOrder?.location || '',
-            zone: originalDcOrder?.zone || '',
-            school_type: originalDcOrder?.school_type || '',
-            products: products.length > 0 ? products : (originalDcOrder?.products || []),
-            assigned_to: originalDcOrder?.assigned_to || undefined,
-            created_at: dc.createdAt || originalDcOrder?.created_at,
-            createdAt: dc.createdAt || originalDcOrder?.createdAt,
-            remarks: dc.dcRemarks || originalDcOrder?.remarks || '',
-            status: 'dc_requested', // Show as dc_requested since DcOrder has this status
-            dc_code: originalDcOrder?.dc_code || undefined,
-            pod_proof_url: dc.poPhotoUrl || dc.poDocument || originalDcOrder?.pod_proof_url || undefined,
-            isTerm2SplitDC: true, // Flag to identify this is a Term 2 split DC
-            term2DCId: dc._id, // Store the actual DC ID
-          } as DcOrder
-        })
-        
-        console.log(`✅ Converted ${term2DCsAsDeals.length} Term 2 split DCs to DcOrder format`)
-        
-        data = [...completedArray, ...savedArray, ...dcRequestedWithoutTerm2, ...dcAcceptedArray, ...term2DCsAsDeals].filter((d: any) => 
+        // When a DC is split:
+        // - DC 1 (Term 1 products) is represented by the DcOrder with status 'dc_requested' -> shows in Closed Sales
+        // - DC 2 (Term 2 products) has status 'scheduled_for_later' -> shows ONLY in Term-Wise DC (NOT in Closed Sales)
+        // So we keep all dc_requested DcOrders - they represent Term 1 DCs (even if split)
+        // Term 2 split DCs should NOT appear in Closed Sales, only in Term-Wise DC
+        data = [...completedArray, ...savedArray, ...dcRequestedArray, ...dcAcceptedArray].filter((d: any) => 
           d.status !== 'dc_approved' && d.status !== 'dc_sent_to_senior'
         )
       } catch (e) {
@@ -392,26 +323,36 @@ export default function ClosedSalesPage() {
             term2_split: term2DCsArray.length
           })
         
-          // Build map for DcOrders - prioritize Term 2 split DCs (scheduled_for_later)
+          // Build map for DcOrders - prioritize Term 1 DCs (not Term 2) for Closed Sales display
           dealIds.forEach((dealId: string) => {
-            // First, check for Term 2 split DC (scheduled_for_later) - these are the split DCs
-            const term2DC = term2DCsArray.find((dc: any) => {
+            // Find all DCs linked to this DcOrder
+            const relatedDCs = allDCsArray.filter((dc: any) => {
               const dcOrderId = dc.dcOrderId?._id || dc.dcOrderId
               return dcOrderId === dealId || (typeof dcOrderId === 'string' && dcOrderId === dealId)
             })
             
-            if (term2DC) {
-              // Use Term 2 split DC if it exists
-              dcMap[dealId] = term2DC
-              console.log(`✅ Found Term 2 split DC for DcOrder ${dealId}:`, term2DC._id)
-            } else {
-              // Otherwise, use any other DC linked to this DcOrder
-            const relatedDC = allDCsArray.find((dc: any) => {
-              const dcOrderId = dc.dcOrderId?._id || dc.dcOrderId
-              return dcOrderId === dealId || (typeof dcOrderId === 'string' && dcOrderId === dealId)
-            })
-            if (relatedDC) {
-              dcMap[dealId] = relatedDC
+            if (relatedDCs.length > 0) {
+              // If there are multiple DCs (split case), prioritize Term 1 DC (not scheduled_for_later)
+              // Term 1 DCs have status like 'pending_dc', 'dc_requested', etc.
+              // Term 2 DCs have status 'scheduled_for_later'
+              const term1DC = relatedDCs.find((dc: any) => dc.status !== 'scheduled_for_later')
+              const term2DC = relatedDCs.find((dc: any) => dc.status === 'scheduled_for_later')
+              
+              if (term1DC) {
+                // Use Term 1 DC for Closed Sales (shows Term 1 products)
+                dcMap[dealId] = term1DC
+                console.log(`✅ Found Term 1 DC for DcOrder ${dealId}:`, term1DC._id, `(status: ${term1DC.status})`)
+                if (term2DC) {
+                  console.log(`   Also has Term 2 DC:`, term2DC._id, `(will appear in Term-Wise DC)`)
+                }
+              } else if (term2DC) {
+                // Fallback: if only Term 2 DC exists, use it (shouldn't happen for Closed Sales, but handle it)
+                dcMap[dealId] = term2DC
+                console.log(`⚠️ Only Term 2 DC found for DcOrder ${dealId}:`, term2DC._id)
+              } else {
+                // Use first DC found
+                dcMap[dealId] = relatedDCs[0]
+                console.log(`✅ Found DC for DcOrder ${dealId}:`, relatedDCs[0]._id)
               }
             }
           })
@@ -509,6 +450,7 @@ export default function ClosedSalesPage() {
       })
       
       // Remove duplicates based on school_name + contact_mobile
+      // BUT: For split DCs (Term 1 and Term 2), allow both entries to appear separately
       // Prioritize: dc_requested > dc_accepted > other statuses
       // Keep the most recent entry (already sorted, so first occurrence is most recent)
       const seen = new Map<string, DcOrder>()
@@ -518,12 +460,48 @@ export default function ClosedSalesPage() {
         // Create a unique key from school_name and contact_mobile (case-insensitive)
         const schoolName = (item.school_name || '').toLowerCase().trim()
         const contactMobile = (item.contact_mobile || '').trim()
-        const uniqueKey = `${schoolName}|${contactMobile}`
+        
+        // Check if this is a split DC (has dcRequestData.isSplit or term2DCId)
+        const dcRequestData = (item as any).dcRequestData || {}
+        const isSplit = dcRequestData.isSplit || dcRequestData.term2DCId
+        const term2DCId = dcRequestData.term2DCId
+        
+        // For split DCs, determine if this is Term 1 or Term 2 entry
+        // Priority: Check dcRequestData.productDetails (most recent request)
+        // Fallback: Check item.products (from initial split)
+        let isTerm2Entry = false
+        if (isSplit) {
+          // First check dcRequestData.productDetails (what was requested most recently)
+          if (dcRequestData.productDetails && Array.isArray(dcRequestData.productDetails) && dcRequestData.productDetails.length > 0) {
+            const allTerm2 = dcRequestData.productDetails.every((p: any) => (p.term || 'Term 1') === 'Term 2')
+            const hasTerm1 = dcRequestData.productDetails.some((p: any) => (p.term || 'Term 1') === 'Term 1' || p.term === 'Both')
+            // If all products are Term 2 and no Term 1 products, this is the Term 2 entry
+            isTerm2Entry = allTerm2 && !hasTerm1
+          } 
+          // If dcRequestData doesn't have productDetails or it's empty, check item.products
+          // This handles the case where Term 1 DC was requested first (products array has Term 1)
+          else if (item.products && Array.isArray(item.products) && item.products.length > 0) {
+            const hasTerm2Only = item.products.every((p: any) => (p.term || 'Term 1') === 'Term 2')
+            const hasTerm1 = item.products.some((p: any) => (p.term || 'Term 1') === 'Term 1' || p.term === 'Both')
+            // If all products are Term 2 and no Term 1 products, this is the Term 2 entry
+            isTerm2Entry = hasTerm2Only && !hasTerm1
+          }
+          // If we have term2DCId, this might be the Term 1 entry (Term 2 DC exists separately)
+          // But we need to check products to be sure
+        }
+        
+        // For split DCs, include term indicator in unique key to allow both entries
+        const uniqueKey = isSplit 
+          ? `${schoolName}|${contactMobile}|${isTerm2Entry ? 'term2' : 'term1'}`
+          : `${schoolName}|${contactMobile}`
         
         // Only add if we haven't seen this combination before
         if (!seen.has(uniqueKey)) {
           seen.set(uniqueKey, item)
           uniqueData.push(item)
+          if (isSplit) {
+            console.log(`✅ Added ${isTerm2Entry ? 'Term 2' : 'Term 1'} split DC entry: ${item.school_name} - ${item.contact_mobile}`)
+          }
         } else {
           // Check if the new item has a higher priority status than the existing one
           const existing = seen.get(uniqueKey)!
@@ -540,7 +518,22 @@ export default function ClosedSalesPage() {
             const index = uniqueData.findIndex(d => {
               const dSchoolName = (d.school_name || '').toLowerCase().trim()
               const dContactMobile = (d.contact_mobile || '').trim()
-              return `${dSchoolName}|${dContactMobile}` === uniqueKey
+              const dDcRequestData = (d as any).dcRequestData || {}
+              const dIsSplit = dDcRequestData.isSplit || dDcRequestData.term2DCId
+              let dIsTerm2Entry = false
+              if (dIsSplit && dDcRequestData.productDetails && Array.isArray(dDcRequestData.productDetails)) {
+                const dAllTerm2 = dDcRequestData.productDetails.every((p: any) => (p.term || 'Term 1') === 'Term 2')
+                const dHasTerm1 = dDcRequestData.productDetails.some((p: any) => (p.term || 'Term 1') === 'Term 1' || p.term === 'Both')
+                dIsTerm2Entry = dAllTerm2 && !dHasTerm1
+              } else if (dIsSplit && d.products && Array.isArray(d.products)) {
+                const dHasTerm2Only = d.products.every((p: any) => (p.term || 'Term 1') === 'Term 2')
+                const dHasTerm1 = d.products.some((p: any) => (p.term || 'Term 1') === 'Term 1' || p.term === 'Both')
+                dIsTerm2Entry = dHasTerm2Only && !dHasTerm1
+              }
+              const dUniqueKey = dIsSplit 
+                ? `${dSchoolName}|${dContactMobile}|${dIsTerm2Entry ? 'term2' : 'term1'}`
+                : `${dSchoolName}|${dContactMobile}`
+              return dUniqueKey === uniqueKey
             })
             if (index !== -1) {
               uniqueData[index] = item
@@ -623,15 +616,15 @@ export default function ClosedSalesPage() {
             school_name: term2DC.customerName || deal.school_name || '',
             contact_person: originalDcOrder?.contact_person || deal.contact_person || '',
             contact_mobile: term2DC.customerPhone || originalDcOrder?.contact_mobile || deal.contact_mobile || '',
-            email: term2DC.customerEmail || originalDcOrder?.email || deal.email || '',
-            address: term2DC.customerAddress || originalDcOrder?.address || deal.address || '',
+            email: (term2DC as any).customerEmail || originalDcOrder?.email || deal.email || '',
+            address: (term2DC as any).customerAddress || originalDcOrder?.address || deal.address || '',
             location: originalDcOrder?.location || deal.location || '',
             zone: originalDcOrder?.zone || deal.zone || '',
             school_type: originalDcOrder?.school_type || deal.school_type || '',
             products: term2DC.productDetails || originalDcOrder?.products || deal.products || [],
             assigned_to: originalDcOrder?.assigned_to || deal.assigned_to,
             remarks: term2DC.dcRemarks || originalDcOrder?.remarks || deal.remarks || '',
-            pod_proof_url: term2DC.poPhotoUrl || term2DC.poDocument || originalDcOrder?.pod_proof_url || deal.pod_proof_url,
+            pod_proof_url: term2DC.poPhotoUrl || (term2DC as any).poDocument || originalDcOrder?.pod_proof_url || deal.pod_proof_url,
             status: 'dc_requested', // Keep as dc_requested
             term2DCId: term2DC._id, // Store the actual DC ID
             isTerm2SplitDC: true,
@@ -711,6 +704,11 @@ export default function ClosedSalesPage() {
         dc_code: fullDeal.dc_code || deal.dc_code || '',
         products: fullDeal.products || deal.products || [],
         assigned_to: assignedTo,
+        // Transport fields - check pendingEdit first, then main fields
+        transport_name: fullDeal.pendingEdit?.transport_name || fullDeal.transport_name || deal.transport_name || '',
+        transport_location: fullDeal.pendingEdit?.transport_location || fullDeal.transport_location || deal.transport_location || '',
+        transportation_landmark: fullDeal.pendingEdit?.transportation_landmark || fullDeal.transportation_landmark || deal.transportation_landmark || '',
+        pincode: fullDeal.pendingEdit?.pincode || fullDeal.pincode || deal.pincode || '',
       }
       
       setSelectedDeal(normalizedDeal)
@@ -735,17 +733,18 @@ export default function ClosedSalesPage() {
         if (dcRequestData.productDetails && Array.isArray(dcRequestData.productDetails) && dcRequestData.productDetails.length > 0) {
           setProductRows(dcRequestData.productDetails.map((p: any, idx: number) => ({
             id: String(idx + 1),
-            product: p.product || '',
+            product: p.product || p.product_name || '', // Use original product name as entered
             class: p.class || '1',
             category: p.category || 'New Students',
             specs: p.specs || 'Regular',
             subject: p.subject || undefined,
-            strength: Number(p.strength) || 0,
+            strength: Number(p.strength) || Number(p.quantity) || 0,
             level: p.level || getDefaultLevel(p.product || 'Abacus'),
             term: p.term || 'Term 1',
+            unit_price: Number(p.unit_price) || Number(p.price) || 0,
           })))
         } else {
-          setProductRows([{ id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1', term: 'Term 1' }])
+          setProductRows([{ id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1', term: 'Term 1', unit_price: 0 }])
         }
       } else if (existingDCForDeal) {
         // Load full DC details to get all fields
@@ -780,7 +779,7 @@ export default function ClosedSalesPage() {
           setDcNotes(fullDC.dcNotes || '')
           
           // Load product rows from DC productDetails or DcOrder products
-          // This should match EXACTLY what the employee entered in Client DC page
+          // Use EXACT product names as they were entered when DC was requested
           if (fullDC.productDetails && Array.isArray(fullDC.productDetails) && fullDC.productDetails.length > 0) {
             console.log('=== LOADING PRODUCTS FOR CLOSED SALES ===')
             console.log('Full productDetails from DC:', JSON.stringify(fullDC.productDetails, null, 2))
@@ -793,19 +792,12 @@ export default function ClosedSalesPage() {
               // Convert to numbers - preserve 0 values, only default to 0 if null/undefined
               const strengthNum = rawStrength !== null && rawStrength !== undefined ? Number(rawStrength) : 0
               
-              // Normalize product value to match dropdown options (case-insensitive matching)
-              const rawProduct = p.product ? String(p.product).trim() : ''
-              // Use the same availableProducts array defined at component level
-              // Find matching product (case-insensitive)
-              const matchedProduct = availableProducts.find(ap => 
-                ap.toLowerCase() === rawProduct.toLowerCase() || 
-                rawProduct.toLowerCase().includes(ap.toLowerCase()) ||
-                ap.toLowerCase().includes(rawProduct.toLowerCase())
-              ) || (rawProduct || 'ABACUS')
+              // Use the original product name as entered (no matching/transformation)
+              const originalProduct = p.product || p.product_name || 'ABACUS'
               
               const productRow = {
               id: String(idx + 1),
-                product: matchedProduct, // Use matched product for dropdown
+                product: originalProduct, // Use original product name as entered
               class: p.class || '1',
               category: p.category || 'New Students',
                 specs: p.specs || 'Regular',
@@ -813,56 +805,37 @@ export default function ClosedSalesPage() {
                 strength: strengthNum,
                 level: rawLevel,
                 term: p.term || 'Term 1',
+                unit_price: Number(p.unit_price) || Number(p.price) || 0,
               }
               
-              console.log(`Product ${idx + 1} - Product dropdown matching:`, {
-                'p.product (raw)': p.product,
-                'rawProduct': rawProduct,
-                'matchedProduct': matchedProduct,
-                'final product (dropdown value)': productRow.product,
-              })
-              
-              console.log(`Product ${idx + 1} - product logic:`, {
+              console.log(`Product ${idx + 1} - Using original product name:`, {
                 'p.product': p.product,
-                'matchedProduct': matchedProduct,
+                'p.product_name': p.product_name,
+                'originalProduct': originalProduct,
                 'final product': productRow.product,
               })
-              console.log(`Product ${idx + 1} RAW VALUES:`, {
-                'p.strength': p.strength,
-                'p.quantity': p.quantity,
-                'p.level': p.level,
-              })
-              console.log(`Product ${idx + 1} CONVERTED:`, {
-                strengthNum,
-                level: rawLevel,
-              })
-              console.log(`Product ${idx + 1} FINAL ROW:`, JSON.stringify(productRow, null, 2))
               return productRow
             }))
           } else if (normalizedDeal.products && Array.isArray(normalizedDeal.products) && normalizedDeal.products.length > 0) {
             setProductRows(normalizedDeal.products.map((p: any, idx: number) => {
-              const rawProduct = p.product_name || p.product || 'ABACUS'
-              // Find matching product (case-insensitive)
-              const matchedProduct = availableProducts.find(ap => 
-                ap.toLowerCase() === String(rawProduct).toLowerCase() || 
-                String(rawProduct).toLowerCase().includes(ap.toLowerCase()) ||
-                ap.toLowerCase().includes(String(rawProduct).toLowerCase())
-              ) || 'ABACUS'
+              // Use original product name as entered (no matching/transformation)
+              const originalProduct = p.product_name || p.product || 'ABACUS'
               
               return {
               id: String(idx + 1),
-                product: matchedProduct, // Use matched product for dropdown
+                product: originalProduct, // Use original product name as entered
               class: '1',
               category: 'New Students',
                 specs: 'Regular',
                 subject: undefined,
-              strength: p.strength || 0,
+              strength: p.strength || p.quantity || 0,
                 level: p.level || getDefaultLevel(p.product || 'Abacus'),
                 term: p.term || 'Term 1',
+                unit_price: Number(p.unit_price) || Number(p.price) || 0,
               }
             }))
           } else {
-            setProductRows([{ id: '1', product: 'ABACUS', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1' }])
+            setProductRows([{ id: '1', product: 'ABACUS', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1', term: 'Term 1', unit_price: 0 }])
           }
         } catch (e) {
           console.error('Failed to load existing DC:', e)
@@ -874,17 +847,18 @@ export default function ClosedSalesPage() {
           if (normalizedDeal.products && Array.isArray(normalizedDeal.products) && normalizedDeal.products.length > 0) {
             setProductRows(normalizedDeal.products.map((p: any, idx: number) => ({
               id: String(idx + 1),
-              product: p.product_name || 'Abacus',
+              product: p.product_name || p.product || 'Abacus', // Use original product name as entered
               class: '1',
               category: 'New Students',
               specs: 'Regular',
               subject: undefined,
-              strength: p.strength || 0,
+              strength: p.strength || p.quantity || 0,
               level: p.level || 'L2',
               term: p.term || 'Term 1',
+              unit_price: Number(p.unit_price) || Number(p.price) || 0,
             })))
           } else {
-            setProductRows([{ id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1', term: 'Term 1' }])
+            setProductRows([{ id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1', term: 'Term 1', unit_price: 0 }])
           }
         }
       } else {
@@ -897,16 +871,18 @@ export default function ClosedSalesPage() {
         if (normalizedDeal.products && Array.isArray(normalizedDeal.products) && normalizedDeal.products.length > 0) {
           setProductRows(normalizedDeal.products.map((p: any, idx: number) => ({
             id: String(idx + 1),
-            product: p.product_name || 'Abacus',
+            product: p.product_name || p.product || 'Abacus', // Use original product name as entered
             class: '1',
             category: 'New Students',
             specs: 'Regular',
             subject: undefined,
-            strength: p.strength || 0,
+            strength: p.strength || p.quantity || 0,
             level: p.level || 'L2',
+            term: p.term || 'Term 1',
+            unit_price: Number(p.unit_price) || Number(p.price) || 0,
           })))
         } else {
-          setProductRows([{ id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1', term: 'Term 1' }])
+          setProductRows([{ id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1', term: 'Term 1', unit_price: 0 }])
         }
       }
       setOpenRaiseDCDialog(true)
@@ -927,17 +903,18 @@ export default function ClosedSalesPage() {
       if (deal.products && Array.isArray(deal.products) && deal.products.length > 0) {
         setProductRows(deal.products.map((p: any, idx: number) => ({
           id: String(idx + 1),
-          product: p.product_name || 'Abacus',
+          product: p.product_name || p.product || 'Abacus', // Use original product name as entered
           class: '1',
           category: 'New Students',
           specs: 'Regular',
           subject: undefined,
-          strength: p.strength || 0,
+          strength: p.strength || p.quantity || 0,
           level: p.level || 'L2',
           term: p.term || 'Term 1',
+          unit_price: Number(p.unit_price) || Number(p.price) || 0,
         })))
       } else {
-        setProductRows([{ id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1' }])
+        setProductRows([{ id: '1', product: 'Abacus', class: '1', category: 'New Students', specs: 'Regular', strength: 0, level: 'L1', term: 'Term 1', unit_price: 0 }])
       }
       
       const errorMessage = e?.message || 'Unknown error'
@@ -1142,6 +1119,7 @@ export default function ClosedSalesPage() {
       const finalDcDate = dcDate || (dcRequestData.dcDate ? new Date(dcRequestData.dcDate).toISOString().split('T')[0] : undefined)
       const finalDcRemarks = dcRemarks || dcRequestData.dcRemarks || undefined
       const finalDcCategory = dcCategory || dcRequestData.dcCategory || undefined
+      const finalDcNotes = dcNotes || dcRequestData.dcNotes || undefined
       
       // Determine product details: use form data if available, otherwise request data, otherwise deal's products
       let finalProductDetails: any[] = []
@@ -1162,7 +1140,7 @@ export default function ClosedSalesPage() {
       } else if (selectedDeal.products && Array.isArray(selectedDeal.products) && selectedDeal.products.length > 0) {
         // Fallback to deal's products if no form data or request data
         finalProductDetails = selectedDeal.products.map((p: any) => ({
-          product: p.product_name || 'Abacus',
+          product: p.product_name || p.product || 'Abacus', // Use original product name as entered
           class: '1',
           category: 'New Students',
           productName: p.product_name || 'Abacus',
@@ -1335,6 +1313,17 @@ export default function ClosedSalesPage() {
 
   // Get products display string
   const getProductsDisplay = (deal: DcOrder) => {
+    // First, try to get products from associated DC's productDetails (most accurate for split DCs)
+    const dc = dealDCs[deal._id] as any
+    if (dc?.productDetails && Array.isArray(dc.productDetails) && dc.productDetails.length > 0) {
+      return dc.productDetails.map((p: any) => {
+        const productName = p.product || p.product_name || 'Unknown'
+        const qty = p.quantity || p.strength || 0
+        return `${productName}${qty ? ` - ${qty}` : ''}`
+      }).join(', ')
+    }
+    
+    // Fallback to deal.products (DcOrder products)
     if (!deal.products || !Array.isArray(deal.products)) return '-'
     return deal.products.map(p => {
       // Handle both DcOrder format (product_name) and DC format (product)
@@ -1714,65 +1703,38 @@ export default function ClosedSalesPage() {
                 </div>
               </div>
 
-              {/* Delivery and Address Section */}
+              {/* Delivery and Address Section - Transport Details */}
               <div className="border-t border-slate-200 pt-6 mt-6">
                 <div className="mb-4">
                   <h3 className="font-bold text-slate-900 text-xl mb-2">Delivery and Address</h3>
-                  <p className="text-sm text-slate-500">Delivery address details for this order</p>
+                  <p className="text-sm text-slate-500">Transport details for this order</p>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <Label className="text-sm font-medium mb-2 block">Property Number</Label>
+                    <Label className="text-sm font-medium mb-2 block">Transport Name</Label>
                     <Input 
-                      value={selectedDeal.property_number || ''} 
+                      value={selectedDeal.transport_name || ''} 
                       disabled 
                       className="bg-slate-50 text-slate-900 border-slate-200 h-11 text-sm" 
-                      placeholder="Property Number"
+                      placeholder="Transport Name"
                     />
                   </div>
                   <div>
-                    <Label className="text-sm font-medium mb-2 block">Floor</Label>
+                    <Label className="text-sm font-medium mb-2 block">Transport Location</Label>
                     <Input 
-                      value={selectedDeal.floor || ''} 
+                      value={selectedDeal.transport_location || ''} 
                       disabled 
                       className="bg-slate-50 text-slate-900 border-slate-200 h-11 text-sm" 
-                      placeholder="Floor"
+                      placeholder="Transport Location"
                     />
                   </div>
                   <div>
-                    <Label className="text-sm font-medium mb-2 block">Tower/Block</Label>
+                    <Label className="text-sm font-medium mb-2 block">Transportation Landmark</Label>
                     <Input 
-                      value={selectedDeal.tower_block || ''} 
+                      value={selectedDeal.transportation_landmark || ''} 
                       disabled 
                       className="bg-slate-50 text-slate-900 border-slate-200 h-11 text-sm" 
-                      placeholder="Tower/Block"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium mb-2 block">Nearby Landmark</Label>
-                    <Input 
-                      value={selectedDeal.nearby_landmark || ''} 
-                      disabled 
-                      className="bg-slate-50 text-slate-900 border-slate-200 h-11 text-sm" 
-                      placeholder="Nearby Landmark"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium mb-2 block">Area</Label>
-                    <Input 
-                      value={selectedDeal.area || ''} 
-                      disabled 
-                      className="bg-slate-50 text-slate-900 border-slate-200 h-11 text-sm" 
-                      placeholder="Area"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium mb-2 block">City</Label>
-                    <Input 
-                      value={selectedDeal.city || ''} 
-                      disabled 
-                      className="bg-slate-50 text-slate-900 border-slate-200 h-11 text-sm" 
-                      placeholder="City"
+                      placeholder="Transportation Landmark"
                     />
                   </div>
                   <div>
@@ -1787,38 +1749,11 @@ export default function ClosedSalesPage() {
                 </div>
               </div>
 
-              {/* Products Table - Where quantities are added */}
+              {/* Products Table - Read-only display */}
               <div className="border-t border-slate-200 pt-8 mt-8">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
+                <div className="mb-6">
                     <Label className="text-xl font-bold text-slate-900">Products & Quantities</Label>
-                    <p className="text-sm text-slate-500 mt-1">Add products and specify quantities and other details</p>
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg transition-all duration-200 flex items-center gap-2"
-                    onClick={() => {
-                      const defaultProduct = 'ABACUS'
-                      const defaultCat = hasProductCategories(defaultProduct) 
-                        ? (getProductCategories(defaultProduct)[0] || defaultCategories[0])
-                        : defaultCategories[0]
-                      setProductRows([...productRows, {
-                        id: Date.now().toString(),
-                        product: defaultProduct,
-                        class: '1',
-                        category: defaultCat,
-                        specs: 'Regular',
-                        subject: undefined,
-                        strength: 0,
-                        level: getDefaultLevel(defaultProduct),
-                        term: 'Term 1'
-                      }])
-                    }}
-                  >
-                    <PlusCircle className="w-4 h-4" />
-                    Add Row
-                  </Button>
+                  <p className="text-sm text-slate-500 mt-1">Product details and quantities</p>
                 </div>
                 
                 <div className="overflow-x-auto rounded-lg border border-slate-200 shadow-sm bg-white">
@@ -1826,12 +1761,12 @@ export default function ClosedSalesPage() {
                     <thead>
                       <tr className="bg-gradient-to-r from-slate-50 to-slate-100 border-b-2 border-slate-300">
                         <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Product</th>
-                        <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Term</th>
                         <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Class</th>
                         <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Category</th>
                         <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Specs</th>
                         <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Subject</th>
                         <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Quantity</th>
+                        <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Unit Price</th>
                         <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Level</th>
                         <th className="py-4 px-5 text-center text-slate-700 font-bold text-xs uppercase tracking-wider">Action</th>
                       </tr>
@@ -1840,147 +1775,62 @@ export default function ClosedSalesPage() {
                       {productRows.map((row, idx) => (
                         <tr key={row.id} className="bg-white hover:bg-blue-50/30 transition-all duration-150 border-b border-slate-100">
                           <td className="py-4 px-5">
-                            <Select value={row.product} onValueChange={(v) => {
-                              const updated = [...productRows]
-                              updated[idx].product = v
-                              updated[idx].level = getDefaultLevel(v)
-                              // Set default category: use first product category if available, otherwise first default category
-                              if (hasProductCategories(v)) {
-                                const productCats = getProductCategories(v)
-                                updated[idx].category = productCats[0] || defaultCategories[0]
-                              } else {
-                                updated[idx].category = defaultCategories[0]
-                              }
-                              setProductRows(updated)
-                            }}>
-                              <SelectTrigger className="h-9 text-sm border-slate-200 hover:border-blue-400 focus:border-blue-500 focus:ring-blue-500">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {availableProducts.map(p => (
-                                  <SelectItem key={p} value={p}>{p}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <Input
+                              value={row.product}
+                              readOnly
+                              className="h-9 text-sm bg-slate-50 border-slate-200"
+                            />
                           </td>
                           <td className="py-4 px-5">
-                            <Select value={row.term || 'Term 1'} onValueChange={(v) => {
-                              const updated = [...productRows]
-                              updated[idx].term = v
-                              setProductRows(updated)
-                            }}>
-                              <SelectTrigger className="h-9 text-sm border-slate-200 hover:border-blue-400 focus:border-blue-500 focus:ring-blue-500">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="Term 1">Term 1</SelectItem>
-                                <SelectItem value="Term 2">Term 2</SelectItem>
-                              </SelectContent>
-                            </Select>
+                            <Input
+                              value={row.class}
+                              readOnly
+                              className="h-9 text-sm bg-slate-50 border-slate-200 w-20"
+                            />
                           </td>
                           <td className="py-4 px-5">
-                            <Select value={row.class} onValueChange={(v) => {
-                              const updated = [...productRows]
-                              updated[idx].class = v
-                              setProductRows(updated)
-                            }}>
-                              <SelectTrigger className="h-9 text-sm border-slate-200 hover:border-blue-400 focus:border-blue-500 focus:ring-blue-500 w-20">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {availableClasses.map(c => (
-                                  <SelectItem key={c} value={c}>{c}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <Input
+                              value={row.category}
+                              readOnly
+                              className="h-9 text-sm bg-slate-50 border-slate-200"
+                            />
                           </td>
                           <td className="py-4 px-5">
-                            <Select value={row.category} onValueChange={(v) => {
-                              const updated = [...productRows]
-                              updated[idx].category = v
-                              setProductRows(updated)
-                            }}>
-                              <SelectTrigger className="h-9 text-sm border-slate-200 hover:border-blue-400 focus:border-blue-500 focus:ring-blue-500">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {hasProductCategories(row.product) ? (
-                                  getProductCategories(row.product).map(cat => (
-                                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                                  ))
-                                ) : (
-                                  defaultCategories.map(cat => (
-                                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                                  ))
-                                )}
-                              </SelectContent>
-                            </Select>
+                            <Input
+                              value={row.specs || 'Regular'}
+                              readOnly
+                              className="h-9 text-sm bg-slate-50 border-slate-200"
+                            />
                           </td>
                           <td className="py-4 px-5">
-                            <Select value={row.specs || 'Regular'} onValueChange={(v) => {
-                              const updated = [...productRows]
-                              updated[idx].specs = v
-                              setProductRows(updated)
-                            }}>
-                              <SelectTrigger className="h-9 text-sm border-slate-200 hover:border-blue-400 focus:border-blue-500 focus:ring-blue-500">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {getProductSpecs(row.product).map(spec => (
-                                  <SelectItem key={spec} value={spec}>{spec}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </td>
-                          <td className="py-4 px-5">
-                            {getProductSubjects(row.product).length > 0 ? (
-                              <Select value={row.subject || ''} onValueChange={(v) => {
-                                const updated = [...productRows]
-                                updated[idx].subject = v
-                                setProductRows(updated)
-                              }}>
-                                <SelectTrigger className="h-9 text-sm border-slate-200 hover:border-blue-400 focus:border-blue-500 focus:ring-blue-500">
-                                  <SelectValue placeholder="Select Subject" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {getProductSubjects(row.product).map(subject => (
-                                    <SelectItem key={subject} value={subject}>{subject}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            ) : (
-                              <span className="text-slate-400 text-sm">-</span>
-                            )}
+                            <Input
+                              value={row.subject || '-'}
+                              readOnly
+                              className="h-9 text-sm bg-slate-50 border-slate-200"
+                            />
                           </td>
                           <td className="py-4 px-5">
                             <Input
                               type="number"
-                              className="h-9 text-sm border-slate-200 hover:border-blue-400 focus:border-blue-500 focus:ring-blue-500 w-24"
-                              value={row.strength || ''}
-                              onChange={(e) => {
-                                const updated = [...productRows]
-                                updated[idx].strength = Number(e.target.value) || 0
-                                setProductRows(updated)
-                              }}
-                              placeholder="0"
-                              min="0"
+                              value={row.strength || 0}
+                              readOnly
+                              className="h-9 text-sm bg-slate-50 border-slate-200 w-24"
                             />
                           </td>
                           <td className="py-4 px-5">
-                            <Select value={row.level || 'L2'} onValueChange={(v) => {
-                              const updated = [...productRows]
-                              updated[idx].level = v
-                              setProductRows(updated)
-                            }}>
-                              <SelectTrigger className="h-9 text-sm border-slate-200 hover:border-blue-400 focus:border-blue-500 focus:ring-blue-500 w-20">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {getAvailableLevels(row.product).map(level => (
-                                  <SelectItem key={level} value={level}>{level}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <Input
+                              type="number"
+                              value={row.unit_price || 0}
+                              readOnly
+                              className="h-9 text-sm bg-slate-50 border-slate-200 w-24"
+                            />
+                          </td>
+                          <td className="py-4 px-5">
+                            <Input
+                              value={row.level || 'L2'}
+                              readOnly
+                              className="h-9 text-sm bg-slate-50 border-slate-200 w-20"
+                            />
                           </td>
                           <td className="py-4 px-5 text-center">
                             {productRows.length > 1 && (
@@ -2001,12 +1851,17 @@ export default function ClosedSalesPage() {
                       ))}
                       {/* Total Row */}
                       <tr className="bg-gradient-to-r from-slate-100 to-slate-200 border-t-2 border-slate-400 font-bold">
-                        <td colSpan={6} className="px-5 py-4 text-right">
+                        <td colSpan={5} className="px-5 py-4 text-right">
                           <span className="text-slate-800 text-base">Grand Total:</span>
                         </td>
                         <td className="px-5 py-4 text-right">
                           <span className="text-slate-800 text-base">
                             {productRows.reduce((sum, row) => sum + (Number(row.strength) || 0), 0)}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4 text-right">
+                          <span className="text-slate-800 text-base">
+                            ₹{productRows.reduce((sum, row) => sum + ((Number(row.strength) || 0) * (Number(row.unit_price) || 0)), 0).toFixed(2)}
                           </span>
                         </td>
                         <td colSpan={2} className="px-5 py-4"></td>

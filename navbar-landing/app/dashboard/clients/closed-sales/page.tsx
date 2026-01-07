@@ -131,40 +131,93 @@ export default function ExecutiveManagerClosedSalesPage() {
           ])
         }
         
-        // Fetch all DC orders to find items with pending edit requests
-        const allRes = await apiCallWithTimeout(`/dc-orders?limit=1000`)
+        // Fetch all DC orders with pending edit requests
+        // First, try to get all DC orders (without limit to ensure we get all pending edits)
+        let allRes
+        try {
+          // Try fetching with a very high limit first
+          allRes = await apiCallWithTimeout(`/dc-orders?limit=10000`)
+        } catch (e) {
+          console.warn('Failed to fetch with high limit, trying default:', e)
+          // Fallback to default limit
+          allRes = await apiCallWithTimeout(`/dc-orders`)
+        }
         const allArray = Array.isArray(allRes) ? allRes : (allRes?.data || [])
+        console.log(`Fetched ${allArray.length} DC orders total`)
         
         // Get items with pending edit requests from assigned executives only
         const itemsWithPendingEdit = allArray.filter((d: any) => {
           const hasPending = d.pendingEdit && d.pendingEdit.status === 'pending'
           if (!hasPending) return false
           
-          // If no executives loaded yet, don't show anything (will reload after executives are loaded)
+          // If no executives loaded yet, show all pending edits (will filter after executives are loaded)
           if (assignedExecutives.length === 0) {
-            return false
+            console.log('No assigned executives loaded yet, showing all pending edits temporarily')
+            return true
           }
           
           // Check if the edit was requested by an assigned executive
-          const requestedById = typeof d.pendingEdit.requestedBy === 'object' 
-            ? d.pendingEdit.requestedBy._id 
-            : d.pendingEdit.requestedBy
+          // Handle both populated object and string ID formats
+          let requestedById = null
+          if (d.pendingEdit.requestedBy) {
+            if (typeof d.pendingEdit.requestedBy === 'object' && d.pendingEdit.requestedBy._id) {
+              requestedById = String(d.pendingEdit.requestedBy._id)
+            } else if (typeof d.pendingEdit.requestedBy === 'string') {
+              requestedById = String(d.pendingEdit.requestedBy)
+            }
+          }
           
           // Also check if the DC Order is assigned to an assigned executive
-          const assignedToId = typeof d.assigned_to === 'object' 
-            ? d.assigned_to._id 
-            : d.assigned_to
+          let assignedToId = null
+          if (d.assigned_to) {
+            if (typeof d.assigned_to === 'object' && d.assigned_to._id) {
+              assignedToId = String(d.assigned_to._id)
+            } else if (typeof d.assigned_to === 'string') {
+              assignedToId = String(d.assigned_to)
+            }
+          }
           
-          const isFromAssignedExecutive = assignedExecutives.includes(String(requestedById)) || 
-            assignedExecutives.includes(String(assignedToId))
+          // Also check employeeId if it exists (for DCs linked to employees)
+          let employeeId = null
+          if (d.employeeId) {
+            if (typeof d.employeeId === 'object' && d.employeeId._id) {
+              employeeId = String(d.employeeId._id)
+            } else if (typeof d.employeeId === 'string') {
+              employeeId = String(d.employeeId)
+            }
+          }
           
-          if (hasPending && isFromAssignedExecutive) {
-            console.log('Found item with pending edit from assigned executive:', {
+          // Convert assigned executives to strings for comparison
+          const assignedExecutivesStr = assignedExecutives.map(id => String(id))
+          
+          // Check if any of these IDs match assigned executives
+          const requestedByMatches = requestedById && assignedExecutivesStr.includes(requestedById)
+          const assignedToMatches = assignedToId && assignedExecutivesStr.includes(assignedToId)
+          const employeeIdMatches = employeeId && assignedExecutivesStr.includes(employeeId)
+          
+          const isFromAssignedExecutive = requestedByMatches || assignedToMatches || employeeIdMatches
+          
+          // If requestedBy is not set but we have assignedTo or employeeId match, still show it
+          // This handles cases where requestedBy might not be populated correctly
+          if (hasPending && !requestedById && (assignedToMatches || employeeIdMatches)) {
+            console.log('Found pending edit without requestedBy, but matches assignedTo/employeeId:', {
               id: d._id,
               school_name: d.school_name,
-              requestedBy: requestedById,
-              assignedTo: assignedToId,
+              assignedToId: assignedToId,
+              employeeId: employeeId,
               assignedExecutives: assignedExecutives
+            })
+          }
+          
+          if (hasPending && !isFromAssignedExecutive) {
+            console.log('Pending edit NOT from assigned executive:', {
+              id: d._id,
+              school_name: d.school_name,
+              requestedById: requestedById,
+              assignedToId: assignedToId,
+              employeeId: employeeId,
+              assignedExecutives: assignedExecutives,
+              pendingEdit: d.pendingEdit
             })
           }
           

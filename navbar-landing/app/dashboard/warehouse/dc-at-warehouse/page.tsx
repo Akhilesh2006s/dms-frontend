@@ -103,6 +103,9 @@ export default function WarehouseDcAtWarehouse() {
   const currentUser = getCurrentUser()
   const isManager = currentUser?.role === 'Manager'
   const isAdmin = currentUser?.role === 'Admin' || currentUser?.role === 'Super Admin'
+  const isWarehouseExecutive = currentUser?.role === 'Warehouse Executive'
+  const isWarehouseManager = currentUser?.role === 'Warehouse Manager'
+  const canAccessWarehouse = isManager || isAdmin || isWarehouseExecutive || isWarehouseManager
 
   async function load() {
     try {
@@ -723,7 +726,6 @@ export default function WarehouseDcAtWarehouse() {
                 <TableHead>Requested Date</TableHead>
                 <TableHead>Customer Name</TableHead>
                 <TableHead>Customer Phone</TableHead>
-                <TableHead>Product</TableHead>
                 <TableHead>Requested Qty</TableHead>
                 <TableHead>Manager</TableHead>
                 <TableHead>Action</TableHead>
@@ -732,12 +734,12 @@ export default function WarehouseDcAtWarehouse() {
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-neutral-500">Loading...</TableCell>
+                  <TableCell colSpan={8} className="text-center text-neutral-500">Loading...</TableCell>
                 </TableRow>
               )}
               {!loading && rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-neutral-500">No pending DCs</TableCell>
+                  <TableCell colSpan={8} className="text-center text-neutral-500">No pending DCs</TableCell>
                 </TableRow>
               )}
               {rows.map((r, idx) => (
@@ -749,7 +751,6 @@ export default function WarehouseDcAtWarehouse() {
                   </TableCell>
                   <TableCell className="truncate max-w-[160px]">{r.customerName || r.saleId?.customerName || '-'}</TableCell>
                   <TableCell className="whitespace-nowrap">{r.customerPhone || '-'}</TableCell>
-                  <TableCell className="truncate max-w-[160px]">{r.product || r.saleId?.product || '-'}</TableCell>
                   <TableCell className="whitespace-nowrap font-medium">
                     {(() => {
                       // Calculate requestedQuantity from productDetails if available, otherwise use requestedQuantity field
@@ -766,7 +767,7 @@ export default function WarehouseDcAtWarehouse() {
                   </TableCell>
                   <TableCell className="whitespace-nowrap">{r.managerId?.name || '-'}</TableCell>
                   <TableCell className="whitespace-nowrap">
-                    {(isManager || isAdmin) && (
+                    {canAccessWarehouse && (
                       <div className="flex items-center gap-2">
                         <Button size="sm" onClick={() => openProcessDialog(r)}>
                           Update & Submit
@@ -993,11 +994,11 @@ export default function WarehouseDcAtWarehouse() {
                             </td>
                             <td className="py-2 px-3 border-r">
                               <div className={`h-8 text-xs px-2 py-1.5 rounded border font-medium ${
-                                (row.deliverableQuantity || 0) < (row.quantity || 0)
+                                (row.availableQuantity || 0) < (row.quantity || 0)
                                   ? 'bg-yellow-50 border-yellow-300 text-yellow-800'
                                   : 'bg-green-50 border-green-300 text-green-800'
                               }`}>
-                                {row.deliverableQuantity !== undefined && row.deliverableQuantity !== null ? row.deliverableQuantity : 0}
+                                {row.quantity !== undefined && row.quantity !== null ? row.quantity : 0}
                               </div>
                             </td>
                             <td className="py-2 px-3 border-r">

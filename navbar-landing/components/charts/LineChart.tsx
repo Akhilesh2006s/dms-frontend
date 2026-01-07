@@ -9,56 +9,46 @@ import {
   LineElement,
   Tooltip,
   Legend,
-  Filler,
 } from 'chart.js'
 import { useMemo } from 'react'
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, Filler)
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend)
+
+type Dataset = {
+  label: string
+  data: number[]
+  borderColor?: string
+  backgroundColor?: string
+  fill?: boolean
+}
 
 type Props = {
   labels: string[]
-  datasets: {
-    label: string
-    data: number[]
-    color: string
-  }[]
+  datasets: Dataset[]
   height?: number
 }
 
 export default function LineChart({ labels, datasets, height = 300 }: Props) {
-  const chartData = useMemo(() => {
-    return {
-      labels,
-      datasets: datasets.map((ds, idx) => ({
-        label: ds.label,
-        data: ds.data,
-        borderColor: ds.color,
-        backgroundColor: `${ds.color}20`,
-        fill: true,
-        tension: 0.4,
-        borderWidth: 3,
-        pointRadius: 4,
-        pointHoverRadius: 6,
-        pointBackgroundColor: ds.color,
-        pointBorderColor: '#ffffff',
-        pointBorderWidth: 2,
-      })),
-    }
-  }, [labels, datasets])
+  const chartData = useMemo(() => ({
+    labels,
+    datasets: datasets.map((ds) => ({
+      ...ds,
+      borderColor: ds.borderColor || '#3b82f6',
+      backgroundColor: ds.backgroundColor || '#3b82f680',
+      fill: ds.fill !== undefined ? ds.fill : false,
+      tension: 0.4,
+      pointRadius: 3,
+      pointHoverRadius: 5,
+    })),
+  }), [labels, datasets])
 
   const options = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
       legend: {
+        display: datasets.length > 1,
         position: 'top' as const,
-        labels: {
-          padding: 15,
-          font: {
-            size: 12,
-          },
-          usePointStyle: true,
-        },
       },
       tooltip: {
         intersect: false,
@@ -91,6 +81,3 @@ export default function LineChart({ labels, datasets, height = 300 }: Props) {
     </div>
   )
 }
-
-
-

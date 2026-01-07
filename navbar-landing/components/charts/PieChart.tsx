@@ -1,63 +1,45 @@
 'use client'
 
 import { Pie } from 'react-chartjs-2'
-import {
-  Chart as ChartJS,
-  ArcElement,
-  Tooltip,
-  Legend,
-} from 'chart.js'
+import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
+import { useMemo } from 'react'
 
 ChartJS.register(ArcElement, Tooltip, Legend)
 
-type PieData = {
+type PieDataItem = {
   label: string
   value: number
   color: string
 }
 
 type Props = {
-  data: PieData[]
+  data: PieDataItem[]
   height?: number
 }
 
 export default function PieChart({ data, height = 300 }: Props) {
-  const chartData = {
-    labels: data.map(d => d.label),
+  const chartData = useMemo(() => ({
+    labels: data.map((d) => d.label),
     datasets: [
       {
-        data: data.map(d => d.value),
-        backgroundColor: data.map(d => d.color),
-        borderWidth: 2,
+        data: data.map((d) => d.value),
+        backgroundColor: data.map((d) => d.color),
         borderColor: '#ffffff',
+        borderWidth: 2,
       },
     ],
-  }
+  }), [data])
 
   const options = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
       legend: {
+        display: true,
         position: 'bottom' as const,
-        labels: {
-          padding: 15,
-          font: {
-            size: 12,
-          },
-          usePointStyle: true,
-        },
       },
       tooltip: {
-        callbacks: {
-          label: (context: any) => {
-            const label = context.label || ''
-            const value = context.parsed || 0
-            const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0)
-            const percentage = ((value / total) * 100).toFixed(1)
-            return `${label}: ${value} (${percentage}%)`
-          },
-        },
+        intersect: false,
       },
     },
   }
@@ -68,6 +50,3 @@ export default function PieChart({ data, height = 300 }: Props) {
     </div>
   )
 }
-
-
-
