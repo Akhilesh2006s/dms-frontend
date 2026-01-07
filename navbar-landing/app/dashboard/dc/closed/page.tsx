@@ -230,6 +230,14 @@ export default function ClosedSalesPage() {
           // Find the original DcOrder to get school details
           const originalDcOrder = dcRequestedArray.find((d: any) => String(d._id) === String(dcOrderId))
           
+          // Convert DC productDetails to DcOrder products format
+          const products = (dc.productDetails || []).map((p: any) => ({
+            product_name: p.product || p.product_name || 'Unknown',
+            quantity: p.quantity || p.strength || 0,
+            unit_price: p.unit_price || 0,
+            term: p.term || 'Term 2',
+          }))
+          
           return {
             _id: dc._id, // Use DC ID as the unique identifier
             dcOrderId: dcOrderId, // Keep reference to original DcOrder
@@ -241,7 +249,7 @@ export default function ClosedSalesPage() {
             location: originalDcOrder?.location || '',
             zone: originalDcOrder?.zone || '',
             school_type: originalDcOrder?.school_type || '',
-            products: dc.productDetails || originalDcOrder?.products || [],
+            products: products.length > 0 ? products : (originalDcOrder?.products || []),
             assigned_to: originalDcOrder?.assigned_to || undefined,
             created_at: dc.createdAt || originalDcOrder?.created_at,
             createdAt: dc.createdAt || originalDcOrder?.createdAt,
@@ -364,10 +372,10 @@ export default function ClosedSalesPage() {
           // Also fetch Term 2 DCs (scheduled_for_later) that might be split from original DCs
           const [allDCsRes, term2DCsRes] = await Promise.all([
             Promise.race([
-              apiRequest<any>(`/dc?limit=2000`),
-              new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Request timeout')), 8000)
-              )
+            apiRequest<any>(`/dc?limit=2000`),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Request timeout')), 8000)
+            )
             ]),
             Promise.race([
               apiRequest<any>(`/dc?status=scheduled_for_later&limit=500`),
@@ -398,12 +406,12 @@ export default function ClosedSalesPage() {
               console.log(`✅ Found Term 2 split DC for DcOrder ${dealId}:`, term2DC._id)
             } else {
               // Otherwise, use any other DC linked to this DcOrder
-              const relatedDC = allDCsArray.find((dc: any) => {
-                const dcOrderId = dc.dcOrderId?._id || dc.dcOrderId
-                return dcOrderId === dealId || (typeof dcOrderId === 'string' && dcOrderId === dealId)
-              })
-              if (relatedDC) {
-                dcMap[dealId] = relatedDC
+            const relatedDC = allDCsArray.find((dc: any) => {
+              const dcOrderId = dc.dcOrderId?._id || dc.dcOrderId
+              return dcOrderId === dealId || (typeof dcOrderId === 'string' && dcOrderId === dealId)
+            })
+            if (relatedDC) {
+              dcMap[dealId] = relatedDC
               }
             }
           })
@@ -1261,14 +1269,14 @@ export default function ClosedSalesPage() {
           : (dcRequestData.requestedQuantity || 1),
         productDetails: productRows.length > 0 
           ? productRows.map(row => ({
-              product: row.product,
-              class: row.class,
-              category: row.category,
-              specs: row.specs || 'Regular',
-              subject: row.subject || undefined,
-              strength: Number(row.strength) || 0,
-              quantity: Number(row.strength) || 0, // Quantity should match strength
-              level: row.level || getDefaultLevel(row.product || 'Abacus'),
+          product: row.product,
+          class: row.class,
+          category: row.category,
+          specs: row.specs || 'Regular',
+          subject: row.subject || undefined,
+          strength: Number(row.strength) || 0,
+          quantity: Number(row.strength) || 0, // Quantity should match strength
+          level: row.level || getDefaultLevel(row.product || 'Abacus'),
               term: row.term || 'Term 1',
             }))
           : (dcRequestData.productDetails || []),
@@ -1328,7 +1336,12 @@ export default function ClosedSalesPage() {
   // Get products display string
   const getProductsDisplay = (deal: DcOrder) => {
     if (!deal.products || !Array.isArray(deal.products)) return '-'
-    return deal.products.map(p => `${p.product_name}${p.quantity ? ` - ${p.quantity}` : ''}`).join(', ')
+    return deal.products.map(p => {
+      // Handle both DcOrder format (product_name) and DC format (product)
+      const productName = (p as any).product_name || (p as any).product || 'Unknown'
+      const qty = (p as any).quantity || (p as any).strength || 0
+      return `${productName}${qty ? ` - ${qty}` : ''}`
+    }).join(', ')
   }
 
   return (

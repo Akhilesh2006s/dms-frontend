@@ -111,12 +111,9 @@ export default function TermWiseDCPage() {
     pod_proof_url: '',
     remarks: '',
     total_amount: 0,
-    property_number: '',
-    floor: '',
-    tower_block: '',
-    nearby_landmark: '',
-    area: '',
-    city: '',
+    transport_name: '',
+    transport_location: '',
+    transportation_landmark: '',
     pincode: '',
   })
   const [submittingEdit, setSubmittingEdit] = useState(false)
@@ -137,12 +134,9 @@ export default function TermWiseDCPage() {
     pod_proof_url: '',
     remarks: '',
     total_amount: 0,
-    property_number: '',
-    floor: '',
-    tower_block: '',
-    nearby_landmark: '',
-    area: '',
-    city: '',
+    transport_name: '',
+    transport_location: '',
+    transportation_landmark: '',
     pincode: '',
   })
   const [requestDCProductRows, setRequestDCProductRows] = useState<Array<{
@@ -378,13 +372,10 @@ export default function TermWiseDCPage() {
         pod_proof_url: dcOrder.pod_proof_url || dc.poPhotoUrl || '',
         remarks: dcOrder.remarks || '',
         total_amount: dcOrder.total_amount || 0,
-        // Delivery and Address fields - check pendingEdit first, then main fields
-        property_number: dcOrder.pendingEdit?.property_number || dcOrder.property_number || '',
-        floor: dcOrder.pendingEdit?.floor || dcOrder.floor || '',
-        tower_block: dcOrder.pendingEdit?.tower_block || dcOrder.tower_block || '',
-        nearby_landmark: dcOrder.pendingEdit?.nearby_landmark || dcOrder.nearby_landmark || '',
-        area: dcOrder.pendingEdit?.area || dcOrder.area || '',
-        city: dcOrder.pendingEdit?.city || dcOrder.city || '',
+        // Transport fields - check pendingEdit first, then main fields
+        transport_name: dcOrder.pendingEdit?.transport_name || dcOrder.transport_name || '',
+        transport_location: dcOrder.pendingEdit?.transport_location || dcOrder.transport_location || '',
+        transportation_landmark: dcOrder.pendingEdit?.transportation_landmark || dcOrder.transportation_landmark || '',
         pincode: dcOrder.pendingEdit?.pincode || dcOrder.pincode || '',
       }
       
@@ -424,13 +415,10 @@ export default function TermWiseDCPage() {
         ...editFormData,
         products,
         total_amount: totalAmount,
-        // Explicitly include delivery address fields
-        property_number: editFormData.property_number || '',
-        floor: editFormData.floor || '',
-        tower_block: editFormData.tower_block || '',
-        nearby_landmark: editFormData.nearby_landmark || '',
-        area: editFormData.area || '',
-        city: editFormData.city || '',
+        // Explicitly include transport fields
+        transport_name: editFormData.transport_name || '',
+        transport_location: editFormData.transport_location || '',
+        transportation_landmark: editFormData.transportation_landmark || '',
         pincode: editFormData.pincode || '',
       }
 
@@ -494,13 +482,10 @@ export default function TermWiseDCPage() {
         pod_proof_url: dcOrder.pod_proof_url || dc.poPhotoUrl || '',
         remarks: dcOrder.remarks || '',
         total_amount: dcOrder.total_amount || 0,
-        // Delivery and Address fields - check pendingEdit first, then main fields
-        property_number: dcOrder.pendingEdit?.property_number || dcOrder.property_number || '',
-        floor: dcOrder.pendingEdit?.floor || dcOrder.floor || '',
-        tower_block: dcOrder.pendingEdit?.tower_block || dcOrder.tower_block || '',
-        nearby_landmark: dcOrder.pendingEdit?.nearby_landmark || dcOrder.nearby_landmark || '',
-        area: dcOrder.pendingEdit?.area || dcOrder.area || '',
-        city: dcOrder.pendingEdit?.city || dcOrder.city || '',
+        // Transport fields - check pendingEdit first, then main fields
+        transport_name: dcOrder.pendingEdit?.transport_name || dcOrder.transport_name || '',
+        transport_location: dcOrder.pendingEdit?.transport_location || dcOrder.transport_location || '',
+        transportation_landmark: dcOrder.pendingEdit?.transportation_landmark || dcOrder.transportation_landmark || '',
         pincode: dcOrder.pendingEdit?.pincode || dcOrder.pincode || '',
       }
       
@@ -1070,56 +1055,32 @@ export default function TermWiseDCPage() {
               </div>
             </div>
 
-            {/* Delivery and Address */}
+            {/* Transport Details */}
             <div className="space-y-4">
-              <h3 className="text-lg font-semibold">Delivery and Address</h3>
+              <h3 className="text-lg font-semibold">Transport Details</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>Property Number *</Label>
+                  <Label>Transport Name *</Label>
                   <Input
-                    value={editFormData.property_number}
-                    onChange={(e) => setEditFormData({ ...editFormData, property_number: e.target.value })}
-                    placeholder="Enter property number"
+                    value={editFormData.transport_name}
+                    onChange={(e) => setEditFormData({ ...editFormData, transport_name: e.target.value })}
+                    placeholder="Enter transport name"
                   />
                 </div>
                 <div>
-                  <Label>Floor *</Label>
+                  <Label>Transport Location *</Label>
                   <Input
-                    value={editFormData.floor}
-                    onChange={(e) => setEditFormData({ ...editFormData, floor: e.target.value })}
-                    placeholder="Enter floor"
+                    value={editFormData.transport_location}
+                    onChange={(e) => setEditFormData({ ...editFormData, transport_location: e.target.value })}
+                    placeholder="Enter transport location"
                   />
                 </div>
                 <div>
-                  <Label>Tower/Block (Optional)</Label>
+                  <Label>Transportation Landmark</Label>
                   <Input
-                    value={editFormData.tower_block}
-                    onChange={(e) => setEditFormData({ ...editFormData, tower_block: e.target.value })}
-                    placeholder="Enter tower/block"
-                  />
-                </div>
-                <div>
-                  <Label>Nearby Landmark (Optional)</Label>
-                  <Input
-                    value={editFormData.nearby_landmark}
-                    onChange={(e) => setEditFormData({ ...editFormData, nearby_landmark: e.target.value })}
-                    placeholder="Enter nearby landmark"
-                  />
-                </div>
-                <div>
-                  <Label>Area *</Label>
-                  <Input
-                    value={editFormData.area}
-                    onChange={(e) => setEditFormData({ ...editFormData, area: e.target.value })}
-                    placeholder="Enter area"
-                  />
-                </div>
-                <div>
-                  <Label>City *</Label>
-                  <Input
-                    value={editFormData.city}
-                    onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
-                    placeholder="Enter city"
+                    value={editFormData.transportation_landmark}
+                    onChange={(e) => setEditFormData({ ...editFormData, transportation_landmark: e.target.value })}
+                    placeholder="Enter transportation landmark"
                   />
                 </div>
                 <div>
@@ -1345,62 +1306,35 @@ export default function TermWiseDCPage() {
               </div>
             </div>
 
-            {/* Delivery and Address */}
+            {/* Transport Details */}
             <div className="space-y-4">
-              <h3 className="text-lg font-semibold">Delivery and Address</h3>
+              <h3 className="text-lg font-semibold">Transport Details</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>Property Number *</Label>
+                  <Label>Transport Name *</Label>
                   <Input
-                    value={requestDCFormData.property_number}
+                    value={requestDCFormData.transport_name}
                     readOnly
                     className="bg-neutral-50"
-                    placeholder="Enter property number"
+                    placeholder="Transport name"
                   />
                 </div>
                 <div>
-                  <Label>Floor *</Label>
+                  <Label>Transport Location *</Label>
                   <Input
-                    value={requestDCFormData.floor}
+                    value={requestDCFormData.transport_location}
                     readOnly
                     className="bg-neutral-50"
-                    placeholder="Enter floor"
+                    placeholder="Transport location"
                   />
                 </div>
                 <div>
-                  <Label>Tower/Block (Optional)</Label>
+                  <Label>Transportation Landmark</Label>
                   <Input
-                    value={requestDCFormData.tower_block}
+                    value={requestDCFormData.transportation_landmark}
                     readOnly
                     className="bg-neutral-50"
-                    placeholder="Enter tower/block"
-                  />
-                </div>
-                <div>
-                  <Label>Nearby Landmark (Optional)</Label>
-                  <Input
-                    value={requestDCFormData.nearby_landmark}
-                    readOnly
-                    className="bg-neutral-50"
-                    placeholder="Enter nearby landmark"
-                  />
-                </div>
-                <div>
-                  <Label>Area *</Label>
-                  <Input
-                    value={requestDCFormData.area}
-                    readOnly
-                    className="bg-neutral-50"
-                    placeholder="Enter area"
-                  />
-                </div>
-                <div>
-                  <Label>City *</Label>
-                  <Input
-                    value={requestDCFormData.city}
-                    readOnly
-                    className="bg-neutral-50"
-                    placeholder="Enter city"
+                    placeholder="Transportation landmark"
                   />
                 </div>
                 <div>
@@ -1409,7 +1343,7 @@ export default function TermWiseDCPage() {
                     value={requestDCFormData.pincode}
                     readOnly
                     className="bg-neutral-50"
-                    placeholder="Enter pincode"
+                    placeholder="Pincode"
                   />
                 </div>
               </div>

@@ -30,11 +30,15 @@ const dcOrderSchema = new mongoose.Schema(
     city: { type: String },
     region: { type: String },
     area: { type: String },
-    // Delivery and Address fields
+    // Old Delivery and Address fields (kept for backwards compatibility)
     property_number: { type: String },
     floor: { type: String },
     tower_block: { type: String },
     nearby_landmark: { type: String },
+    // New Transport fields
+    transport_name: { type: String },
+    transport_location: { type: String },
+    transportation_landmark: { type: String },
     average_fee: { type: Number },
     strength: { type: Number, default: 0, min: 0 },
     products: { type: [productSchema], default: [] },
@@ -109,7 +113,7 @@ const dcOrderSchema = new mongoose.Schema(
         pod_proof_url: { type: String },
         remarks: { type: String },
         total_amount: { type: Number },
-        // Delivery and Address fields
+        // Delivery and Address fields (old)
         property_number: { type: String },
         floor: { type: String },
         tower_block: { type: String },
@@ -117,6 +121,10 @@ const dcOrderSchema = new mongoose.Schema(
         area: { type: String },
         city: { type: String },
         pincode: { type: String },
+        // Transport fields (new)
+        transport_name: { type: String },
+        transport_location: { type: String },
+        transportation_landmark: { type: String },
         // Metadata
         requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
         requestedAt: { type: Date, default: Date.now },

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { apiRequest } from '@/lib/api'
+import { apiRequest, API_BASE_URL } from '@/lib/api'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -115,16 +115,14 @@ export default function ClientDCPage() {
     pod_proof_url: '',
     remarks: '',
     total_amount: 0,
-    // Delivery and Address fields
-    property_number: '',
-    floor: '',
-    tower_block: '',
-    nearby_landmark: '',
-    area: '',
-    city: '',
+    // Transport fields
+    transport_name: '',
+    transport_location: '',
+    transportation_landmark: '',
     pincode: '',
   })
   const [submittingEdit, setSubmittingEdit] = useState(false)
+  const [uploadingPO, setUploadingPO] = useState(false)
   const [editProductRows, setEditProductRows] = useState<Array<{
     id: string
     product_name: string
@@ -133,7 +131,15 @@ export default function ClientDCPage() {
     term: string
   }>>([])
   const [addProductDialogOpen, setAddProductDialogOpen] = useState(false)
+  const [addNewProductDialogOpen, setAddNewProductDialogOpen] = useState(false)
   const [originalPOProducts, setOriginalPOProducts] = useState<string[]>([])
+  // Track original state for change detection
+  const [originalPDFUrl, setOriginalPDFUrl] = useState<string>('')
+  const [originalProductNames, setOriginalProductNames] = useState<string[]>([])
+  // Track which DCs have pending changes (PDF changed or new products added)
+  const [dcsWithPendingChanges, setDcsWithPendingChanges] = useState<Set<string>>(new Set())
+  // Track current DC being edited
+  const [currentEditingDCId, setCurrentEditingDCId] = useState<string | null>(null)
   
   const { productNames: availableProducts, getProductLevels, getDefaultLevel, getProductSpecs, getProductSubjects } = useProducts()
   
@@ -353,6 +359,21 @@ export default function ClientDCPage() {
     // THEN: Load all DCs from API (this will merge with sessionStorage items if they exist)
     load()
   }, [])
+
+  // Watch editProductRows for new products and mark DC as having changes
+  useEffect(() => {
+    if (!currentEditingDCId || editProductRows.length === 0) return
+    
+    const currentProductNames = editProductRows
+      .map(row => row.product_name)
+      .filter(name => name && name.trim() !== '')
+    
+    const hasNewProducts = currentProductNames.some(name => !originalProductNames.includes(name))
+    
+    if (hasNewProducts) {
+      setDcsWithPendingChanges(prev => new Set(prev).add(currentEditingDCId))
+    }
+  }, [editProductRows, currentEditingDCId, originalProductNames])
 
   const openInvoiceView = async (dc: DC) => {
     try {
@@ -1210,6 +1231,72 @@ export default function ClientDCPage() {
     }
   }
 
+  // Helper function to check if new products were added and mark DC as having changes
+  const checkForNewProducts = (currentProducts: Array<{ product_name: string }>) => {
+    if (!currentEditingDCId) return
+    
+    const currentProductNames = currentProducts.map(p => p.product_name).filter(Boolean)
+    const hasNewProducts = currentProductNames.some(name => !originalProductNames.includes(name))
+    
+    if (hasNewProducts) {
+      setDcsWithPendingChanges(prev => new Set(prev).add(currentEditingDCId))
+    }
+  }
+
+  // Handle PO photo upload for Edit PO
+  const handleEditPOPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    // Validate file type
+    if (!file.type.includes('pdf') && !file.type.includes('image')) {
+      toast.error('Please upload a PDF or image file')
+      return
+    }
+    
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('File size must be less than 5MB')
+      return
+    }
+    
+    setUploadingPO(true)
+    
+    try {
+      // Create FormData for file upload
+      const formData = new FormData()
+      formData.append('poPhoto', file)
+      
+      // Upload to backend
+      const response = await fetch(`${API_BASE_URL}/api/dc/upload-po`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+        },
+        body: formData,
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to upload PO document')
+      }
+      
+      const data = await response.json()
+      const newUrl = data.poPhotoUrl || data.url || ''
+      setEditFormData({ ...editFormData, pod_proof_url: newUrl })
+      
+      // Check if PDF changed - if different from original, mark DC as having pending changes
+      if (newUrl !== originalPDFUrl && currentEditingDCId) {
+        setDcsWithPendingChanges(prev => new Set(prev).add(currentEditingDCId))
+      }
+      
+      toast.success('PO document uploaded successfully')
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to upload PO document')
+    } finally {
+      setUploadingPO(false)
+    }
+  }
+
   const openEditPODialog = async (dc: DC) => {
     // Get the DcOrder ID from the DC
     const dcOrderId = typeof dc.dcOrderId === 'object' ? dc.dcOrderId._id : dc.dcOrderId
@@ -1218,6 +1305,9 @@ export default function ClientDCPage() {
       toast.error('Cannot edit: DC Order not found')
       return
     }
+    
+    // Store current DC ID for change tracking
+    setCurrentEditingDCId(dc._id)
 
     try {
       // Fetch the full DcOrder details
@@ -1240,23 +1330,17 @@ export default function ClientDCPage() {
         pod_proof_url: dcOrder.pod_proof_url || dc.poPhotoUrl || '',
         remarks: dcOrder.remarks || '',
         total_amount: dcOrder.total_amount || 0,
-        // Delivery and Address fields - only from pendingEdit (not from school address)
-        property_number: dcOrder.pendingEdit?.property_number || '',
-        floor: dcOrder.pendingEdit?.floor || '',
-        tower_block: dcOrder.pendingEdit?.tower_block || '',
-        nearby_landmark: dcOrder.pendingEdit?.nearby_landmark || '',
-        area: dcOrder.pendingEdit?.area || '',
-        city: dcOrder.pendingEdit?.city || '',
+        // Transport fields - from pendingEdit
+        transport_name: dcOrder.pendingEdit?.transport_name || '',
+        transport_location: dcOrder.pendingEdit?.transport_location || '',
+        transportation_landmark: dcOrder.pendingEdit?.transportation_landmark || '',
         pincode: dcOrder.pendingEdit?.pincode || '',
       }
       
       console.log('📋 Edit PO Dialog opened - Form data initialized:', {
-        property_number: formData.property_number,
-        floor: formData.floor,
-        tower_block: formData.tower_block,
-        nearby_landmark: formData.nearby_landmark,
-        area: formData.area,
-        city: formData.city,
+        transport_name: formData.transport_name,
+        transport_location: formData.transport_location,
+        transportation_landmark: formData.transportation_landmark,
         pincode: formData.pincode,
         hasPendingEdit: !!dcOrder.pendingEdit,
       })
@@ -1280,6 +1364,11 @@ export default function ClientDCPage() {
       ))
       setOriginalPOProducts(originalProducts)
       
+      // Store original state for change detection
+      const originalPDF = dcOrder.pod_proof_url || dc.poPhotoUrl || ''
+      setOriginalPDFUrl(originalPDF)
+      setOriginalProductNames(originalProducts)
+      
       setEditPODialogOpen(true)
     } catch (e: any) {
       toast.error(e?.message || 'Failed to load DC Order details')
@@ -1298,36 +1387,57 @@ export default function ClientDCPage() {
     try {
       // Log current editFormData state before preparing payload
       console.log('📝 Current editFormData state:', {
-        property_number: editFormData.property_number,
-        floor: editFormData.floor,
-        tower_block: editFormData.tower_block,
-        nearby_landmark: editFormData.nearby_landmark,
-        area: editFormData.area,
-        city: editFormData.city,
+        transport_name: editFormData.transport_name,
+        transport_location: editFormData.transport_location,
+        transportation_landmark: editFormData.transportation_landmark,
         pincode: editFormData.pincode,
       })
 
+      // Validate products - quantity and unit price are mandatory
+      const invalidProducts = editProductRows.filter(row => {
+        const hasProductName = row.product_name && row.product_name.trim() !== ''
+        if (!hasProductName) return false // Skip empty rows
+        return !row.quantity || row.quantity <= 0 || !row.unit_price || row.unit_price <= 0
+      })
+      
+      if (invalidProducts.length > 0) {
+        toast.error('Please fill in Quantity and Unit Price for all products')
+        setSubmittingEdit(false)
+        return
+      }
+
       // Prepare products array
-      const products = editProductRows.map(row => ({
-        product_name: row.product_name,
-        quantity: row.quantity,
-        unit_price: row.unit_price,
-        term: row.term || 'Term 1',
-      }))
+      const products = editProductRows
+        .filter(row => row.product_name && row.product_name.trim() !== '') // Only include rows with product names
+        .map(row => ({
+          product_name: row.product_name,
+          quantity: row.quantity,
+          unit_price: row.unit_price,
+          term: row.term || 'Term 1',
+        }))
 
       // Calculate total amount
       const totalAmount = products.reduce((sum, p) => sum + (p.quantity * p.unit_price), 0)
 
-      // Prepare the payload with all fields including delivery address
-      // Explicitly include delivery address fields to ensure they're sent
-      // Get delivery address fields from editFormData, with fallback to empty string
-      const deliveryAddressFields = {
-        property_number: (editFormData.property_number !== undefined && editFormData.property_number !== null) ? String(editFormData.property_number) : '',
-        floor: (editFormData.floor !== undefined && editFormData.floor !== null) ? String(editFormData.floor) : '',
-        tower_block: (editFormData.tower_block !== undefined && editFormData.tower_block !== null) ? String(editFormData.tower_block) : '',
-        nearby_landmark: (editFormData.nearby_landmark !== undefined && editFormData.nearby_landmark !== null) ? String(editFormData.nearby_landmark) : '',
-        area: (editFormData.area !== undefined && editFormData.area !== null) ? String(editFormData.area) : '',
-        city: (editFormData.city !== undefined && editFormData.city !== null) ? String(editFormData.city) : '',
+      // Check if PDF changed or new products were added (compared to original Close Lead state)
+      const pdfChanged = editFormData.pod_proof_url !== originalPDFUrl
+      const currentProductNames = products.map(p => p.product_name).filter(Boolean)
+      const hasNewProducts = currentProductNames.some(name => !originalProductNames.includes(name))
+      
+      console.log('🔍 Change Detection:', {
+        pdfChanged,
+        hasNewProducts,
+        originalProductNames,
+        currentProductNames,
+        newProducts: currentProductNames.filter(name => !originalProductNames.includes(name))
+      })
+      
+      // Prepare the payload with all fields including transport details
+      // Get transport fields from editFormData, with fallback to empty string
+      const transportFields = {
+        transport_name: (editFormData.transport_name !== undefined && editFormData.transport_name !== null) ? String(editFormData.transport_name) : '',
+        transport_location: (editFormData.transport_location !== undefined && editFormData.transport_location !== null) ? String(editFormData.transport_location) : '',
+        transportation_landmark: (editFormData.transportation_landmark !== undefined && editFormData.transportation_landmark !== null) ? String(editFormData.transportation_landmark) : '',
         pincode: (editFormData.pincode !== undefined && editFormData.pincode !== null) ? String(editFormData.pincode) : '',
       }
 
@@ -1335,31 +1445,63 @@ export default function ClientDCPage() {
         ...editFormData,
         products,
         total_amount: totalAmount,
-        // Explicitly include delivery address fields (overrides any from spread)
-        ...deliveryAddressFields,
+        // Explicitly include transport fields (overrides any from spread)
+        ...transportFields,
       }
 
-      // Log the full payload to verify delivery address fields are included
-      console.log('Saving PO changes - Full payload:', JSON.stringify(payload, null, 2))
-      console.log('Delivery address fields in payload:', {
-        property_number: payload.property_number,
-        floor: payload.floor,
-        tower_block: payload.tower_block,
-        nearby_landmark: payload.nearby_landmark,
-        area: payload.area,
-        city: payload.city,
-        pincode: payload.pincode,
-      })
+      // If PDF changed or new products added, create pendingEdit request for Executive Manager approval
+      if (pdfChanged || hasNewProducts) {
+        console.log('📤 Creating pendingEdit request for Executive Manager approval:', {
+          pdfChanged,
+          hasNewProducts,
+          dcOrderId: selectedDcOrder._id
+        })
+        
+        try {
+          const response = await apiRequest(`/dc-orders/${selectedDcOrder._id}/submit-edit`, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          })
+          console.log('✅ PendingEdit request created successfully:', response)
+          
+          // Mark DC as having pending changes
+          if (currentEditingDCId) {
+            setDcsWithPendingChanges(prev => new Set(prev).add(currentEditingDCId))
+          }
+          
+          toast.success('PO edit request submitted! Executive Manager will review and approve.')
+        } catch (e: any) {
+          console.error('❌ Failed to create pendingEdit request:', e)
+          // If there's already a pending edit, that's okay - just update the existing one
+          if (e?.message?.includes('already a pending edit')) {
+            toast.info('Edit request already pending. Executive Manager will review it.')
+          } else {
+            toast.error(e?.message || 'Failed to submit edit request. Please try again.')
+            setSubmittingEdit(false)
+            return
+          }
+        }
+      } else {
+        // No PDF or product changes - update directly (no approval needed)
+        console.log('📤 Updating DC Order directly (no approval needed):', `/dc-orders/${selectedDcOrder._id}`)
+        const response = await apiRequest(`/dc-orders/${selectedDcOrder._id}`, {
+          method: 'PUT',
+          body: JSON.stringify(payload),
+        })
+        console.log('✅ DC Order updated successfully:', response)
+        
+        // Remove from pending changes if no changes detected
+        if (currentEditingDCId) {
+          setDcsWithPendingChanges(prev => {
+            const newSet = new Set(prev)
+            newSet.delete(currentEditingDCId)
+            return newSet
+          })
+        }
+        
+        toast.success('PO updated successfully!')
+      }
 
-      // Update directly (no approval needed)
-      console.log('📤 Updating DC Order directly:', `/dc-orders/${selectedDcOrder._id}`)
-      const response = await apiRequest(`/dc-orders/${selectedDcOrder._id}`, {
-        method: 'PUT',
-        body: JSON.stringify(payload),
-      })
-      console.log('✅ DC Order updated successfully:', response)
-
-      toast.success('PO updated successfully!')
       setEditPODialogOpen(false)
       load()
     } catch (e: any) {
@@ -1560,13 +1702,16 @@ export default function ClientDCPage() {
                                   Edit PO
                                 </Button>
                               )}
-                              <Button 
-                                size="sm" 
-                                onClick={() => openClientDCDialog(d)}
-                              >
-                                <Package className="w-4 h-4 mr-2" />
-                                Request DC
-                              </Button>
+                              {/* Hide Request DC button if DC has pending changes (PDF changed or new products added) */}
+                              {!dcsWithPendingChanges.has(d._id) && (
+                                <Button 
+                                  size="sm" 
+                                  onClick={() => openClientDCDialog(d)}
+                                >
+                                  <Package className="w-4 h-4 mr-2" />
+                                  Request DC
+                                </Button>
+                              )}
                             </div>
                           ) : (
                             <div className="flex items-center gap-2 justify-center">
@@ -2067,7 +2212,15 @@ export default function ClientDCPage() {
       </Dialog>
 
       {/* Edit PO Dialog */}
-      <Dialog open={editPODialogOpen} onOpenChange={setEditPODialogOpen}>
+      <Dialog open={editPODialogOpen} onOpenChange={(open) => {
+        setEditPODialogOpen(open)
+        if (!open) {
+          // Reset editing state when dialog closes
+          setCurrentEditingDCId(null)
+          setOriginalPDFUrl('')
+          setOriginalProductNames([])
+        }
+      }}>
         <DialogContent className="sm:max-w-[95vw] lg:max-w-[1000px] max-h-[95vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit PO - {editFormData.school_name || 'Client'}</DialogTitle>
@@ -2078,6 +2231,81 @@ export default function ClientDCPage() {
           
           {selectedDcOrder && (
             <div className="space-y-6 py-4">
+              {/* PO Document Upload Section at Top */}
+              <div className="p-4 bg-neutral-50 rounded-lg border">
+                <Label className="text-sm font-semibold text-neutral-700">PO Document</Label>
+                <div className="mt-2">
+                  {editFormData.pod_proof_url ? (
+                    <div className="flex items-center gap-4">
+                      <div className="h-16 w-16 flex items-center justify-center bg-red-100 rounded border">
+                        <FileText className="w-6 h-6 text-red-700" />
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <a
+                          href={editFormData.pod_proof_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-blue-600 hover:underline"
+                        >
+                          View Current Document
+                        </a>
+                        <div className="flex gap-2">
+                          <label className="cursor-pointer">
+                            <input
+                              type="file"
+                              accept="application/pdf,image/*"
+                              onChange={handleEditPOPhotoUpload}
+                              disabled={uploadingPO}
+                              className="hidden"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={uploadingPO}
+                              asChild
+                            >
+                              <span>
+                                <Upload className="w-4 h-4 mr-1" />
+                                {uploadingPO ? 'Uploading...' : 'Change'}
+                              </span>
+                            </Button>
+                          </label>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEditFormData({ ...editFormData, pod_proof_url: '' })}
+                          >
+                            <X className="w-4 h-4 mr-1" />
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="cursor-pointer">
+                        <input
+                          type="file"
+                          accept="application/pdf,image/*"
+                          onChange={handleEditPOPhotoUpload}
+                          disabled={uploadingPO}
+                          className="hidden"
+                        />
+                        <div className="border-2 border-dashed border-neutral-300 rounded-lg p-4 text-center hover:border-neutral-400 transition-colors">
+                          <Upload className="w-8 h-8 mx-auto text-neutral-400" />
+                          <p className="text-sm text-neutral-600 mt-2">
+                            {uploadingPO ? 'Uploading...' : 'Click to upload PO document'}
+                          </p>
+                          <p className="text-xs text-neutral-500 mt-1">PDF or Image (max 5MB)</p>
+                        </div>
+                      </label>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label>School Name</Label>
@@ -2160,14 +2388,6 @@ export default function ClientDCPage() {
                   />
                 </div>
                 <div>
-                  <Label>PO Photo URL</Label>
-                  <Input
-                    value={editFormData.pod_proof_url}
-                    onChange={(e) => setEditFormData({ ...editFormData, pod_proof_url: e.target.value })}
-                    placeholder="Enter PO photo URL"
-                  />
-                </div>
-                <div>
                   <Label>Total Amount</Label>
                   <Input
                     type="number"
@@ -2178,56 +2398,32 @@ export default function ClientDCPage() {
                 </div>
               </div>
 
-              {/* Delivery and Address Section */}
+              {/* Transport Details Section */}
               <div className="border-t pt-4">
-                <Label className="text-lg font-semibold mb-4 block">Delivery and Address</Label>
+                <Label className="text-lg font-semibold mb-4 block">Transport Details</Label>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label>Property Number *</Label>
+                    <Label>Transport Name *</Label>
                     <Input
-                      value={editFormData.property_number}
-                      onChange={(e) => setEditFormData({ ...editFormData, property_number: e.target.value })}
-                      placeholder="Enter property number"
+                      value={editFormData.transport_name}
+                      onChange={(e) => setEditFormData({ ...editFormData, transport_name: e.target.value })}
+                      placeholder="Enter transport name"
                     />
                   </div>
                   <div>
-                    <Label>Floor *</Label>
+                    <Label>Transport Location *</Label>
                     <Input
-                      value={editFormData.floor}
-                      onChange={(e) => setEditFormData({ ...editFormData, floor: e.target.value })}
-                      placeholder="Enter floor"
+                      value={editFormData.transport_location}
+                      onChange={(e) => setEditFormData({ ...editFormData, transport_location: e.target.value })}
+                      placeholder="Enter transport location"
                     />
                   </div>
                   <div>
-                    <Label>Tower/Block (Optional)</Label>
+                    <Label>Transportation Landmark</Label>
                     <Input
-                      value={editFormData.tower_block}
-                      onChange={(e) => setEditFormData({ ...editFormData, tower_block: e.target.value })}
-                      placeholder="Enter tower/block"
-                    />
-                  </div>
-                  <div>
-                    <Label>Nearby Landmark (Optional)</Label>
-                    <Input
-                      value={editFormData.nearby_landmark}
-                      onChange={(e) => setEditFormData({ ...editFormData, nearby_landmark: e.target.value })}
-                      placeholder="Enter nearby landmark"
-                    />
-                  </div>
-                  <div>
-                    <Label>Area *</Label>
-                    <Input
-                      value={editFormData.area}
-                      onChange={(e) => setEditFormData({ ...editFormData, area: e.target.value })}
-                      placeholder="Enter area"
-                    />
-                  </div>
-                  <div>
-                    <Label>City *</Label>
-                    <Input
-                      value={editFormData.city}
-                      onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
-                      placeholder="Enter city"
+                      value={editFormData.transportation_landmark}
+                      onChange={(e) => setEditFormData({ ...editFormData, transportation_landmark: e.target.value })}
+                      placeholder="Enter transportation landmark"
                     />
                   </div>
                   <div>
@@ -2245,124 +2441,200 @@ export default function ClientDCPage() {
               <div className="border-t pt-4">
                 <div className="flex items-center justify-between mb-4">
                   <Label className="text-lg font-semibold">Products</Label>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setAddProductDialogOpen(true)
-                    }}
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Product
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setAddProductDialogOpen(true)
+                      }}
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Product
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setAddNewProductDialogOpen(true)
+                      }}
+                    >
+                      <PlusCircle className="w-4 h-4 mr-2" />
+                      Add New Product
+                    </Button>
+                  </div>
                 </div>
                 
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Product Name</TableHead>
-                        <TableHead>Term</TableHead>
-                        <TableHead>Quantity</TableHead>
-                        <TableHead>Unit Price</TableHead>
-                        <TableHead>Total</TableHead>
-                        <TableHead>Action</TableHead>
+                {/* Helper function to render a product row */}
+                {(() => {
+                  const renderProductRow = (row: typeof editProductRows[0], idx: number) => {
+                    const actualIdx = editProductRows.findIndex(r => r.id === row.id)
+                    return (
+                      <TableRow key={row.id}>
+                        <TableCell>
+                          <Input
+                            value={row.product_name}
+                            onChange={(e) => {
+                              const updated = [...editProductRows]
+                              updated[actualIdx].product_name = e.target.value
+                              setEditProductRows(updated)
+                            }}
+                            placeholder="Enter product name"
+                            className={row.product_name && availableProducts.includes(row.product_name) ? "bg-neutral-50" : ""}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            value={row.term || 'Term 1'}
+                            onValueChange={(value) => {
+                              const updated = [...editProductRows]
+                              updated[actualIdx].term = value
+                              setEditProductRows(updated)
+                              // Recalculate total after term change
+                              const total = updated.reduce((sum, p) => sum + (p.quantity * p.unit_price), 0)
+                              setEditFormData({ ...editFormData, total_amount: total })
+                            }}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select term" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Term 1">Term 1</SelectItem>
+                              <SelectItem value="Term 2">Term 2</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            value={row.quantity}
+                            onChange={(e) => {
+                              const updated = [...editProductRows]
+                              updated[actualIdx].quantity = Number(e.target.value) || 0
+                              setEditProductRows(updated)
+                              // Update total amount
+                              const total = updated.reduce((sum, p) => sum + (p.quantity * p.unit_price), 0)
+                              setEditFormData({ ...editFormData, total_amount: total })
+                            }}
+                            min="0"
+                            required
+                            className={row.product_name && (!row.quantity || row.quantity <= 0) ? "border-red-500" : ""}
+                            placeholder="Required"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            value={row.unit_price}
+                            onChange={(e) => {
+                              const updated = [...editProductRows]
+                              updated[actualIdx].unit_price = Number(e.target.value) || 0
+                              setEditProductRows(updated)
+                              // Update total amount
+                              const total = updated.reduce((sum, p) => sum + (p.quantity * p.unit_price), 0)
+                              setEditFormData({ ...editFormData, total_amount: total })
+                            }}
+                            min="0"
+                            step="0.01"
+                            required
+                            readOnly={originalProductNames.includes(row.product_name)}
+                            className={`${row.product_name && (!row.unit_price || row.unit_price <= 0) ? "border-red-500" : ""} ${originalProductNames.includes(row.product_name) ? "bg-neutral-50 cursor-not-allowed" : ""}`}
+                            placeholder="Required"
+                            title={originalProductNames.includes(row.product_name) ? "Unit price cannot be changed for original PO products" : ""}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {(row.quantity * row.unit_price).toFixed(2)}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              const updated = editProductRows.filter((_, i) => i !== actualIdx)
+                              setEditProductRows(updated)
+                              // Recalculate total
+                              const total = updated.reduce((sum, p) => sum + (p.quantity * p.unit_price), 0)
+                              setEditFormData({ ...editFormData, total_amount: total })
+                            }}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {editProductRows.map((row, idx) => (
-                        <TableRow key={row.id}>
-                          <TableCell>
-                            <Input
-                              value={row.product_name}
-                              readOnly
-                              className="bg-neutral-50 cursor-not-allowed"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Select
-                              value={row.term || 'Term 1'}
-                              onValueChange={(value) => {
-                                const updated = [...editProductRows]
-                                updated[idx].term = value
-                                setEditProductRows(updated)
-                              }}
-                            >
-                              <SelectTrigger className="w-full">
-                                <SelectValue placeholder="Select term" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="Term 1">Term 1</SelectItem>
-                                <SelectItem value="Term 2">Term 2</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              value={row.quantity}
-                              onChange={(e) => {
-                                const updated = [...editProductRows]
-                                updated[idx].quantity = Number(e.target.value) || 0
-                                setEditProductRows(updated)
-                                // Update total amount
-                                const total = editProductRows.reduce((sum, p, i) => {
-                                  if (i === idx) {
-                                    return sum + (updated[idx].quantity * updated[idx].unit_price)
-                                  }
-                                  return sum + (p.quantity * p.unit_price)
-                                }, 0)
-                                setEditFormData({ ...editFormData, total_amount: total })
-                              }}
-                              min="0"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              value={row.unit_price}
-                              onChange={(e) => {
-                                const updated = [...editProductRows]
-                                updated[idx].unit_price = Number(e.target.value) || 0
-                                setEditProductRows(updated)
-                                // Update total amount
-                                const total = editProductRows.reduce((sum, p, i) => {
-                                  if (i === idx) {
-                                    return sum + (updated[idx].quantity * updated[idx].unit_price)
-                                  }
-                                  return sum + (p.quantity * p.unit_price)
-                                }, 0)
-                                setEditFormData({ ...editFormData, total_amount: total })
-                              }}
-                              min="0"
-                              step="0.01"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            {(row.quantity * row.unit_price).toFixed(2)}
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => {
-                                const updated = editProductRows.filter((_, i) => i !== idx)
-                                setEditProductRows(updated)
-                                // Recalculate total
-                                const total = updated.reduce((sum, p) => sum + (p.quantity * p.unit_price), 0)
-                                setEditFormData({ ...editFormData, total_amount: total })
-                              }}
-                            >
-                              <X className="w-4 h-4" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                    )
+                  }
+
+                  const term1Products = editProductRows.filter(row => (row.term || 'Term 1') === 'Term 1')
+                  const term2Products = editProductRows.filter(row => (row.term || 'Term 1') === 'Term 2')
+
+                  return (
+                    <div className="space-y-6">
+                      {/* Term 1 Products Table */}
+                      <div>
+                        <Label className="text-md font-semibold mb-3 block text-blue-700">Term 1 Products</Label>
+                        <div className="overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Product Name</TableHead>
+                                <TableHead>Term</TableHead>
+                                <TableHead>Quantity</TableHead>
+                                <TableHead>Unit Price</TableHead>
+                                <TableHead>Total</TableHead>
+                                <TableHead>Action</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {term1Products.length === 0 ? (
+                                <TableRow>
+                                  <TableCell colSpan={6} className="text-center text-neutral-500 py-4">
+                                    No Term 1 products added yet
+                                  </TableCell>
+                                </TableRow>
+                              ) : (
+                                term1Products.map((row, idx) => renderProductRow(row, idx))
+                              )}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </div>
+
+                      {/* Term 2 Products Table */}
+                      <div>
+                        <Label className="text-md font-semibold mb-3 block text-green-700">Term 2 Products</Label>
+                        <div className="overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Product Name</TableHead>
+                                <TableHead>Term</TableHead>
+                                <TableHead>Quantity</TableHead>
+                                <TableHead>Unit Price</TableHead>
+                                <TableHead>Total</TableHead>
+                                <TableHead>Action</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {term2Products.length === 0 ? (
+                                <TableRow>
+                                  <TableCell colSpan={6} className="text-center text-neutral-500 py-4">
+                                    No Term 2 products added yet
+                                  </TableCell>
+                                </TableRow>
+                              ) : (
+                                term2Products.map((row, idx) => renderProductRow(row, idx))
+                              )}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
             </div>
           )}
@@ -2384,45 +2656,48 @@ export default function ClientDCPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Add Products Dialog (for Edit PO) */}
+      {/* Add Products Dialog (for Edit PO) - Shows only original PO products */}
       <Dialog open={addProductDialogOpen} onOpenChange={setAddProductDialogOpen}>
         <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Add Products</DialogTitle>
-            <DialogDescription>Select products from the original PO</DialogDescription>
+            <DialogTitle>Add Product</DialogTitle>
+            <DialogDescription>Select from products in this PO (from Close Lead)</DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 py-4">
             {/* Product Selection */}
             <div>
-              <Label className="text-sm font-semibold mb-2 block">Add Products</Label>
+              <Label className="text-sm font-semibold mb-2 block">PO Products</Label>
               <p className="text-xs text-neutral-500 mb-2">
-                {originalPOProducts.length > 0 
-                  ? `Products selected for this PO (${originalPOProducts.length} available)`
-                  : 'No products available'}
+                {originalPOProducts.length} products from original PO
               </p>
               {originalPOProducts.length === 0 ? (
                 <div className="p-4 border rounded bg-yellow-50 text-yellow-800 text-sm">
-                  No products available. This PO was created without products.
+                  No products in this PO. Use "Add New Product" to add products from the database.
                 </div>
               ) : (
-                <div className="space-y-2 max-h-[200px] overflow-y-auto border rounded p-3">
+                <div className="space-y-2 max-h-[400px] overflow-y-auto border rounded p-3">
                   {originalPOProducts.map((product, index) => {
                     const productSpecs = getProductSpecs(product)
                     const hasSpecs = productSpecs.length > 0
                     const specCount = hasSpecs ? productSpecs.length : 1
+                    // Check if this product is already added
+                    const isAlreadyAdded = editProductRows.some(row => row.product_name === product)
                     
                     return (
-                      <div key={`${product}-${index}`} className="flex items-center justify-between p-2 border rounded hover:bg-neutral-50">
+                      <div key={`${product}-${index}`} className={`flex items-center justify-between p-2 border rounded hover:bg-neutral-50 ${isAlreadyAdded ? 'bg-green-50 border-green-200' : ''}`}>
                         <div className="flex items-center space-x-2 flex-1">
                           <span className="text-sm font-medium">{product}</span>
                           {hasSpecs && (
                             <span className="text-xs text-neutral-500">({specCount} specs - {productSpecs.join(', ')})</span>
                           )}
+                          {isAlreadyAdded && (
+                            <span className="text-xs text-green-600 font-medium">(Added)</span>
+                          )}
                         </div>
                         <Button
                           type="button"
-                          variant="outline"
+                          variant={isAlreadyAdded ? "secondary" : "outline"}
                           size="sm"
                           onClick={() => {
                             // Add product to editProductRows
@@ -2439,7 +2714,7 @@ export default function ClientDCPage() {
                           className="text-xs"
                         >
                           <PlusCircle className="w-3 h-3 mr-1" />
-                          Add Product
+                          {isAlreadyAdded ? 'Add Another' : 'Add'}
                         </Button>
                       </div>
                     )
@@ -2451,6 +2726,87 @@ export default function ClientDCPage() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddProductDialogOpen(false)}>
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add New Product Dialog - Shows all products from database */}
+      <Dialog open={addNewProductDialogOpen} onOpenChange={setAddNewProductDialogOpen}>
+        <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add New Product</DialogTitle>
+            <DialogDescription>Select from all available products in the database</DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {/* Product Selection */}
+            <div>
+              <Label className="text-sm font-semibold mb-2 block">All Available Products</Label>
+              <p className="text-xs text-neutral-500 mb-2">
+                {availableProducts.length} products available in database
+              </p>
+              {availableProducts.length === 0 ? (
+                <div className="p-4 border rounded bg-yellow-50 text-yellow-800 text-sm">
+                  No products available in database.
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[400px] overflow-y-auto border rounded p-3">
+                  {availableProducts.map((product, index) => {
+                    const productSpecs = getProductSpecs(product)
+                    const hasSpecs = productSpecs.length > 0
+                    const specCount = hasSpecs ? productSpecs.length : 1
+                    // Check if this product is already added
+                    const isAlreadyAdded = editProductRows.some(row => row.product_name === product)
+                    // Check if this product is from original PO
+                    const isFromPO = originalPOProducts.includes(product)
+                    
+                    return (
+                      <div key={`new-${product}-${index}`} className={`flex items-center justify-between p-2 border rounded hover:bg-neutral-50 ${isAlreadyAdded ? 'bg-green-50 border-green-200' : ''}`}>
+                        <div className="flex items-center space-x-2 flex-1">
+                          <span className="text-sm font-medium">{product}</span>
+                          {hasSpecs && (
+                            <span className="text-xs text-neutral-500">({specCount} specs - {productSpecs.join(', ')})</span>
+                          )}
+                          {isFromPO && (
+                            <span className="text-xs text-blue-600 font-medium">(In PO)</span>
+                          )}
+                          {isAlreadyAdded && (
+                            <span className="text-xs text-green-600 font-medium">(Added)</span>
+                          )}
+                        </div>
+                        <Button
+                          type="button"
+                          variant={isAlreadyAdded ? "secondary" : "outline"}
+                          size="sm"
+                          onClick={() => {
+                            // Add product to editProductRows
+                            const newRow = {
+                              id: Date.now().toString(),
+                              product_name: product,
+                              quantity: 0,
+                              unit_price: 0,
+                              term: 'Term 1',
+                            }
+                            setEditProductRows([...editProductRows, newRow])
+                            setAddNewProductDialogOpen(false)
+                          }}
+                          className="text-xs"
+                        >
+                          <PlusCircle className="w-3 h-3 mr-1" />
+                          {isAlreadyAdded ? 'Add Another' : 'Add'}
+                        </Button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddNewProductDialogOpen(false)}>
               Cancel
             </Button>
           </DialogFooter>

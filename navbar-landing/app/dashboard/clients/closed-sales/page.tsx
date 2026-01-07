@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { CheckCircle, XCircle, Eye, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
+import { getCurrentUser } from '@/lib/auth'
 
 type PendingEdit = {
   school_name?: string
@@ -23,10 +24,14 @@ type PendingEdit = {
   school_type?: string
   zone?: string
   location?: string
-  products?: Array<{ product_name: string; quantity: number; unit_price: number }>
+  products?: Array<{ product_name: string; quantity: number; unit_price: number; term?: string }>
   pod_proof_url?: string
   remarks?: string
   total_amount?: number
+  // Transport fields
+  transport_name?: string
+  transport_location?: string
+  transportation_landmark?: string
   // Delivery and Address fields
   property_number?: string
   floor?: string
@@ -78,6 +83,11 @@ type DcOrder = {
   pincode?: string
 }
 
+type Employee = {
+  _id: string
+  name: string
+}
+
 export default function ExecutiveManagerClosedSalesPage() {
   const [items, setItems] = useState<DcOrder[]>([])
   const [loading, setLoading] = useState(true)
@@ -86,6 +96,25 @@ export default function ExecutiveManagerClosedSalesPage() {
   const [approving, setApproving] = useState<string | null>(null)
   const [rejecting, setRejecting] = useState<string | null>(null)
   const [rejectionReason, setRejectionReason] = useState('')
+  const [assignedExecutives, setAssignedExecutives] = useState<string[]>([])
+
+  // Load assigned executives
+  useEffect(() => {
+    const loadAssignedExecutives = async () => {
+      try {
+        const currentUser = getCurrentUser()
+        if (currentUser?._id) {
+          const empData = await apiRequest<Employee[]>(`/executive-managers/${currentUser._id}/employees`).catch(() => [])
+          const executiveIds = (empData || []).map(emp => emp._id)
+          setAssignedExecutives(executiveIds)
+          console.log('Assigned executives:', executiveIds)
+        }
+      } catch (error) {
+        console.error('Failed to load assigned executives:', error)
+      }
+    }
+    loadAssignedExecutives()
+  }, [])
 
   const load = async () => {
     setLoading(true)
@@ -106,18 +135,40 @@ export default function ExecutiveManagerClosedSalesPage() {
         const allRes = await apiCallWithTimeout(`/dc-orders?limit=1000`)
         const allArray = Array.isArray(allRes) ? allRes : (allRes?.data || [])
         
-        // Get items with pending edit requests (regardless of status)
+        // Get items with pending edit requests from assigned executives only
         const itemsWithPendingEdit = allArray.filter((d: any) => {
           const hasPending = d.pendingEdit && d.pendingEdit.status === 'pending'
-          if (hasPending) {
-            console.log('Found item with pending edit:', {
+          if (!hasPending) return false
+          
+          // If no executives loaded yet, don't show anything (will reload after executives are loaded)
+          if (assignedExecutives.length === 0) {
+            return false
+          }
+          
+          // Check if the edit was requested by an assigned executive
+          const requestedById = typeof d.pendingEdit.requestedBy === 'object' 
+            ? d.pendingEdit.requestedBy._id 
+            : d.pendingEdit.requestedBy
+          
+          // Also check if the DC Order is assigned to an assigned executive
+          const assignedToId = typeof d.assigned_to === 'object' 
+            ? d.assigned_to._id 
+            : d.assigned_to
+          
+          const isFromAssignedExecutive = assignedExecutives.includes(String(requestedById)) || 
+            assignedExecutives.includes(String(assignedToId))
+          
+          if (hasPending && isFromAssignedExecutive) {
+            console.log('Found item with pending edit from assigned executive:', {
               id: d._id,
               school_name: d.school_name,
-              requestedBy: d.pendingEdit?.requestedBy,
-              pendingEdit: d.pendingEdit
+              requestedBy: requestedById,
+              assignedTo: assignedToId,
+              assignedExecutives: assignedExecutives
             })
           }
-          return hasPending
+          
+          return isFromAssignedExecutive
         })
         
         console.log(`Found ${itemsWithPendingEdit.length} items with pending edit requests`)
@@ -173,8 +224,10 @@ export default function ExecutiveManagerClosedSalesPage() {
   }
 
   useEffect(() => {
+    // Load initially and reload when assigned executives are loaded
     load()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignedExecutives.length]) // Reload when executives list changes
 
   const getProductsDisplay = (deal: DcOrder) => {
     if (!deal.products || !Array.isArray(deal.products)) return '-'

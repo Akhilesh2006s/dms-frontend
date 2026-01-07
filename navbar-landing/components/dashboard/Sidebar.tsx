@@ -529,10 +529,11 @@ export function Sidebar() {
       { label: 'Sign out', icon: LogOut, href: '/auth/login' },
     ]
   } else if (isTrainer) {
-    // For Trainer role, show only Training, Services, and Expenses
+    // For Trainer role, show only specified menu items
     finalNav = [
+      { label: 'My Dashboard', icon: LayoutDashboard, href: '/dashboard' },
       {
-        label: 'Trainings & Services',
+        label: 'Training and Services',
         icon: GraduationCap,
         children: [
           { label: 'Trainings List', href: '/dashboard/training/list' },
@@ -540,11 +541,27 @@ export function Sidebar() {
         ],
       },
       {
-        label: 'Expenses',
+        label: 'Expense',
         icon: Calculator,
         children: [
           { label: 'Create Expense', href: '/dashboard/expenses/create', icon: PlusCircle },
           { label: 'My Expenses', href: '/dashboard/expenses/my', icon: FileText },
+        ],
+      },
+      {
+        label: 'Completed Training and Services',
+        icon: CheckCircle2,
+        children: [
+          { label: 'Completed Trainings', href: '/dashboard/training/list?status=Completed' },
+          { label: 'Completed Services', href: '/dashboard/training/services?status=Completed' },
+        ],
+      },
+      {
+        label: 'Leave Management',
+        icon: CalendarCheck2,
+        children: [
+          { label: 'Leave Request', href: '/dashboard/leaves/request', icon: PlusCircle },
+          { label: 'My Leaves', href: '/dashboard/leaves/approved', icon: CheckCircle2 },
         ],
       },
       { label: 'Sign out', icon: LogOut, href: '/auth/login' },
@@ -561,8 +578,17 @@ export function Sidebar() {
       { label: 'Sign out', icon: LogOut, href: '/auth/login' },
     ]
   } else {
-    // For all other roles (Admin, Super Admin, etc.), show all menu items except "DC listed" (only for Manager and Coordinator)
+    // For all other roles (Admin, Super Admin, etc.), show all menu items except "DC listed" (only for Manager and Coordinator) and "Term-Wise DC"
     finalNav = NAV.map(item => {
+      // Filter Clients menu items to exclude "Term-Wise DC" for Admin
+      if (item.label === 'Clients' && item.children) {
+        return {
+          ...item,
+          children: item.children.filter(child => 
+            child.label !== 'Term-Wise DC'
+          )
+        }
+      }
       // Filter Warehouse menu items to exclude "DC listed" for roles other than Manager and Coordinator
       if (item.label === 'Warehouse' && item.children) {
         return {
