@@ -1,4 +1,7 @@
 const Service = require('../models/Service');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 // @desc    Get all services with filters
 // @route   GET /api/services
@@ -207,6 +210,216 @@ const getServiceStats = async (req, res) => {
   }
 };
 
+// @desc    Get services assigned to logged-in trainer (active/upcoming)
+// @route   GET /api/services/trainer/my
+// @access  Private (Trainer only)
+const getMyServices = async (req, res) => {
+  try {
+    const trainerId = req.user._id;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Get services that are scheduled and not completed/cancelled
+    const services = await Service.find({
+      trainerId,
+      status: { $in: ['Scheduled'] },
+    })
+      .populate('trainerId', 'name mobile')
+      .populate('employeeId', 'name email')
+      .populate('createdBy', 'name email')
+      .sort({ serviceDate: 1 }); // Sort by date ascending (upcoming first)
+
+    // Auto-complete services where date has passed
+    const updatePromises = services
+      .filter(service => {
+        const serviceDate = new Date(service.serviceDate);
+        serviceDate.setHours(0, 0, 0, 0);
+        return serviceDate < today;
+      })
+      .map(service => {
+        service.status = 'Completed';
+        service.completionDate = new Date();
+        return service.save();
+      });
+
+    await Promise.all(updatePromises);
+
+    // Fetch updated services
+    const updatedServices = await Service.find({
+      trainerId,
+      status: { $in: ['Scheduled'] },
+    })
+      .populate('trainerId', 'name mobile')
+      .populate('employeeId', 'name email')
+      .populate('createdBy', 'name email')
+      .sort({ serviceDate: 1 });
+
+    res.json(updatedServices);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get completed services for logged-in trainer
+// @route   GET /api/services/trainer/completed
+// @access  Private (Trainer only)
+const getMyCompletedServices = async (req, res) => {
+  try {
+    const trainerId = req.user._id;
+    
+    const services = await Service.find({
+      trainerId,
+      status: 'Completed',
+    })
+      .populate('trainerId', 'name mobile')
+      .populate('employeeId', 'name email')
+      .populate('createdBy', 'name email')
+      .sort({ completionDate: -1 }); // Sort by completion date descending
+
+    res.json(services);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Mark attendance for service
+// @route   POST /api/services/:id/mark-attendance
+// @access  Private (Trainer only)
+const markServiceAttendance = async (req, res) => {
+  try {
+    const service = await Service.findById(req.params.id);
+    
+    if (!service) {
+      return res.status(404).json({ message: 'Service not found' });
+    }
+    
+    // Verify trainer owns this service
+    if (service.trainerId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not authorized to mark attendance for this service' });
+    }
+    
+    // Mark attendance for today
+    service.attendanceDate = new Date();
+    await service.save();
+    
+    const populatedService = await Service.findById(service._id)
+      .populate('trainerId', 'name mobile')
+      .populate('employeeId', 'name email')
+      .populate('createdBy', 'name email');
+    
+    res.json(populatedService);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Mark service as completed
+// @route   POST /api/services/:id/complete
+// @access  Private (Trainer only)
+const completeService = async (req, res) => {
+  try {
+    const service = await Service.findById(req.params.id);
+    
+    if (!service) {
+      return res.status(404).json({ message: 'Service not found' });
+    }
+    
+    // Verify trainer owns this service
+    if (service.trainerId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not authorized to complete this service' });
+    }
+    
+    // Mark as completed
+    service.status = 'Completed';
+    service.completionDate = new Date();
+    await service.save();
+    
+    const populatedService = await Service.findById(service._id)
+      .populate('trainerId', 'name mobile')
+      .populate('employeeId', 'name email')
+      .populate('createdBy', 'name email');
+    
+    res.json(populatedService);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Configure multer for feedback PDF uploads
+const feedbackStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadDir = path.join(__dirname, '../uploads/service-feedback');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, 'feedback-' + uniqueSuffix + ext);
+  }
+});
+
+const feedbackFileFilter = (req, file, cb) => {
+  if (file.mimetype === 'application/pdf') {
+    cb(null, true);
+  } else {
+    cb(new Error('Only PDF files are allowed'), false);
+  }
+};
+
+const uploadFeedback = multer({
+  storage: feedbackStorage,
+  fileFilter: feedbackFileFilter,
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+});
+
+// @desc    Upload feedback PDF for service
+// @route   POST /api/services/:id/upload-feedback
+// @access  Private (Trainer only)
+const uploadServiceFeedback = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+    
+    const service = await Service.findById(req.params.id);
+    
+    if (!service) {
+      return res.status(404).json({ message: 'Service not found' });
+    }
+    
+    // Verify trainer owns this service
+    if (service.trainerId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not authorized to upload feedback for this service' });
+    }
+    
+    // Generate URL for the uploaded file
+    const fileUrl = `/uploads/service-feedback/${req.file.filename}`;
+    const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
+    const fullUrl = `${baseUrl}${fileUrl}`;
+    
+    // Update service with feedback PDF URL
+    service.feedbackPdfUrl = fullUrl;
+    await service.save();
+    
+    const populatedService = await Service.findById(service._id)
+      .populate('trainerId', 'name mobile')
+      .populate('employeeId', 'name email')
+      .populate('createdBy', 'name email');
+    
+    res.json({
+      message: 'Feedback uploaded successfully',
+      service: populatedService,
+      feedbackPdfUrl: fullUrl,
+    });
+  } catch (error) {
+    console.error('Error uploading feedback:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   getServices,
   getService,
@@ -214,6 +427,12 @@ module.exports = {
   updateService,
   cancelService,
   getServiceStats,
+  getMyServices,
+  getMyCompletedServices,
+  markServiceAttendance,
+  completeService,
+  uploadServiceFeedback,
+  uploadFeedbackMiddleware: uploadFeedback.single('feedback'),
 };
 
 

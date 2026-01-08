@@ -1,4 +1,7 @@
 const Training = require('../models/Training');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 // @desc    Get all trainings with filters
 // @route   GET /api/training
@@ -207,6 +210,216 @@ const getTrainingStats = async (req, res) => {
   }
 };
 
+// @desc    Get trainings assigned to logged-in trainer (active/upcoming)
+// @route   GET /api/training/trainer/my
+// @access  Private (Trainer only)
+const getMyTrainings = async (req, res) => {
+  try {
+    const trainerId = req.user._id;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Get trainings that are scheduled and not completed/cancelled
+    const trainings = await Training.find({
+      trainerId,
+      status: { $in: ['Scheduled'] },
+    })
+      .populate('trainerId', 'name mobile')
+      .populate('employeeId', 'name email')
+      .populate('createdBy', 'name email')
+      .sort({ trainingDate: 1 }); // Sort by date ascending (upcoming first)
+
+    // Auto-complete trainings where date has passed
+    const updatePromises = trainings
+      .filter(training => {
+        const trainingDate = new Date(training.trainingDate);
+        trainingDate.setHours(0, 0, 0, 0);
+        return trainingDate < today;
+      })
+      .map(training => {
+        training.status = 'Completed';
+        training.completionDate = new Date();
+        return training.save();
+      });
+
+    await Promise.all(updatePromises);
+
+    // Fetch updated trainings
+    const updatedTrainings = await Training.find({
+      trainerId,
+      status: { $in: ['Scheduled'] },
+    })
+      .populate('trainerId', 'name mobile')
+      .populate('employeeId', 'name email')
+      .populate('createdBy', 'name email')
+      .sort({ trainingDate: 1 });
+
+    res.json(updatedTrainings);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get completed trainings for logged-in trainer
+// @route   GET /api/training/trainer/completed
+// @access  Private (Trainer only)
+const getMyCompletedTrainings = async (req, res) => {
+  try {
+    const trainerId = req.user._id;
+    
+    const trainings = await Training.find({
+      trainerId,
+      status: 'Completed',
+    })
+      .populate('trainerId', 'name mobile')
+      .populate('employeeId', 'name email')
+      .populate('createdBy', 'name email')
+      .sort({ completionDate: -1 }); // Sort by completion date descending
+
+    res.json(trainings);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Mark attendance for training
+// @route   POST /api/training/:id/mark-attendance
+// @access  Private (Trainer only)
+const markTrainingAttendance = async (req, res) => {
+  try {
+    const training = await Training.findById(req.params.id);
+    
+    if (!training) {
+      return res.status(404).json({ message: 'Training not found' });
+    }
+    
+    // Verify trainer owns this training
+    if (training.trainerId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not authorized to mark attendance for this training' });
+    }
+    
+    // Mark attendance for today
+    training.attendanceDate = new Date();
+    await training.save();
+    
+    const populatedTraining = await Training.findById(training._id)
+      .populate('trainerId', 'name mobile')
+      .populate('employeeId', 'name email')
+      .populate('createdBy', 'name email');
+    
+    res.json(populatedTraining);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Mark training as completed
+// @route   POST /api/training/:id/complete
+// @access  Private (Trainer only)
+const completeTraining = async (req, res) => {
+  try {
+    const training = await Training.findById(req.params.id);
+    
+    if (!training) {
+      return res.status(404).json({ message: 'Training not found' });
+    }
+    
+    // Verify trainer owns this training
+    if (training.trainerId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not authorized to complete this training' });
+    }
+    
+    // Mark as completed
+    training.status = 'Completed';
+    training.completionDate = new Date();
+    await training.save();
+    
+    const populatedTraining = await Training.findById(training._id)
+      .populate('trainerId', 'name mobile')
+      .populate('employeeId', 'name email')
+      .populate('createdBy', 'name email');
+    
+    res.json(populatedTraining);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Configure multer for feedback PDF uploads
+const feedbackStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadDir = path.join(__dirname, '../uploads/training-feedback');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, 'feedback-' + uniqueSuffix + ext);
+  }
+});
+
+const feedbackFileFilter = (req, file, cb) => {
+  if (file.mimetype === 'application/pdf') {
+    cb(null, true);
+  } else {
+    cb(new Error('Only PDF files are allowed'), false);
+  }
+};
+
+const uploadFeedback = multer({
+  storage: feedbackStorage,
+  fileFilter: feedbackFileFilter,
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+});
+
+// @desc    Upload feedback PDF for training
+// @route   POST /api/training/:id/upload-feedback
+// @access  Private (Trainer only)
+const uploadTrainingFeedback = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+    
+    const training = await Training.findById(req.params.id);
+    
+    if (!training) {
+      return res.status(404).json({ message: 'Training not found' });
+    }
+    
+    // Verify trainer owns this training
+    if (training.trainerId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not authorized to upload feedback for this training' });
+    }
+    
+    // Generate URL for the uploaded file
+    const fileUrl = `/uploads/training-feedback/${req.file.filename}`;
+    const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
+    const fullUrl = `${baseUrl}${fileUrl}`;
+    
+    // Update training with feedback PDF URL
+    training.feedbackPdfUrl = fullUrl;
+    await training.save();
+    
+    const populatedTraining = await Training.findById(training._id)
+      .populate('trainerId', 'name mobile')
+      .populate('employeeId', 'name email')
+      .populate('createdBy', 'name email');
+    
+    res.json({
+      message: 'Feedback uploaded successfully',
+      training: populatedTraining,
+      feedbackPdfUrl: fullUrl,
+    });
+  } catch (error) {
+    console.error('Error uploading feedback:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   getTrainings,
   getTraining,
@@ -214,5 +427,11 @@ module.exports = {
   updateTraining,
   cancelTraining,
   getTrainingStats,
+  getMyTrainings,
+  getMyCompletedTrainings,
+  markTrainingAttendance,
+  completeTraining,
+  uploadTrainingFeedback,
+  uploadFeedbackMiddleware: uploadFeedback.single('feedback'),
 };
 

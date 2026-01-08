@@ -40,6 +40,17 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 const path = require('path');
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Ensure feedback upload directories exist
+const fs = require('fs');
+const trainingFeedbackDir = path.join(__dirname, 'uploads', 'training-feedback');
+const serviceFeedbackDir = path.join(__dirname, 'uploads', 'service-feedback');
+if (!fs.existsSync(trainingFeedbackDir)) {
+  fs.mkdirSync(trainingFeedbackDir, { recursive: true });
+}
+if (!fs.existsSync(serviceFeedbackDir)) {
+  fs.mkdirSync(serviceFeedbackDir, { recursive: true });
+}
+
 // Database connection
 const connectDB = require('./config/db');
 

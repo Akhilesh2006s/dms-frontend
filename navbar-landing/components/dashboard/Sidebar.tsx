@@ -540,12 +540,14 @@ export function Sidebar() {
     finalNav = [
       { label: 'My Dashboard', icon: LayoutDashboard, href: '/dashboard' },
       {
-        label: 'Training and Services',
+        label: 'Training & Services (Active / Upcoming)',
         icon: GraduationCap,
-        children: [
-          { label: 'Trainings List', href: '/dashboard/training/list' },
-          { label: 'Services List', href: '/dashboard/training/services' },
-        ],
+        href: '/dashboard/training/trainer/my',
+      },
+      {
+        label: 'Completed Training & Services',
+        icon: CheckCircle2,
+        href: '/dashboard/training/trainer/completed',
       },
       {
         label: 'Expense',
@@ -553,14 +555,6 @@ export function Sidebar() {
         children: [
           { label: 'Create Expense', href: '/dashboard/expenses/create', icon: PlusCircle },
           { label: 'My Expenses', href: '/dashboard/expenses/my', icon: FileText },
-        ],
-      },
-      {
-        label: 'Completed Training and Services',
-        icon: CheckCircle2,
-        children: [
-          { label: 'Completed Trainings', href: '/dashboard/training/list?status=Completed' },
-          { label: 'Completed Services', href: '/dashboard/training/services?status=Completed' },
         ],
       },
       {

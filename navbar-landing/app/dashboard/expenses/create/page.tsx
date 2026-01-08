@@ -155,7 +155,7 @@ export default function CreateExpensePage() {
           headers["Authorization"] = `Bearer ${token}`
         }
 
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:5001"}/api/expenses/create`, {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:5000"}/api/expenses/create`, {
           method: 'POST',
           headers,
           body: formData,

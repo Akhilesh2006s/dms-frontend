@@ -14,6 +14,9 @@ const trainingSchema = new mongoose.Schema({
   remarks: { type: String }, // Remarks field
   status: { type: String, enum: ['Scheduled', 'Completed', 'Cancelled'], default: 'Scheduled' },
   poImageUrl: { type: String }, // Purchase Order image
+  attendanceDate: { type: Date }, // Date when attendance was marked
+  feedbackPdfUrl: { type: String }, // URL to uploaded feedback PDF
+  completionDate: { type: Date }, // Date when training was completed
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 }, {
   timestamps: true,
