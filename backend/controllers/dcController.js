@@ -71,7 +71,7 @@ const getDCs = async (req, res) => {
 
     // Optimize query - fetch without populate first, then populate if needed
     let dcs = await DC.find(filter)
-      .select('_id saleId dcOrderId employeeId customerName customerPhone customerEmail customerAddress product requestedQuantity availableQuantity deliverableQuantity status poPhotoUrl poDocument productDetails dcDate dcRemarks dcCategory dcNotes transport lrNo lrDate boxes transportArea deliveryStatus financeRemarks splApproval smeRemarks warehouseProcessedAt warehouseProcessedBy completedAt completedBy createdAt updatedAt')
+      .select('_id saleId dcOrderId employeeId customerName customerPhone customerEmail customerAddress product requestedQuantity availableQuantity deliverableQuantity status poPhotoUrl poDocument productDetails dcDate dcRemarks dcCategory dcNotes transport lrNo lrDate lrCost boxes transportArea deliveryStatus financeRemarks splApproval smeRemarks warehouseProcessedAt warehouseProcessedBy completedAt completedBy createdAt updatedAt')
       .sort({ createdAt: -1 })
       .lean()
       .maxTimeMS(20000); // 20 second timeout
@@ -149,7 +149,7 @@ const getDC = async (req, res) => {
   try {
     const dc = await DC.findById(req.params.id)
       .populate('saleId', 'customerName product quantity status poDocument poSubmittedAt poSubmittedBy')
-      .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products due_amount due_percentage')
+      .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products due_amount due_percentage transport_name transport_location transportation_landmark pincode')
       .populate('employeeId', 'name email')
       .populate('adminId', 'name email')
       .populate('managerId', 'name email')
@@ -660,7 +660,7 @@ const getCompletedDCs = async (req, res) => {
     // Use lowercase 'completed' to match the DC model enum
     // Optimize query - fetch without populate first
     let dcs = await DC.find({ status: 'completed' })
-      .select('_id saleId dcOrderId employeeId customerName customerPhone customerEmail customerAddress product requestedQuantity availableQuantity deliverableQuantity status poPhotoUrl poDocument productDetails dcDate dcRemarks dcCategory dcNotes transport lrNo lrDate boxes transportArea deliveryStatus financeRemarks splApproval smeRemarks warehouseProcessedAt warehouseProcessedBy completedAt completedBy createdAt updatedAt')
+      .select('_id saleId dcOrderId employeeId customerName customerPhone customerEmail customerAddress product requestedQuantity availableQuantity deliverableQuantity status poPhotoUrl poDocument productDetails dcDate dcRemarks dcCategory dcNotes transport lrNo lrDate lrCost boxes transportArea deliveryStatus financeRemarks splApproval smeRemarks warehouseProcessedAt warehouseProcessedBy completedAt completedBy createdAt updatedAt')
       .sort({ completedAt: -1, createdAt: -1 }) // Sort by completedAt first, then createdAt as fallback
       .lean()
       .maxTimeMS(20000);
@@ -669,6 +669,7 @@ const getCompletedDCs = async (req, res) => {
     if (dcs && dcs.length > 0) {
       try {
         const populatedPromise = DC.find({ _id: { $in: dcs.map(dc => dc._id) }, status: 'completed' })
+          .select('_id saleId dcOrderId employeeId customerName customerPhone customerEmail customerAddress product requestedQuantity availableQuantity deliverableQuantity status poPhotoUrl poDocument productDetails dcDate dcRemarks dcCategory dcNotes transport lrNo lrDate lrCost boxes transportArea deliveryStatus financeRemarks splApproval smeRemarks warehouseProcessedAt warehouseProcessedBy completedAt completedBy createdAt updatedAt')
           .populate('saleId', 'customerName product quantity status')
           .populate('dcOrderId', 'school_name school_type contact_person contact_mobile email address location zone products dc_code')
           .populate('employeeId', 'name email')

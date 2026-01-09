@@ -1226,6 +1226,44 @@ export default function ClosedSalesPage() {
   const handleSendToSeniorCoordinator = async () => {
     if (!selectedDeal) return
 
+    // Validate that all product fields are filled
+    if (productRows.length === 0) {
+      alert('Please add at least one product before sending to Senior Coordinator')
+      return
+    }
+
+    // Check each product row for required fields
+    const invalidRows: string[] = []
+    productRows.forEach((row, idx) => {
+      const rowNum = idx + 1
+      if (!row.product || row.product.trim() === '') {
+        invalidRows.push(`Row ${rowNum}: Product is required`)
+      }
+      if (!row.class || row.class.trim() === '') {
+        invalidRows.push(`Row ${rowNum}: Class is required`)
+      }
+      if (!row.category || row.category.trim() === '') {
+        invalidRows.push(`Row ${rowNum}: Category is required`)
+      }
+      if (!row.specs || row.specs.trim() === '') {
+        invalidRows.push(`Row ${rowNum}: Specs is required`)
+      }
+      if (!row.strength || Number(row.strength) <= 0) {
+        invalidRows.push(`Row ${rowNum}: Quantity must be greater than 0`)
+      }
+      if (!row.level || row.level.trim() === '') {
+        invalidRows.push(`Row ${rowNum}: Level is required`)
+      }
+      if (!row.term || row.term.trim() === '') {
+        invalidRows.push(`Row ${rowNum}: Term is required`)
+      }
+    })
+
+    if (invalidRows.length > 0) {
+      alert('Please fill in all required fields:\n\n' + invalidRows.join('\n'))
+      return
+    }
+
     setSaving(true)
     try {
       // Check if this is a Term 2 split DC
@@ -1236,25 +1274,26 @@ export default function ClosedSalesPage() {
       const dcRequestData = (selectedDeal as any).dcRequestData || {}
       
       // Prepare payload to create DC and submit to manager
-      // Always use current productRows to ensure term changes are saved
+      // Always use current productRows and form fields to ensure all changes are saved
       const raisePayload: any = {
         dcOrderId: selectedDeal._id, // Use DcOrder ID (will be resolved from term2DCId if needed)
-        dcDate: dcRequestData.dcDate || dcDate || undefined,
-        dcRemarks: dcRequestData.dcRemarks || dcRemarks || undefined,
-        dcCategory: dcRequestData.dcCategory || dcCategory || undefined,
+        dcDate: dcDate || dcRequestData.dcDate || undefined, // Prioritize current form value
+        dcRemarks: dcRemarks || dcRequestData.dcRemarks || undefined, // Prioritize current form value
+        dcCategory: dcCategory || dcRequestData.dcCategory || undefined, // Prioritize current form value
         requestedQuantity: productRows.length > 0 
           ? productRows.reduce((sum, row) => sum + (row.strength || 0), 0) || 1
           : (dcRequestData.requestedQuantity || 1),
+        // Always use current productRows to save all edited product details
         productDetails: productRows.length > 0 
           ? productRows.map(row => ({
-          product: row.product,
-          class: row.class,
-          category: row.category,
-          specs: row.specs || 'Regular',
-          subject: row.subject || undefined,
-          strength: Number(row.strength) || 0,
-          quantity: Number(row.strength) || 0, // Quantity should match strength
-          level: row.level || getDefaultLevel(row.product || 'Abacus'),
+              product: row.product || '',
+              class: row.class || '1',
+              category: row.category || (selectedDeal?.school_type === 'Existing' ? 'Existing Students' : 'New Students'),
+              specs: row.specs || 'Regular',
+              subject: row.subject || undefined,
+              strength: Number(row.strength) || 0,
+              quantity: Number(row.strength) || 0, // Quantity should match strength
+              level: row.level || getDefaultLevel(row.product || 'Abacus'),
               term: row.term || 'Term 1',
             }))
           : (dcRequestData.productDetails || []),
@@ -1749,11 +1788,36 @@ export default function ClosedSalesPage() {
                 </div>
               </div>
 
-              {/* Products Table - Read-only display */}
+              {/* Products Table - Editable */}
               <div className="border-t border-slate-200 pt-8 mt-8">
-                <div className="mb-6">
+                <div className="mb-6 flex justify-between items-center">
+                  <div>
                     <Label className="text-xl font-bold text-slate-900">Products & Quantities</Label>
-                  <p className="text-sm text-slate-500 mt-1">Product details and quantities</p>
+                    <p className="text-sm text-slate-500 mt-1">Product details and quantities</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const newRow: ProductRow = {
+                        id: Date.now().toString(),
+                        product: '',
+                        class: '1',
+                        category: selectedDeal?.school_type === 'Existing' ? 'Existing Students' : 'New Students',
+                        specs: 'Regular',
+                        strength: 0,
+                        level: 'L2',
+                        term: 'Term 1',
+                        unit_price: 0,
+                      }
+                      setProductRows([...productRows, newRow])
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    <PlusCircle className="w-4 h-4" />
+                    Add Product
+                  </Button>
                 </div>
                 
                 <div className="overflow-x-auto rounded-lg border border-slate-200 shadow-sm bg-white">
@@ -1766,8 +1830,8 @@ export default function ClosedSalesPage() {
                         <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Specs</th>
                         <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Subject</th>
                         <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Quantity</th>
-                        <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Unit Price</th>
                         <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Level</th>
+                        <th className="py-4 px-5 text-left text-slate-700 font-bold text-xs uppercase tracking-wider">Term</th>
                         <th className="py-4 px-5 text-center text-slate-700 font-bold text-xs uppercase tracking-wider">Action</th>
                       </tr>
                     </thead>
@@ -1775,77 +1839,159 @@ export default function ClosedSalesPage() {
                       {productRows.map((row, idx) => (
                         <tr key={row.id} className="bg-white hover:bg-blue-50/30 transition-all duration-150 border-b border-slate-100">
                           <td className="py-4 px-5">
-                            <Input
+                            <Select
                               value={row.product}
-                              readOnly
-                              className="h-9 text-sm bg-slate-50 border-slate-200"
-                            />
+                              onValueChange={(value) => {
+                                const updated = [...productRows]
+                                updated[idx].product = value
+                                updated[idx].level = getDefaultLevel(value)
+                                setProductRows(updated)
+                              }}
+                            >
+                              <SelectTrigger className="h-9 text-sm bg-white border-slate-200">
+                                <SelectValue placeholder="Select Product" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {availableProducts.map((product) => (
+                                  <SelectItem key={product} value={product}>
+                                    {product}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </td>
                           <td className="py-4 px-5">
                             <Input
                               value={row.class}
-                              readOnly
-                              className="h-9 text-sm bg-slate-50 border-slate-200 w-20"
+                              onChange={(e) => {
+                                const updated = [...productRows]
+                                updated[idx].class = e.target.value
+                                setProductRows(updated)
+                              }}
+                              className="h-9 text-sm bg-white border-slate-200 w-20"
+                              placeholder="Class"
                             />
                           </td>
                           <td className="py-4 px-5">
                             <Input
                               value={row.category}
-                              readOnly
-                              className="h-9 text-sm bg-slate-50 border-slate-200"
+                              onChange={(e) => {
+                                const updated = [...productRows]
+                                updated[idx].category = e.target.value
+                                setProductRows(updated)
+                              }}
+                              className="h-9 text-sm bg-white border-slate-200"
+                              placeholder="Category"
                             />
                           </td>
                           <td className="py-4 px-5">
                             <Input
                               value={row.specs || 'Regular'}
-                              readOnly
-                              className="h-9 text-sm bg-slate-50 border-slate-200"
+                              onChange={(e) => {
+                                const updated = [...productRows]
+                                updated[idx].specs = e.target.value
+                                setProductRows(updated)
+                              }}
+                              className="h-9 text-sm bg-white border-slate-200"
+                              placeholder="Specs"
                             />
                           </td>
                           <td className="py-4 px-5">
                             <Input
-                              value={row.subject || '-'}
-                              readOnly
-                              className="h-9 text-sm bg-slate-50 border-slate-200"
+                              value={row.subject || ''}
+                              onChange={(e) => {
+                                const updated = [...productRows]
+                                updated[idx].subject = e.target.value
+                                setProductRows(updated)
+                              }}
+                              className="h-9 text-sm bg-white border-slate-200"
+                              placeholder="Subject"
                             />
                           </td>
                           <td className="py-4 px-5">
                             <Input
                               type="number"
-                              value={row.strength || 0}
-                              readOnly
-                              className="h-9 text-sm bg-slate-50 border-slate-200 w-24"
+                              value={row.strength || ''}
+                              onChange={(e) => {
+                                let value = e.target.value
+                                // Remove leading zeros (but allow single '0')
+                                if (value.length > 1) {
+                                  value = value.replace(/^0+/, '') || '0'
+                                }
+                                // Convert to number, use 0 if empty
+                                const numValue = value === '' ? 0 : Number(value)
+                                const updated = [...productRows]
+                                updated[idx].strength = numValue
+                                setProductRows(updated)
+                              }}
+                              onBlur={(e) => {
+                                // Normalize on blur to remove any remaining leading zeros
+                                const numValue = Number(e.target.value) || 0
+                                if (numValue !== row.strength) {
+                                  const updated = [...productRows]
+                                  updated[idx].strength = numValue
+                                  setProductRows(updated)
+                                }
+                              }}
+                              className="h-9 text-sm bg-white border-slate-200 w-24"
+                              min="0"
+                              placeholder="0"
                             />
                           </td>
                           <td className="py-4 px-5">
-                            <Input
-                              type="number"
-                              value={row.unit_price || 0}
-                              readOnly
-                              className="h-9 text-sm bg-slate-50 border-slate-200 w-24"
-                            />
-                          </td>
-                          <td className="py-4 px-5">
-                            <Input
+                            <Select
                               value={row.level || 'L2'}
-                              readOnly
-                              className="h-9 text-sm bg-slate-50 border-slate-200 w-20"
-                            />
+                              onValueChange={(value) => {
+                                const updated = [...productRows]
+                                updated[idx].level = value
+                                setProductRows(updated)
+                              }}
+                            >
+                              <SelectTrigger className="h-9 text-sm bg-white border-slate-200 w-20">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {row.product ? getProductLevels(row.product).map((level) => (
+                                  <SelectItem key={level} value={level}>
+                                    {level}
+                                  </SelectItem>
+                                )) : (
+                                  <SelectItem value="L2">L2</SelectItem>
+                                )}
+                              </SelectContent>
+                            </Select>
+                          </td>
+                          <td className="py-4 px-5">
+                            <Select
+                              value={row.term || 'Term 1'}
+                              onValueChange={(value) => {
+                                const updated = [...productRows]
+                                updated[idx].term = value
+                                setProductRows(updated)
+                              }}
+                            >
+                              <SelectTrigger className="h-9 text-sm bg-white border-slate-200 w-24">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Term 1">Term 1</SelectItem>
+                                <SelectItem value="Term 2">Term 2</SelectItem>
+                                <SelectItem value="Both">Both</SelectItem>
+                              </SelectContent>
+                            </Select>
                           </td>
                           <td className="py-4 px-5 text-center">
-                            {productRows.length > 1 && (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                className="text-red-600 hover:text-red-700 hover:bg-red-50 h-9 w-9 p-0 rounded-full transition-all duration-200"
-                                onClick={() => {
-                                  setProductRows(productRows.filter((_, i) => i !== idx))
-                                }}
-                              >
-                                <X className="w-4 h-4" />
-                              </Button>
-                            )}
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50 h-9 w-9 p-0 rounded-full transition-all duration-200"
+                              onClick={() => {
+                                setProductRows(productRows.filter((_, i) => i !== idx))
+                              }}
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
                           </td>
                         </tr>
                       ))}
@@ -1859,12 +2005,7 @@ export default function ClosedSalesPage() {
                             {productRows.reduce((sum, row) => sum + (Number(row.strength) || 0), 0)}
                           </span>
                         </td>
-                        <td className="px-5 py-4 text-right">
-                          <span className="text-slate-800 text-base">
-                            ₹{productRows.reduce((sum, row) => sum + ((Number(row.strength) || 0) * (Number(row.unit_price) || 0)), 0).toFixed(2)}
-                          </span>
-                        </td>
-                        <td colSpan={2} className="px-5 py-4"></td>
+                        <td colSpan={4} className="px-5 py-4"></td>
                       </tr>
                     </tbody>
                   </table>

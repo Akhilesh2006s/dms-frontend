@@ -902,9 +902,9 @@ export default function ClientDCPage() {
       const hasBothTerm = uniqueTerms.includes('Both')
       const hasTerm1 = uniqueTerms.includes('Term 1')
       const hasTerm2 = uniqueTerms.includes('Term 2')
-      // Only split if there are actual Term 1 AND Term 2 products (not "Both")
-      // If "Both" is present, treat it like Term 1 (goes to Closed Sales, no splitting)
-      const hasBothTerms = hasTerm1 && hasTerm2 && !hasBothTerm
+      // Split if there are Term 2 products AND (Term 1 products OR "Both" products)
+      // "Both" products behave like Term 1 products - go to DC 1 (Closed Sales)
+      const hasBothTerms = hasTerm2 && (hasTerm1 || hasBothTerm)
 
       // Split products by term
       const term1Products = productDetails.filter(p => {
@@ -2907,12 +2907,13 @@ export default function ClientDCPage() {
                     )
                   }
 
-                  // Check if all products have the same term
+                  // Check if all products have the same term (excluding "Both")
                   const terms = editProductRows.map(row => row.term || 'Term 1')
                   const uniqueTerms = Array.from(new Set(terms))
-                  const hasDifferentTerms = uniqueTerms.length > 1
+                  const hasBothTerm = terms.includes('Both')
+                  const hasDifferentTerms = uniqueTerms.length > 1 || hasBothTerm
 
-                  // If all products have the same term, show single table
+                  // If all products have the same term (and it's not "Both"), show single table
                   if (!hasDifferentTerms) {
                     return (
                       <div className="overflow-x-auto">
@@ -2944,8 +2945,15 @@ export default function ClientDCPage() {
                   }
 
                   // If products have different terms, show separate tables
-                  const term1Products = editProductRows.filter(row => (row.term || 'Term 1') === 'Term 1')
-                  const term2Products = editProductRows.filter(row => (row.term || 'Term 1') === 'Term 2')
+                  // Products with term "Both" should only appear in Term 1 table, not Term 2
+                  const term1Products = editProductRows.filter(row => {
+                    const term = row.term || 'Term 1'
+                    return term === 'Term 1' || term === 'Both'
+                  })
+                  const term2Products = editProductRows.filter(row => {
+                    const term = row.term || 'Term 1'
+                    return term === 'Term 2'
+                  })
 
                   return (
                     <div className="space-y-6">

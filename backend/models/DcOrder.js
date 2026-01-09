@@ -6,7 +6,7 @@ const productSchema = new mongoose.Schema(
     quantity: { type: Number, default: 1, min: 0 },
     unit_price: { type: Number, default: 0, min: 0 },
     expiry_date: { type: Date },
-    term: { type: String, enum: ['Term 1', 'Term 2'], default: 'Term 1' },
+    term: { type: String, enum: ['Term 1', 'Term 2', 'Both'], default: 'Term 1' },
   },
   { _id: false }
 );

@@ -49,6 +49,20 @@ type DC = {
     product?: string
     quantity?: number
   }
+  dcOrderId?: {
+    _id: string
+    school_name?: string
+    school_type?: string
+    address?: string
+    location?: string
+    transport_name?: string
+    transport_location?: string
+    transportation_landmark?: string
+    pincode?: string
+    contact_person?: string
+    contact_mobile?: string
+    zone?: string
+  } | string
   customerName?: string
   customerPhone?: string
   product?: string
@@ -72,6 +86,12 @@ type DC = {
   zone?: string
   cluster?: string
   remarks?: string
+  transport?: string
+  lrNo?: string
+  lrDate?: string
+  boxes?: string
+  transportArea?: string
+  deliveryStatus?: string
 }
 
 export default function WarehouseDcAtWarehouse() {
@@ -86,6 +106,8 @@ export default function WarehouseDcAtWarehouse() {
   const [dcNotes, setDcNotes] = useState('')
   const [contactPerson, setContactPerson] = useState('')
   const [contactMobile, setContactMobile] = useState('')
+  const [schoolType, setSchoolType] = useState('')
+  const [schoolAddress, setSchoolAddress] = useState('')
   const [zone, setZone] = useState('')
   const [cluster, setCluster] = useState('')
   const [remarks, setRemarks] = useState('')
@@ -133,9 +155,12 @@ export default function WarehouseDcAtWarehouse() {
       const inventoryArray = Array.isArray(inventory) ? inventory : []
       setWarehouseInventory(inventoryArray)
       
-      // Fetch full DC details to get productDetails
+      // Fetch full DC details to get productDetails and dcOrderId with delivery/address info
       const fullDC = await apiRequest<DC>(`/dc/${dc._id}`)
       setSelectedDC(fullDC)
+      
+      // Extract delivery and address info from dcOrderId
+      const dcOrder = typeof fullDC.dcOrderId === 'object' ? fullDC.dcOrderId : null
       
       // Helper function to find matching inventory item
       const findInventoryItem = (productName: string, category?: string, level?: string, specs?: string, subject?: string): WarehouseItem | null => {
@@ -314,19 +339,20 @@ export default function WarehouseDcAtWarehouse() {
           const str = (p.strength !== undefined && p.strength !== null) ? Number(p.strength) : 0
           const requestedQty = Math.max(qty, str) // Use the larger value
           const availableQty = inventoryItem ? inventoryItem.currentStock : (p.availableQuantity !== undefined && p.availableQuantity !== null ? Number(p.availableQuantity) : 0)
-          // Always recalculate deliverable quantity based on requested and available (don't use existing value from backend)
-          // Ignore any existing deliverableQuantity value from the DC data
-          // Deliverable is the minimum of requested and available
-          const deliverableQty = Math.min(requestedQty, availableQty)
+          // Use deliverable quantity from database if available, otherwise calculate it
+          // The deliverable quantity from database is the value set by the manager/employee
+          const deliverableQty = (p.deliverableQuantity !== undefined && p.deliverableQuantity !== null) 
+            ? Number(p.deliverableQuantity) 
+            : Math.min(requestedQty, availableQty) // Fallback: calculate if not in database
           const remainingQty = availableQty - deliverableQty
           
           console.log(`Product ${idx + 1} quantity calculation:`, {
             'p.quantity': p.quantity,
             'p.strength': p.strength,
-            'p.deliverableQuantity (from backend - IGNORED)': p.deliverableQuantity,
+            'p.deliverableQuantity (from database)': p.deliverableQuantity,
             'requestedQty (calculated)': requestedQty,
             'availableQty (from inventory)': availableQty,
-            'deliverableQty (recalculated)': deliverableQty
+            'deliverableQty (from database or calculated)': deliverableQty
           })
           
           const productRow = {
@@ -337,7 +363,7 @@ export default function WarehouseDcAtWarehouse() {
             subject: subjectValue, // Use subject from DC productDetails (saved from pending DC)
             quantity: requestedQty, // Requested quantity (read-only)
             availableQuantity: availableQty, // Available in warehouse (from inventory, auto-filled)
-            deliverableQuantity: deliverableQty, // Deliverable (calculated)
+            deliverableQuantity: deliverableQty, // Deliverable quantity (from database, or calculated if not available)
             remainingQuantity: remainingQty, // Remaining in warehouse after delivery
             strength: p.strength || 0,
             price: p.price || 0,
@@ -377,11 +403,14 @@ export default function WarehouseDcAtWarehouse() {
       setDcNotes(fullDC.dcNotes || '')
       setContactPerson(fullDC.contactPerson || '')
       setContactMobile(fullDC.contactMobile || fullDC.customerPhone || '')
+      setSchoolType(dcOrder?.school_type || '')
+      setSchoolAddress(dcOrder?.address || '')
       setZone(fullDC.zone || '')
+      // Load cluster from DC (it's stored directly in the DC, not in dcOrderId)
       setCluster(fullDC.cluster || '')
       setRemarks(fullDC.remarks || '')
-    setInsufficientQuantity(false)
-    setOpenDialog(true)
+      setInsufficientQuantity(false)
+      setOpenDialog(true)
     } catch (e: any) {
       console.error('Failed to load DC details:', e)
       alert(`Error loading DC: ${e?.message || 'Unknown error'}`)
@@ -395,15 +424,19 @@ export default function WarehouseDcAtWarehouse() {
       const hasAllAvailableQty = productRows.every(p => 
         p.availableQuantity !== undefined && p.availableQuantity !== null && p.availableQuantity > 0
       )
+      // Check if any product has available qty < deliverable qty
+      const hasInvalidDeliverableQty = productRows.some(p => 
+        (p.availableQuantity || 0) < (p.deliverableQuantity || 0)
+      )
       const hasInsufficientQty = productRows.some(p => 
         (p.availableQuantity || 0) < (p.quantity || 0)
       )
       
       if (!hasAllAvailableQty) {
         setInsufficientQuantity(false) // Still entering, don't show warning yet
-      } else if (hasInsufficientQty) {
-        setInsufficientQuantity(true) // Some products have insufficient quantity
-        } else {
+      } else if (hasInvalidDeliverableQty || hasInsufficientQty) {
+        setInsufficientQuantity(true) // Some products have insufficient quantity or invalid deliverable qty
+      } else {
         setInsufficientQuantity(false) // All products have sufficient quantity
       }
     } else {
@@ -414,9 +447,25 @@ export default function WarehouseDcAtWarehouse() {
   const processDC = async () => {
     if (!selectedDC) return
 
+    // Validate required fields
+    if (!schoolType || schoolType.trim() === '') {
+      alert('School Type is required. Please enter the school type before submitting.')
+      return
+    }
+
+    // Validate that available qty >= deliverable qty for all products
+    const hasInvalidDeliverableQty = productRows.some(p => 
+      (p.availableQuantity || 0) < (p.deliverableQuantity || 0)
+    )
+    
+    if (hasInvalidDeliverableQty) {
+      alert('Enough quantity is not available. Available quantity is less than deliverable quantity for one or more products. Please adjust deliverable quantities or use the "Hold DC" button to put the DC on hold.')
+      return
+    }
+
     setProcessing(true)
     try {
-      // Fetch latest warehouse inventory from database
+      // Fetch latest warehouse inventory from database first
       const inventory = await apiRequest<WarehouseItem[]>('/warehouse')
       // Ensure inventory is an array before using
       const inventoryArray = Array.isArray(inventory) ? inventory : []
@@ -542,8 +591,9 @@ export default function WarehouseDcAtWarehouse() {
         return match || null
       }
 
-      // Auto-fill available quantities from database for each product
+      // Update available quantities from inventory and recalculate remaining qty for all products
       const updatedProductRows = productRows.map(p => {
+        // Find matching inventory item to get latest available quantity
         const inventoryItem = findInventoryItem(
           p.product || '',
           p.category,
@@ -552,29 +602,21 @@ export default function WarehouseDcAtWarehouse() {
           p.subject
         )
         
-        // Get available qty from database (currentStock)
-        const availableQty = inventoryItem ? inventoryItem.currentStock : (p.availableQuantity !== undefined && p.availableQuantity !== null ? Number(p.availableQuantity) : 0)
-        
-        // Get requested quantity - use the larger of quantity or strength
-        // Sometimes backend has quantity: 1 but strength: 500, so we use the larger value
-        const qty = (p.quantity !== undefined && p.quantity !== null) ? Number(p.quantity) : 0
-        const str = (p.strength !== undefined && p.strength !== null) ? Number(p.strength) : 0
-        const requestedQty = Math.max(qty, str) // Use the larger value
-        
-        // Calculate deliverable quantity and remaining quantity
-        // Deliverable is the minimum of requested and available
-        const deliverableQty = Math.min(requestedQty, availableQty)
-        const remainingQty = availableQty - deliverableQty
+        // Use inventory quantity if found, otherwise keep existing available quantity
+        const availableQty = inventoryItem ? inventoryItem.currentStock : (p.availableQuantity || 0)
+        const deliverableQty = p.deliverableQuantity || 0
+        // Calculate remaining qty = available qty - deliverable qty (only if available >= deliverable)
+        const remainingQty = availableQty >= deliverableQty ? availableQty - deliverableQty : 0
         
         return {
           ...p,
-          availableQuantity: availableQty, // Auto-filled from database
-          deliverableQuantity: deliverableQty,
+          availableQuantity: availableQty,
           remainingQuantity: remainingQty,
         }
       })
-      
-      // Update the productRows state to reflect the auto-filled values
+
+      // Use the updated product rows with recalculated remaining qty
+      // Update the productRows state to reflect the recalculated values
       setProductRows(updatedProductRows)
 
       // Calculate totals - use the larger of quantity or strength for each product
@@ -607,6 +649,18 @@ export default function WarehouseDcAtWarehouse() {
           requestedQuantity: totalRequestedQty,
           availableQuantity: totalAvailableQty,
           deliverableQuantity: totalDeliverableQty,
+          dcDate: dcDate || undefined,
+          dcRemarks: dcRemarks || undefined,
+          dcCategory: dcCategory || undefined,
+          dcNotes: dcNotes || undefined,
+          contactPerson: contactPerson || undefined,
+          contactMobile: contactMobile || undefined,
+          zone: zone || undefined,
+          cluster: cluster || undefined,
+          remarks: remarks || undefined,
+          dcOrderId: selectedDC.dcOrderId && typeof selectedDC.dcOrderId === 'object' 
+            ? { ...selectedDC.dcOrderId, school_type: schoolType || undefined, address: schoolAddress || undefined }
+            : selectedDC.dcOrderId,
         }),
       })
       
@@ -633,6 +687,12 @@ export default function WarehouseDcAtWarehouse() {
   const putOnHold = async () => {
     if (!selectedDC) return
 
+    // Validate required fields
+    if (!schoolType || schoolType.trim() === '') {
+      alert('School Type is required. Please enter the school type before putting the DC on hold.')
+      return
+    }
+
     // Validate that available quantities exist (they're auto-filled from inventory)
     const productsWithoutAvailableQty = productRows.filter(p => 
       p.availableQuantity === undefined || p.availableQuantity === null
@@ -648,11 +708,19 @@ export default function WarehouseDcAtWarehouse() {
       return
     }
 
-    // Calculate deliverable quantity for each product
-    const updatedProductRows = productRows.map(p => ({
-      ...p,
-      deliverableQuantity: Math.min(p.quantity || 0, p.availableQuantity || 0),
-    }))
+    // Recalculate remaining qty for each product: remaining qty = available qty - deliverable qty
+    // Note: Hold DC is allowed even when available qty < deliverable qty (that's the purpose of putting it on hold)
+    const updatedProductRows = productRows.map(p => {
+      const availableQty = p.availableQuantity || 0
+      const deliverableQty = p.deliverableQuantity || 0
+      // Calculate remaining qty = available qty - deliverable qty (only if available >= deliverable)
+      const remainingQty = availableQty >= deliverableQty ? availableQty - deliverableQty : 0
+      
+      return {
+        ...p,
+        remainingQuantity: remainingQty,
+      }
+    })
 
     // Calculate totals - use the larger of quantity or strength for each product
     const totalRequestedQty = productRows.reduce((sum, p) => {
@@ -666,7 +734,9 @@ export default function WarehouseDcAtWarehouse() {
     setOnHoldProcessing(true)
     try {
       // Update DC with product details and set status to 'hold'
-      const holdReason = `Insufficient quantity available. ${remarks ? `Remarks: ${remarks}` : ''}`
+      const holdReason = remarks 
+        ? `Insufficient quantity available. Remarks: ${remarks}`
+        : 'Insufficient quantity available.';
       
       await apiRequest(`/dc/${selectedDC._id}`, {
         method: 'PUT',
@@ -680,6 +750,7 @@ export default function WarehouseDcAtWarehouse() {
             quantity: p.quantity,
             availableQuantity: p.availableQuantity,
             deliverableQuantity: p.deliverableQuantity,
+            remainingQuantity: p.remainingQuantity, // Save remaining qty to database
             strength: p.strength,
             price: p.price,
             total: p.total,
@@ -694,6 +765,14 @@ export default function WarehouseDcAtWarehouse() {
           dcRemarks: dcRemarks || undefined,
           dcCategory: dcCategory || undefined,
           dcNotes: dcNotes || undefined,
+          contactPerson: contactPerson || undefined,
+          contactMobile: contactMobile || undefined,
+          zone: zone || undefined,
+          cluster: cluster || undefined,
+          remarks: remarks || undefined,
+          dcOrderId: selectedDC.dcOrderId && typeof selectedDC.dcOrderId === 'object' 
+            ? { ...selectedDC.dcOrderId, school_type: schoolType || undefined, address: schoolAddress || undefined }
+            : selectedDC.dcOrderId,
         }),
       })
       
@@ -817,6 +896,16 @@ export default function WarehouseDcAtWarehouse() {
                       />
                 </div>
                 <div>
+                      <Label className="text-sm text-neutral-600">School Type <span className="text-red-500">*</span></Label>
+                      <Input
+                        value={schoolType}
+                        onChange={(e) => setSchoolType(e.target.value)}
+                        placeholder="School Type"
+                        className={`mt-1 ${!schoolType ? 'border-red-300' : ''}`}
+                        required
+                      />
+                    </div>
+                <div>
                       <Label className="text-sm text-neutral-600">Executive</Label>
                       <Input
                         value={selectedDC.managerId?.name || ''}
@@ -832,6 +921,16 @@ export default function WarehouseDcAtWarehouse() {
                   <h3 className="font-semibold text-neutral-900 mb-4">More Information</h3>
                   <div className="space-y-4">
                     <div>
+                      <Label className="text-sm text-neutral-600">School Address</Label>
+                      <Textarea
+                        value={schoolAddress}
+                        onChange={(e) => setSchoolAddress(e.target.value)}
+                        placeholder="School Address"
+                        rows={3}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
                       <Label className="text-sm text-neutral-600">Zone</Label>
                       <Input
                         value={zone}
@@ -844,25 +943,119 @@ export default function WarehouseDcAtWarehouse() {
                       <Label className="text-sm text-neutral-600">Cluster</Label>
                       <Input
                         value={cluster}
-                        onChange={(e) => setCluster(e.target.value)}
+                        readOnly
+                        disabled
+                        className="mt-1 bg-neutral-50"
                         placeholder="Cluster"
-                        className="mt-1"
                       />
                 </div>
-                <div>
-                      <Label className="text-sm text-neutral-600">Remarks</Label>
-                      <Textarea
-                        value={remarks}
-                        onChange={(e) => setRemarks(e.target.value)}
-                        placeholder="Remarks"
-                        rows={3}
-                        className="mt-1"
-                      />
-                    </div>
                 </div>
                 </Card>
               </div>
               
+              {/* Delivery & Address Information - Full Width */}
+              {(() => {
+                const dcOrder = typeof selectedDC.dcOrderId === 'object' ? selectedDC.dcOrderId : null
+                // Get delivery and address information from database (saved in edit PO in executive)
+                const transportName = dcOrder?.transport_name || selectedDC.transport || ''
+                const transportLocation = dcOrder?.transport_location || selectedDC.transportArea || ''
+                const transportLandmark = dcOrder?.transportation_landmark || ''
+                const pincode = dcOrder?.pincode || ''
+                
+                return (
+                  <Card className="p-4 border-t-4 border-t-green-500">
+                    <h3 className="font-semibold text-neutral-900 mb-4">Delivery & Address Information</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-sm text-neutral-600">Transport Name</Label>
+                        <Input
+                          value={transportName}
+                          readOnly
+                          disabled
+                          className="mt-1 bg-neutral-50"
+                          placeholder="Not provided"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-sm text-neutral-600">Transport Location</Label>
+                        <Input
+                          value={transportLocation}
+                          readOnly
+                          disabled
+                          className="mt-1 bg-neutral-50"
+                          placeholder="Not provided"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-sm text-neutral-600">Transport Landmark</Label>
+                        <Input
+                          value={transportLandmark}
+                          readOnly
+                          disabled
+                          className="mt-1 bg-neutral-50"
+                          placeholder="Not provided"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-sm text-neutral-600">Pincode</Label>
+                        <Input
+                          value={pincode}
+                          readOnly
+                          disabled
+                          className="mt-1 bg-neutral-50"
+                          placeholder="Not provided"
+                        />
+                      </div>
+                      {selectedDC.lrNo && (
+                        <div>
+                          <Label className="text-sm text-neutral-600">LR No</Label>
+                          <Input
+                            value={selectedDC.lrNo}
+                            readOnly
+                            disabled
+                            className="mt-1 bg-neutral-50"
+                          />
+                        </div>
+                      )}
+                      {selectedDC.lrDate && (
+                        <div>
+                          <Label className="text-sm text-neutral-600">LR Date</Label>
+                          <Input
+                            type="date"
+                            value={selectedDC.lrDate ? new Date(selectedDC.lrDate).toISOString().split('T')[0] : ''}
+                            readOnly
+                            disabled
+                            className="mt-1 bg-neutral-50"
+                          />
+                        </div>
+                      )}
+                      {selectedDC.boxes && (
+                        <div>
+                          <Label className="text-sm text-neutral-600">Boxes</Label>
+                          <Input
+                            value={selectedDC.boxes}
+                            readOnly
+                            disabled
+                            className="mt-1 bg-neutral-50"
+                          />
+                        </div>
+                      )}
+                      {selectedDC.deliveryStatus && (
+                        <div>
+                          <Label className="text-sm text-neutral-600">Delivery Status</Label>
+                          <Input
+                            value={selectedDC.deliveryStatus}
+                            readOnly
+                            disabled
+                            className="mt-1 bg-neutral-50"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+                )
+              })()}
+
               {/* DC Information Update - Full Width */}
               <Card className="p-4 border-t-4 border-t-blue-500">
                 <h3 className="font-semibold text-neutral-900 mb-4">DC Information Update</h3>
@@ -921,6 +1114,13 @@ export default function WarehouseDcAtWarehouse() {
                 <div className="mb-4">
                   <h3 className="font-semibold text-neutral-900">Products</h3>
                   <p className="text-sm text-neutral-600 mt-1">Available quantity is auto-filled from inventory and cannot be changed. Deliverable and remaining quantities are calculated automatically.</p>
+                  {insufficientQuantity && (
+                    <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-md">
+                      <p className="text-sm font-medium text-red-800">
+                        ⚠️ Warning: Enough quantity is not available. Available quantity is less than deliverable quantity for one or more products. Please adjust deliverable quantities or use the "Hold DC" button to put the DC on hold.
+                      </p>
+                    </div>
+                  )}
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm border-collapse">
@@ -993,13 +1193,31 @@ export default function WarehouseDcAtWarehouse() {
                 />
                             </td>
                             <td className="py-2 px-3 border-r">
-                              <div className={`h-8 text-xs px-2 py-1.5 rounded border font-medium ${
-                                (row.availableQuantity || 0) < (row.quantity || 0)
-                                  ? 'bg-yellow-50 border-yellow-300 text-yellow-800'
-                                  : 'bg-green-50 border-green-300 text-green-800'
-                              }`}>
-                                {row.quantity !== undefined && row.quantity !== null ? row.quantity : 0}
-                              </div>
+                              <Input
+                                type="number"
+                                className={`h-8 text-xs border font-medium ${
+                                  (row.availableQuantity || 0) < (row.deliverableQuantity || 0)
+                                    ? 'bg-red-50 border-red-300 text-red-800'
+                                    : 'bg-white border-neutral-300 text-neutral-700'
+                                }`}
+                                value={row.deliverableQuantity !== undefined && row.deliverableQuantity !== null ? String(row.deliverableQuantity) : '0'}
+                                onChange={(e) => {
+                                  const updated = [...productRows]
+                                  const newDeliverableQty = Number(e.target.value) || 0
+                                  const availableQty = updated[idx].availableQuantity || 0
+                                  updated[idx].deliverableQuantity = newDeliverableQty
+                                  // Calculate remaining qty = available qty - deliverable qty (only if available > deliverable)
+                                  if (availableQty >= newDeliverableQty) {
+                                    updated[idx].remainingQuantity = availableQty - newDeliverableQty
+                                  } else {
+                                    updated[idx].remainingQuantity = 0 // Can't have negative remaining
+                                  }
+                                  setProductRows(updated)
+                                }}
+                                min="0"
+                                max={row.availableQuantity || 0}
+                                placeholder="0"
+                              />
                             </td>
                             <td className="py-2 px-3 border-r">
                               <div className={`h-8 text-xs px-2 py-1.5 rounded border font-medium ${
@@ -1043,7 +1261,7 @@ export default function WarehouseDcAtWarehouse() {
             </Button>
             <Button 
               onClick={processDC} 
-              disabled={processing || onHoldProcessing || productRows.length === 0}
+              disabled={processing || onHoldProcessing || productRows.length === 0 || insufficientQuantity}
             >
               {processing ? 'Processing...' : 'Update'}
             </Button>

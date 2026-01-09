@@ -1379,8 +1379,24 @@ export default function CloseLeadPage() {
                           <td className="px-3 py-2">
                             <Input
                               type="number"
-                              value={pd.strength}
-                              onChange={(e) => updateProductDetail(pd.id, 'strength', Number(e.target.value))}
+                              value={pd.strength || ''}
+                              onChange={(e) => {
+                                let value = e.target.value
+                                // Remove leading zeros (but allow single '0')
+                                if (value.length > 1) {
+                                  value = value.replace(/^0+/, '') || '0'
+                                }
+                                // Convert to number, use 0 if empty
+                                const numValue = value === '' ? 0 : Number(value)
+                                updateProductDetail(pd.id, 'strength', numValue)
+                              }}
+                              onBlur={(e) => {
+                                // Normalize on blur to remove any remaining leading zeros
+                                const numValue = Number(e.target.value) || 0
+                                if (numValue !== pd.strength) {
+                                  updateProductDetail(pd.id, 'strength', numValue)
+                                }
+                              }}
                               className="w-20 h-8"
                               min="1"
                               placeholder="0"
@@ -1390,8 +1406,32 @@ export default function CloseLeadPage() {
                           <td className="px-3 py-2">
                             <Input
                               type="number"
-                              value={pd.price}
-                              onChange={(e) => updateProductDetail(pd.id, 'price', Number(e.target.value))}
+                              value={pd.price || ''}
+                              onChange={(e) => {
+                                let value = e.target.value
+                                // Remove leading zeros for decimal numbers
+                                if (value.includes('.')) {
+                                  const [intPart, decPart] = value.split('.')
+                                  // Remove leading zeros from integer part, but keep at least '0' if it was just '0'
+                                  const cleanedInt = intPart.length > 1 
+                                    ? intPart.replace(/^0+/, '') || '0'
+                                    : intPart
+                                  value = cleanedInt + (decPart !== undefined ? '.' + decPart : '')
+                                } else if (value.length > 1) {
+                                  // Remove leading zeros for whole numbers
+                                  value = value.replace(/^0+/, '') || '0'
+                                }
+                                // Convert to number, use 0 if empty
+                                const numValue = value === '' ? 0 : Number(value)
+                                updateProductDetail(pd.id, 'price', numValue)
+                              }}
+                              onBlur={(e) => {
+                                // Normalize on blur to remove any remaining leading zeros
+                                const numValue = Number(e.target.value) || 0
+                                if (numValue !== pd.price) {
+                                  updateProductDetail(pd.id, 'price', numValue)
+                                }
+                              }}
                               className="w-24 h-8"
                               min="0.01"
                               placeholder="0"

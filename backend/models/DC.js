@@ -192,6 +192,9 @@ const dcSchema = new mongoose.Schema({
   lrDate: {
     type: Date,
   },
+  lrCost: {
+    type: String,
+  },
   boxes: {
     type: String,
   },
@@ -258,7 +261,7 @@ const dcSchema = new mongoose.Schema({
     },
     term: {
       type: String,
-      enum: ['Term 1', 'Term 2'],
+      enum: ['Term 1', 'Term 2', 'Both'],
       default: 'Term 1',
     },
   }],

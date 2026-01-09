@@ -258,16 +258,16 @@ export default function PendingDCPage() {
           return {
           id: String(idx + 1),
             product: matchedProduct, // Use matched product for dropdown
-          class: '1',
-          category: 'New Students',
+          class: p.class || '1',
+          category: p.category || (mergedDC.school_type === 'Existing' ? 'Existing Students' : 'New Students'),
             productName: matchedProduct, // Use matched product
           quantity: p.quantity || 0,
           strength: p.strength || 0,
-          level: getDefaultLevel(matchedProduct),
-          specs: 'Regular',
-          subject: undefined,
-          price: 0,
-          total: 0,
+          level: p.level || getDefaultLevel(matchedProduct),
+          specs: p.specs || 'Regular',
+          subject: p.subject || undefined,
+          price: p.price || 0,
+          total: p.total || 0,
           term: p.term || 'Term 1',
           }
         }))
