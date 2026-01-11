@@ -7,16 +7,16 @@ import { apiRequest } from '@/lib/api'
 import { 
   Brain, 
   TrendingUp, 
-  AlertTriangle, 
-  DollarSign, 
+  AlertCircle, 
+  Wallet, 
   Users, 
-  Shield, 
-  Activity,
-  Clock,
-  UserX,
+  ShieldCheck, 
+  LineChart as LineChartIcon,
+  Timer,
+  UserMinus,
   FileText,
-  Sparkles,
-  Zap,
+  ListChecks,
+  RefreshCw,
   BarChart3,
   TrendingDown,
   CheckCircle2,
@@ -25,7 +25,8 @@ import {
   Info,
   Target,
   Award,
-  LineChart as LineChartIcon
+  AlertTriangle,
+  Activity
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -40,7 +41,7 @@ const AI_TOOLS = [
     name: 'Revenue at Risk',
     shortName: 'Revenue Risk',
     description: 'AI-powered engine identifying revenue likely to get stuck or lost',
-    icon: DollarSign,
+    icon: Wallet,
     gradient: 'from-rose-500 via-pink-500 to-rose-600',
     bgGradient: 'from-rose-50 via-pink-50 to-rose-100',
     color: 'rose'
@@ -60,7 +61,7 @@ const AI_TOOLS = [
     name: 'Smart Priority Engine',
     shortName: 'Priority AI',
     description: 'Automatically ranks daily actions by business impact and urgency',
-    icon: Sparkles,
+    icon: ListChecks,
     gradient: 'from-amber-500 via-yellow-500 to-amber-600',
     bgGradient: 'from-amber-50 via-yellow-50 to-amber-100',
     color: 'amber'
@@ -70,7 +71,7 @@ const AI_TOOLS = [
     name: 'Deal Risk Scoring',
     shortName: 'Deal Risk',
     description: 'Identifies deals at high risk of failing with ML predictions',
-    icon: AlertTriangle,
+    icon: AlertCircle,
     gradient: 'from-red-500 via-orange-500 to-red-600',
     bgGradient: 'from-red-50 via-orange-50 to-red-100',
     color: 'red'
@@ -90,7 +91,7 @@ const AI_TOOLS = [
     name: 'Fraud Detection',
     shortName: 'Fraud AI',
     description: 'Advanced ML detection of unusual patterns in transactions',
-    icon: Shield,
+    icon: ShieldCheck,
     gradient: 'from-orange-500 via-amber-500 to-orange-600',
     bgGradient: 'from-orange-50 via-amber-50 to-orange-100',
     color: 'orange'
@@ -100,7 +101,7 @@ const AI_TOOLS = [
     name: 'Cashflow Analyzer',
     shortName: 'Cashflow',
     description: 'Identifies payment delays and cashflow bottlenecks',
-    icon: Activity,
+    icon: LineChartIcon,
     gradient: 'from-teal-500 via-cyan-500 to-teal-600',
     bgGradient: 'from-teal-50 via-cyan-50 to-teal-100',
     color: 'teal'
@@ -110,7 +111,7 @@ const AI_TOOLS = [
     name: 'Delay Cost Calculator',
     shortName: 'Delay Cost',
     description: 'Calculates financial loss from operational delays',
-    icon: Clock,
+    icon: Timer,
     gradient: 'from-yellow-500 via-amber-500 to-yellow-600',
     bgGradient: 'from-yellow-50 via-amber-50 to-yellow-100',
     color: 'yellow'
@@ -120,7 +121,7 @@ const AI_TOOLS = [
     name: 'Churn Predictor',
     shortName: 'Churn AI',
     description: 'ML-powered identification of customers likely to churn',
-    icon: UserX,
+    icon: UserMinus,
     gradient: 'from-pink-500 via-rose-500 to-pink-600',
     bgGradient: 'from-pink-50 via-rose-50 to-pink-100',
     color: 'pink'
@@ -274,7 +275,7 @@ export default function AIDashboardPage() {
                             disabled={loading}
                             className="bg-white/80 hover:bg-white"
                           >
-                            <Zap className="h-4 w-4 mr-2" />
+                            <RefreshCw className="h-4 w-4 mr-2" />
                             Refresh
                           </Button>
                         </div>
@@ -345,7 +346,7 @@ export default function AIDashboardPage() {
               </motion.div>
             )}
             <Button onClick={loadAIData} size="lg" className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white">
-              <Zap className="h-4 w-4 mr-2" />
+              <RefreshCw className="h-4 w-4 mr-2" />
               Retry Connection
             </Button>
           </div>
@@ -408,7 +409,7 @@ function NarrativeBIView({ data }: { data: any }) {
         <Card className="border-0 shadow-lg bg-white/90 backdrop-blur-sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-indigo-600" />
+              <Award className="h-5 w-5 text-indigo-600" />
               Key Insights
             </CardTitle>
           </CardHeader>
@@ -486,7 +487,7 @@ function RevenueAtRiskView({ data }: { data: any }) {
             <p className="text-rose-100 mt-2 text-sm">Based on ML risk analysis</p>
           </div>
           <div className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl">
-            <DollarSign className="h-12 w-12" />
+            <Wallet className="h-12 w-12" />
           </div>
         </div>
       </motion.div>
@@ -589,7 +590,7 @@ function ExecutiveDashboardView({ data }: { data: any }) {
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {[
-          { label: 'Total Revenue', value: `₹${(metrics.total_revenue || 0).toLocaleString('en-IN')}`, icon: DollarSign, bgClass: 'bg-blue-100', iconClass: 'text-blue-600', textClass: 'text-blue-600', trend: trend },
+          { label: 'Total Revenue', value: `₹${(metrics.total_revenue || 0).toLocaleString('en-IN')}`, icon: Wallet, bgClass: 'bg-blue-100', iconClass: 'text-blue-600', textClass: 'text-blue-600', trend: trend },
           { label: 'Total Deals', value: metrics.total_deals || 0, icon: Target, bgClass: 'bg-green-100', iconClass: 'text-green-600', textClass: 'text-green-600' },
           { label: 'Revenue Trend', value: `${trend > 0 ? '+' : ''}${trend.toFixed(1)}%`, icon: TrendingUp, bgClass: trend > 0 ? 'bg-green-100' : 'bg-red-100', iconClass: trend > 0 ? 'text-green-600' : 'text-red-600', textClass: trend > 0 ? 'text-green-600' : 'text-red-600' },
           { label: 'Avg Daily Revenue', value: `₹${(metrics.avg_daily_revenue || 0).toLocaleString('en-IN')}`, icon: BarChart3, bgClass: 'bg-purple-100', iconClass: 'text-purple-600', textClass: 'text-purple-600' }
@@ -919,7 +920,7 @@ function FraudDetectionView({ data }: { data: any }) {
             <p className="text-orange-100 mt-2 text-sm">Suspicious transactions detected</p>
           </div>
           <div className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl">
-            <Shield className="h-12 w-12" />
+            <ShieldCheck className="h-12 w-12" />
           </div>
         </div>
       </motion.div>
@@ -962,7 +963,7 @@ function FraudDetectionView({ data }: { data: any }) {
                     <ul className="space-y-1">
                       {alert.recommendations.map((rec: string, j: number) => (
                         <li key={j} className="text-xs text-gray-600 flex items-start gap-2">
-                          <Shield className="h-3 w-3 text-orange-600 mt-0.5" />
+                          <ShieldCheck className="h-3 w-3 text-orange-600 mt-0.5" />
                           <span>{rec}</span>
                         </li>
                       ))}
@@ -983,7 +984,7 @@ function CashflowAnalyzerView({ data }: { data: any }) {
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {[
-          { label: 'Total Pending', value: data.total_pending || 0, bgClass: 'bg-gradient-to-br from-blue-50 to-blue-100', iconClass: 'text-blue-600', textClass: 'text-blue-600', icon: Clock },
+          { label: 'Total Pending', value: data.total_pending || 0, bgClass: 'bg-gradient-to-br from-blue-50 to-blue-100', iconClass: 'text-blue-600', textClass: 'text-blue-600', icon: Timer },
           { label: 'Total Delayed', value: data.total_delayed || 0, bgClass: 'bg-gradient-to-br from-red-50 to-red-100', iconClass: 'text-red-600', textClass: 'text-red-600', icon: AlertTriangle }
         ].map((metric, i) => {
           const Icon = metric.icon
@@ -1091,7 +1092,7 @@ function DelayCostCalculatorView({ data }: { data: any }) {
             <p className="text-yellow-100 mt-2 text-sm">Estimated financial impact</p>
           </div>
           <div className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl">
-            <Clock className="h-12 w-12" />
+            <Timer className="h-12 w-12" />
           </div>
         </div>
       </motion.div>
@@ -1151,9 +1152,9 @@ function ChurnPredictorView({ data }: { data: any }) {
               <p className="text-4xl font-bold">{data.high_risk_count || 0}</p>
               <p className="text-pink-100 mt-2 text-sm">High risk customers identified</p>
             </div>
-            <div className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl">
-              <UserX className="h-12 w-12" />
-            </div>
+          <div className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl">
+            <UserMinus className="h-12 w-12" />
+          </div>
           </div>
           <div className="mt-4 p-4 bg-white/20 backdrop-blur-sm rounded-xl">
             <p className="text-sm opacity-90">Revenue at Risk</p>
