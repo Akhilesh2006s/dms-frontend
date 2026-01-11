@@ -26,6 +26,7 @@ const locationRoutes = require('./routes/locationRoutes');
 const productRoutes = require('./routes/productRoutes');
 const executiveManagerRoutes = require('./routes/executiveManagerRoutes');
 const sampleRequestRoutes = require('./routes/sampleRequestRoutes');
+const aiRoutes = require('./routes/aiRoutes');
 
 dotenv.config();
 
@@ -146,6 +147,7 @@ app.use('/api/location', locationRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/executive-managers', executiveManagerRoutes);
 app.use('/api/sample-requests', sampleRequestRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

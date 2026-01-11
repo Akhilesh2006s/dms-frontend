@@ -1682,9 +1682,9 @@ export default function ClientDCPage() {
       }
 
       const payload = {
-        ...editFormData,
-        products,
-        total_amount: totalAmount,
+          ...editFormData,
+          products,
+          total_amount: totalAmount,
         // Explicitly include transport fields (overrides any from spread)
         ...transportFields,
       }
@@ -1926,17 +1926,17 @@ export default function ClientDCPage() {
                         </TableCell>
                         <TableCell className="text-center">
                           {status === 'created' || status === 'po_submitted' ? (
-                            <div className="flex items-center gap-2 justify-center">
-                              {d.poPhotoUrl && (
-                                <Button 
-                                  size="sm" 
-                                  variant="outline"
-                                  onClick={() => openEditPODialog(d)}
-                                >
-                                  <Pencil className="w-4 h-4 mr-2" />
-                                  Edit PO
-                                </Button>
-                              )}
+                          <div className="flex items-center gap-2 justify-center">
+                            {d.poPhotoUrl && (
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => openEditPODialog(d)}
+                              >
+                                <Pencil className="w-4 h-4 mr-2" />
+                                Edit PO
+                              </Button>
+                            )}
                               {/* Always show Edit PO button if dcOrderId exists, even without PO photo */}
                               {!d.poPhotoUrl && d.dcOrderId && (
                                 <Button 
@@ -1950,15 +1950,15 @@ export default function ClientDCPage() {
                               )}
                               {/* Hide Request DC button if DC has pending changes (PDF changed or new products added) or pending edit request */}
                               {!dcsWithPendingChanges.has(d._id) && !dcsWithPendingEditRequests.has(d._id) && (
-                              <Button 
-                                size="sm" 
-                                onClick={() => openClientDCDialog(d)}
-                              >
-                                <Package className="w-4 h-4 mr-2" />
-                                Request DC
-                                </Button>
+                            <Button 
+                              size="sm" 
+                              onClick={() => openClientDCDialog(d)}
+                            >
+                              <Package className="w-4 h-4 mr-2" />
+                              Request DC
+                            </Button>
                               )}
-                            </div>
+                          </div>
                           ) : (
                             <div className="flex items-center gap-2 justify-center">
                               <Button 
@@ -2179,10 +2179,10 @@ export default function ClientDCPage() {
                       disabled
                       className="bg-neutral-50"
                     />
-                  </div>
+                </div>
                   <div>
                     <Label>Email</Label>
-                    <Input
+                  <Input
                       value={dcOrderData.email || ''}
                       readOnly
                       disabled
@@ -2191,7 +2191,7 @@ export default function ClientDCPage() {
                   </div>
                   <div>
                     <Label>Contact Person 2 (Decision Maker)</Label>
-                    <Input
+                  <Input
                       value={dcOrderData.contact_person2 || ''}
                       readOnly
                       disabled
@@ -2246,8 +2246,8 @@ export default function ClientDCPage() {
                     />
                   </div>
                 </div>
-              </div>
-            )}
+                </div>
+              )}
 
             {/* Delivery and Address Table */}
             <div className="border rounded-lg p-6 space-y-4">
@@ -2375,7 +2375,7 @@ export default function ClientDCPage() {
                           <Input
                             type="text"
                             className="h-10 text-sm bg-neutral-50"
-                            value={row.specs || 'Regular'}
+                            value={row.specs || 'Regular'} 
                             readOnly
                             disabled
                           />
@@ -2486,14 +2486,14 @@ export default function ClientDCPage() {
                               <tr className="border-t-2 border-neutral-300 bg-neutral-100 font-semibold">
                                 <td colSpan={6} className="px-3 py-3 text-right">
                                   <span className="text-neutral-700">Total:</span>
-                                </td>
+                      </td>
                                 <td className="px-3 py-3 text-right">
                                   {term1Products.reduce((sum, row) => sum + (Number(row.strength) || 0), 0)}
                                 </td>
                                 <td className="px-3 py-3"></td>
-                              </tr>
-                            </tbody>
-                          </table>
+                    </tr>
+                  </tbody>
+                </table>
                         </div>
               </div>
               )}
@@ -2812,9 +2812,9 @@ export default function ClientDCPage() {
                     return (
                         <TableRow key={row.id}>
                           <TableCell>
-                          <Input
+                            <Input
                               value={row.product_name}
-                            onChange={(e) => {
+                              onChange={(e) => {
                                 const updated = [...editProductRows]
                               updated[actualIdx].product_name = e.target.value
                                 setEditProductRows(updated)
@@ -3100,8 +3100,8 @@ export default function ClientDCPage() {
                           <PlusCircle className="w-3 h-3 mr-1" />
                           {isAlreadyAdded ? 'Add Another' : 'Add'}
                         </Button>
-                      </div>
-                    )
+    </div>
+  )
                   })}
                 </div>
               )}

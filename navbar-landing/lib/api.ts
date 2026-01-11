@@ -27,11 +27,20 @@ export async function apiRequest<T>(
 
     if (!res.ok) {
       let message = "Request failed";
+      let details = null;
       try {
         const data = await res.json();
-        message = data?.message || message;
+        // Check for error, message, or details fields
+        message = data?.error || data?.message || message;
+        details = data?.details || null;
       } catch (_) {}
-      throw new Error(message);
+      
+      // Include details in error message if available
+      const errorMessage = details ? `${message}\n\n${details}` : message;
+      const error = new Error(errorMessage);
+      (error as any).status = res.status;
+      (error as any).details = details;
+      throw error;
     }
 
     return (await res.json()) as T;

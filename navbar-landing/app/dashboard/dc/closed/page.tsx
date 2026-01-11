@@ -1289,11 +1289,11 @@ export default function ClosedSalesPage() {
               product: row.product || '',
               class: row.class || '1',
               category: row.category || (selectedDeal?.school_type === 'Existing' ? 'Existing Students' : 'New Students'),
-              specs: row.specs || 'Regular',
-              subject: row.subject || undefined,
-              strength: Number(row.strength) || 0,
-              quantity: Number(row.strength) || 0, // Quantity should match strength
-              level: row.level || getDefaultLevel(row.product || 'Abacus'),
+          specs: row.specs || 'Regular',
+          subject: row.subject || undefined,
+          strength: Number(row.strength) || 0,
+          quantity: Number(row.strength) || 0, // Quantity should match strength
+          level: row.level || getDefaultLevel(row.product || 'Abacus'),
               term: row.term || 'Term 1',
             }))
           : (dcRequestData.productDetails || []),
@@ -1842,10 +1842,10 @@ export default function ClosedSalesPage() {
                             <Select
                               value={row.product}
                               onValueChange={(value) => {
-                                const updated = [...productRows]
+                              const updated = [...productRows]
                                 updated[idx].product = value
                                 updated[idx].level = getDefaultLevel(value)
-                                setProductRows(updated)
+                              setProductRows(updated)
                               }}
                             >
                               <SelectTrigger className="h-9 text-sm bg-white border-slate-200">
@@ -1864,9 +1864,9 @@ export default function ClosedSalesPage() {
                             <Input
                               value={row.class}
                               onChange={(e) => {
-                                const updated = [...productRows]
+                              const updated = [...productRows]
                                 updated[idx].class = e.target.value
-                                setProductRows(updated)
+                              setProductRows(updated)
                               }}
                               className="h-9 text-sm bg-white border-slate-200 w-20"
                               placeholder="Class"
@@ -1876,9 +1876,9 @@ export default function ClosedSalesPage() {
                             <Input
                               value={row.category}
                               onChange={(e) => {
-                                const updated = [...productRows]
+                              const updated = [...productRows]
                                 updated[idx].category = e.target.value
-                                setProductRows(updated)
+                              setProductRows(updated)
                               }}
                               className="h-9 text-sm bg-white border-slate-200"
                               placeholder="Category"
@@ -1888,9 +1888,9 @@ export default function ClosedSalesPage() {
                             <Input
                               value={row.specs || 'Regular'}
                               onChange={(e) => {
-                                const updated = [...productRows]
+                              const updated = [...productRows]
                                 updated[idx].specs = e.target.value
-                                setProductRows(updated)
+                              setProductRows(updated)
                               }}
                               className="h-9 text-sm bg-white border-slate-200"
                               placeholder="Specs"
@@ -1965,9 +1965,9 @@ export default function ClosedSalesPage() {
                             <Select
                               value={row.term || 'Term 1'}
                               onValueChange={(value) => {
-                                const updated = [...productRows]
+                              const updated = [...productRows]
                                 updated[idx].term = value
-                                setProductRows(updated)
+                              setProductRows(updated)
                               }}
                             >
                               <SelectTrigger className="h-9 text-sm bg-white border-slate-200 w-24">
@@ -1981,17 +1981,17 @@ export default function ClosedSalesPage() {
                             </Select>
                           </td>
                           <td className="py-4 px-5 text-center">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50 h-9 w-9 p-0 rounded-full transition-all duration-200"
-                              onClick={() => {
-                                setProductRows(productRows.filter((_, i) => i !== idx))
-                              }}
-                            >
-                              <X className="w-4 h-4" />
-                            </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50 h-9 w-9 p-0 rounded-full transition-all duration-200"
+                                onClick={() => {
+                                  setProductRows(productRows.filter((_, i) => i !== idx))
+                                }}
+                              >
+                                <X className="w-4 h-4" />
+                              </Button>
                           </td>
                         </tr>
                       ))}
