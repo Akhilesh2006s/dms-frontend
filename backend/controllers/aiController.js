@@ -6,6 +6,9 @@ const DC = require('../models/DC');
 const DcOrder = require('../models/DcOrder');
 const User = require('../models/User');
 const Expense = require('../models/Expense');
+const ContactQuery = require('../models/ContactQuery');
+const Training = require('../models/Training');
+const Service = require('../models/Service');
 
 // Helper function to check AI service health
 const checkAIServiceHealth = async (res) => {
@@ -389,66 +392,222 @@ const getDelayCosts = async (req, res) => {
 const getChurnPredictions = async (req, res) => {
   try {
     if (!(await checkAIServiceHealth(res))) return;
-    // Get customers from leads and sales
+    
+    // Get comprehensive customer data
     const leads = await Lead.find({ 
       status: { $in: ['Saved', 'Closed'] } 
     }).lean();
     
     const sales = await Sale.find({}).lean();
+    const payments = await Payment.find({}).lean();
+    const contactQueries = await ContactQuery.find({}).lean();
+    const trainings = await Training.find({}).lean();
+    const services = await Service.find({}).lean();
     
-    // Aggregate customer data
+    // Aggregate customer data with enhanced metrics
     const customerMap = new Map();
+    const now = new Date();
     
+    // Process leads
     leads.forEach(lead => {
       const key = lead.school_name || lead.contact_mobile;
+      const schoolCode = lead.school_code;
       if (!customerMap.has(key)) {
+        const createdAt = new Date(lead.createdAt);
+        const customerAgeDays = Math.floor((now - createdAt) / (1000 * 60 * 60 * 24));
+        
         customerMap.set(key, {
           id: lead._id.toString(),
           name: lead.school_name,
+          school_code: schoolCode,
           total_orders: 0,
           total_revenue: 0,
           last_order_date: lead.updatedAt,
+          first_order_date: lead.createdAt,
+          customer_age_days: customerAgeDays,
           avg_payment_delay: 0,
           complaint_count: 0,
-          renewal_count: 0
+          renewal_count: 0,
+          training_count: 0,
+          service_count: 0,
+          interaction_count: 0,
+          unresolved_queries: 0,
+          recent_orders_3m: 0,
+          previous_orders_3m: 0
         });
       }
       const customer = customerMap.get(key);
       customer.total_orders += 1;
       customer.renewal_count += lead.status === 'Saved' ? 1 : 0;
+      
+      // Track recent vs previous orders
+      const threeMonthsAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+      const sixMonthsAgo = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+      const leadDate = new Date(lead.updatedAt);
+      
+      if (leadDate >= threeMonthsAgo) {
+        customer.recent_orders_3m += 1;
+      } else if (leadDate >= sixMonthsAgo) {
+        customer.previous_orders_3m += 1;
+      }
     });
     
+    // Process sales
     sales.forEach(sale => {
       const key = sale.customerName || sale.customerPhone;
       if (!customerMap.has(key)) {
+        const saleDate = new Date(sale.saleDate);
+        const customerAgeDays = Math.floor((now - saleDate) / (1000 * 60 * 60 * 24));
+        
         customerMap.set(key, {
           id: sale._id.toString(),
           name: sale.customerName,
           total_orders: 0,
           total_revenue: 0,
           last_order_date: sale.saleDate,
+          first_order_date: sale.saleDate,
+          customer_age_days: customerAgeDays,
           avg_payment_delay: 0,
           complaint_count: 0,
-          renewal_count: 0
+          renewal_count: 0,
+          training_count: 0,
+          service_count: 0,
+          interaction_count: 0,
+          unresolved_queries: 0,
+          recent_orders_3m: 0,
+          previous_orders_3m: 0
         });
       }
       const customer = customerMap.get(key);
       customer.total_orders += 1;
       customer.total_revenue += sale.totalAmount || 0;
-      if (sale.saleDate > customer.last_order_date) {
+      
+      const saleDate = new Date(sale.saleDate);
+      if (saleDate > new Date(customer.last_order_date)) {
         customer.last_order_date = sale.saleDate;
+      }
+      
+      // Track recent vs previous orders
+      const threeMonthsAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+      const sixMonthsAgo = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+      
+      if (saleDate >= threeMonthsAgo) {
+        customer.recent_orders_3m += 1;
+      } else if (saleDate >= sixMonthsAgo) {
+        customer.previous_orders_3m += 1;
       }
     });
     
-    // Get payment delays
-    const payments = await Payment.find({}).lean();
+    // Process payments with better delay calculation
+    const paymentDelays = [];
     payments.forEach(payment => {
       const key = payment.customerName || payment.mobileNumber;
       if (customerMap.has(key)) {
         const customer = customerMap.get(key);
-        if (payment.paymentDate && payment.approvedAt) {
-          const delay = (new Date(payment.approvedAt) - new Date(payment.paymentDate)) / (1000 * 60 * 60 * 24);
-          customer.avg_payment_delay = (customer.avg_payment_delay + delay) / 2;
+        if (payment.paymentDate) {
+          const paymentDate = new Date(payment.paymentDate);
+          const approvedDate = payment.approvedAt ? new Date(payment.approvedAt) : now;
+          const delay = Math.floor((approvedDate - paymentDate) / (1000 * 60 * 60 * 24));
+          
+          if (delay > 0) {
+            paymentDelays.push({ key, delay });
+          }
+        }
+      }
+    });
+    
+    // Calculate average payment delays
+    const delayMap = new Map();
+    paymentDelays.forEach(({ key, delay }) => {
+      if (!delayMap.has(key)) {
+        delayMap.set(key, []);
+      }
+      delayMap.get(key).push(delay);
+    });
+    
+    delayMap.forEach((delays, key) => {
+      if (customerMap.has(key)) {
+        const avgDelay = delays.reduce((a, b) => a + b, 0) / delays.length;
+        customerMap.get(key).avg_payment_delay = avgDelay;
+      }
+    });
+    
+    // Process contact queries (interactions and complaints)
+    contactQueries.forEach(query => {
+      const key = query.school_name || query.contact_mobile;
+      if (customerMap.has(key)) {
+        const customer = customerMap.get(key);
+        customer.interaction_count += 1;
+        
+        if (query.status === 'Pending' || query.status === 'In Progress') {
+          customer.unresolved_queries += 1;
+        }
+        
+        // Check if it's a complaint (negative sentiment keywords)
+        const complaintKeywords = ['complaint', 'issue', 'problem', 'dissatisfied', 'unhappy', 'poor'];
+        const description = (query.description || '').toLowerCase();
+        if (complaintKeywords.some(keyword => description.includes(keyword))) {
+          customer.complaint_count += 1;
+        }
+      }
+    });
+    
+    // Process training engagements
+    trainings.forEach(training => {
+      const schoolName = training.schoolName;
+      const schoolCode = training.schoolCode;
+      
+      // Match by school code first (most reliable), then by name
+      let matched = false;
+      for (const [key, customer] of customerMap.entries()) {
+        if (schoolCode && customer.school_code === schoolCode) {
+          customer.training_count += 1;
+          matched = true;
+          break;
+        }
+      }
+      
+      // Fallback to name matching if code didn't match
+      if (!matched && schoolName) {
+        for (const [key, customer] of customerMap.entries()) {
+          if (customer.name === schoolName || 
+              (customer.name && schoolName && (
+                customer.name.toLowerCase().includes(schoolName.toLowerCase()) || 
+                schoolName.toLowerCase().includes(customer.name.toLowerCase())
+              ))) {
+            customer.training_count += 1;
+            break;
+          }
+        }
+      }
+    });
+    
+    // Process service engagements
+    services.forEach(service => {
+      const schoolName = service.schoolName;
+      const schoolCode = service.schoolCode;
+      
+      // Match by school code first (most reliable), then by name
+      let matched = false;
+      for (const [key, customer] of customerMap.entries()) {
+        if (schoolCode && customer.school_code === schoolCode) {
+          customer.service_count += 1;
+          matched = true;
+          break;
+        }
+      }
+      
+      // Fallback to name matching if code didn't match
+      if (!matched && schoolName) {
+        for (const [key, customer] of customerMap.entries()) {
+          if (customer.name === schoolName || 
+              (customer.name && schoolName && (
+                customer.name.toLowerCase().includes(schoolName.toLowerCase()) || 
+                schoolName.toLowerCase().includes(customer.name.toLowerCase())
+              ))) {
+            customer.service_count += 1;
+            break;
+          }
         }
       }
     });

@@ -2352,7 +2352,7 @@ export default function DashboardPage() {
               </Card>
             </div>
           </Card>
-        </div>
+      </div>
       )}
     </div>
   )
