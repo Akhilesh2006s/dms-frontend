@@ -1131,10 +1131,12 @@ function DelayCostCalculatorView({ data }: { data: any }) {
 }
 
 function ChurnPredictorView({ data }: { data: any }) {
+  // Support both old and new data structure
+  const summary = data.summary || data
   const riskData = [
-    { label: 'High Risk', value: data.high_risk_count || 0, color: '#ef4444' },
-    { label: 'Medium Risk', value: data.medium_risk_count || 0, color: '#f59e0b' },
-    { label: 'Low Risk', value: data.low_risk_count || 0, color: '#10b981' }
+    { label: 'High Risk', value: summary.high_risk_count || 0, color: '#ef4444' },
+    { label: 'Medium Risk', value: summary.medium_risk_count || 0, color: '#f59e0b' },
+    { label: 'Low Risk', value: summary.low_risk_count || 0, color: '#10b981' }
   ]
 
   return (
@@ -1149,18 +1151,26 @@ function ChurnPredictorView({ data }: { data: any }) {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-xl font-semibold mb-2 opacity-90">Churn Predictions</h3>
-              <p className="text-4xl font-bold">{data.high_risk_count || 0}</p>
+              <p className="text-4xl font-bold">{summary.high_risk_count || 0}</p>
               <p className="text-pink-100 mt-2 text-sm">High risk customers identified</p>
             </div>
           <div className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl">
             <UserMinus className="h-12 w-12" />
           </div>
           </div>
-          <div className="mt-4 p-4 bg-white/20 backdrop-blur-sm rounded-xl">
-            <p className="text-sm opacity-90">Revenue at Risk</p>
-            <p className="text-2xl font-bold">
-              ₹{(data.total_at_risk_revenue || 0).toLocaleString('en-IN')}
-            </p>
+          <div className="grid grid-cols-2 gap-4 mt-4">
+            <div className="p-4 bg-white/20 backdrop-blur-sm rounded-xl">
+              <p className="text-sm opacity-90">Total Revenue at Risk</p>
+              <p className="text-2xl font-bold">
+                ₹{(summary.total_at_risk_revenue || 0).toLocaleString('en-IN')}
+              </p>
+            </div>
+            <div className="p-4 bg-white/20 backdrop-blur-sm rounded-xl">
+              <p className="text-sm opacity-90">High-Value at Risk</p>
+              <p className="text-2xl font-bold">
+                ₹{(summary.high_value_at_risk || 0).toLocaleString('en-IN')}
+              </p>
+            </div>
           </div>
         </div>
       </motion.div>
@@ -1185,10 +1195,13 @@ function ChurnPredictorView({ data }: { data: any }) {
 
       <Card className="border-0 shadow-lg">
         <CardHeader>
-          <CardTitle>At-Risk Customers</CardTitle>
+          <CardTitle>Customer Churn Risk Analysis</CardTitle>
+          <p className="text-sm text-gray-500 mt-2">
+            Customers sorted by revenue at risk. Enhanced 8-factor AI model with confidence scores.
+          </p>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
+          <div className="space-y-4">
             {data.churn_predictions?.slice(0, 20).map((prediction: any, i: number) => {
               const riskLevel = prediction.risk_level?.toLowerCase() || 'low'
               const bgClass = riskLevel === 'high' ? 'bg-red-50 border-red-200' : riskLevel === 'medium' ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'
@@ -1198,33 +1211,108 @@ function ChurnPredictorView({ data }: { data: any }) {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.05 }}
-                  className={`p-4 rounded-xl ${bgClass} border`}
+                  className={`p-5 rounded-xl ${bgClass} border`}
                 >
-                  <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <p className="font-semibold text-gray-900">{prediction.customer_name}</p>
-                      <p className="text-sm text-gray-600">
-                        ₹{prediction.total_revenue?.toLocaleString('en-IN')} • {prediction.total_orders} orders
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <Badge variant={riskLevel === 'high' ? 'destructive' : riskLevel === 'medium' ? 'default' : 'secondary'}>
-                        {Math.round((prediction.churn_probability || 0) * 100)}% risk
-                      </Badge>
-                      <p className="text-xs text-gray-500 mt-1">{prediction.risk_level}</p>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <p className="font-semibold text-gray-900 text-lg">{prediction.customer_name}</p>
+                        <Badge variant={riskLevel === 'high' ? 'destructive' : riskLevel === 'medium' ? 'default' : 'secondary'}>
+                          {Math.round((prediction.churn_probability || 0) * 100)}% risk
+                        </Badge>
+                        {prediction.confidence && (
+                          <Badge variant="outline" className="text-xs">
+                            {Math.round(prediction.confidence * 100)}% confidence
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                        <div>
+                          <p className="text-gray-600">Revenue</p>
+                          <p className="font-semibold">₹{prediction.total_revenue?.toLocaleString('en-IN') || 0}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-600">At Risk</p>
+                          <p className="font-semibold text-red-600">₹{prediction.revenue_at_risk?.toLocaleString('en-IN') || 0}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-600">Orders</p>
+                          <p className="font-semibold">{prediction.total_orders || 0}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-600">Timeframe</p>
+                          <p className="font-semibold">{prediction.churn_timeframe || 'N/A'}</p>
+                        </div>
+                      </div>
+                      {prediction.days_since_last_order !== null && prediction.days_since_last_order !== undefined && (
+                        <p className="text-xs text-gray-500 mt-2">
+                          Last order: {prediction.days_since_last_order} days ago
+                        </p>
+                      )}
                     </div>
                   </div>
+                  
+                  {prediction.risk_factors && prediction.risk_factors.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <p className="text-xs font-semibold text-gray-700 mb-2">Key Risk Factors:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {prediction.risk_factors.slice(0, 3).map((factor: any, j: number) => (
+                          <Badge key={j} variant="outline" className="text-xs">
+                            {typeof factor === 'string' ? factor : factor.factor || factor}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {prediction.engagement_score !== undefined && prediction.engagement_score !== null && (
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-600">Engagement Score:</span>
+                        <div className="flex items-center gap-2">
+                          <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-gradient-to-r from-green-500 to-red-500"
+                              style={{ width: `${(prediction.engagement_score || 0) * 100}%` }}
+                            />
+                          </div>
+                          <span className="font-semibold">{Math.round((prediction.engagement_score || 0) * 100)}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
                   {prediction.retention_recommendations && prediction.retention_recommendations.length > 0 && (
                     <div className="mt-3 pt-3 border-t border-gray-200">
                       <p className="text-xs font-semibold text-gray-700 mb-2">Retention Strategies:</p>
-                      <ul className="space-y-1">
-                        {prediction.retention_recommendations.map((rec: string, j: number) => (
-                          <li key={j} className="text-xs text-gray-600 flex items-start gap-2">
-                            <span className="text-pink-600 mt-0.5">•</span>
-                            <span>{rec}</span>
-                          </li>
-                        ))}
+                      <ul className="space-y-2">
+                        {prediction.retention_recommendations.map((rec: any, j: number) => {
+                          const recText = typeof rec === 'string' ? rec : rec.action || rec
+                          const priority = typeof rec === 'object' ? rec.priority : null
+                          return (
+                            <li key={j} className="text-xs text-gray-600 flex items-start gap-2">
+                              <span className={`mt-0.5 ${priority === 'Critical' ? 'text-red-600' : priority === 'High' ? 'text-orange-600' : 'text-blue-600'}`}>•</span>
+                              <div className="flex-1">
+                                <span>{recText}</span>
+                                {typeof rec === 'object' && rec.timeline && (
+                                  <span className="text-gray-400 ml-2">({rec.timeline})</span>
+                                )}
+                              </div>
+                            </li>
+                          )
+                        })}
                       </ul>
+                    </div>
+                  )}
+                  
+                  {prediction.retention_roi !== undefined && prediction.retention_roi !== null && prediction.retention_roi > 0 && (
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-600">Retention ROI:</span>
+                        <span className="font-bold text-green-600">
+                          {prediction.retention_roi > 0 ? '+' : ''}{Math.round(prediction.retention_roi * 100)}%
+                        </span>
+                      </div>
                     </div>
                   )}
                 </motion.div>

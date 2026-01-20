@@ -544,15 +544,18 @@ export default function ClientDCPage() {
               }
             }
             
-            // Get unit price from DcOrder product, or from DC productDetails if available
-            const unitPrice = matchingProduct 
-              ? (Number(matchingProduct.unit_price) || 0)
-              : (Number(pd.price) || 0)
+            // Get unit price from database - prioritize DcOrder product price, then DC productDetails price
+            // Both are from database, DcOrder is more up-to-date
+            const unitPrice = matchingProduct && matchingProduct.unit_price !== undefined && matchingProduct.unit_price !== null
+              ? Number(matchingProduct.unit_price)
+              : (pd.price !== undefined && pd.price !== null
+                  ? Number(pd.price)
+                  : 0)
             
             const quantity = Number(pd.quantity) || 0
             const strength = Number(pd.strength) || 0
-            // Use strength for calculation (not quantity) - strength is the actual number of students/items
-            const total = unitPrice * strength
+            // Total = strength * price (from database)
+            const total = strength * unitPrice
             totalAmount += total
             
             // Prioritize term from DcOrder product if available (more up-to-date), otherwise use DC productDetails term
@@ -575,13 +578,14 @@ export default function ClientDCPage() {
             }
           })
         } else {
-          // Fallback: use DC productDetails with prices if available
+          // Fallback: use DC productDetails with prices from database
           paymentBreakdown = fullDC.productDetails.map((p: any) => {
-            const price = Number(p.price) || 0
+            // Get price from database (DC productDetails.price)
+            const price = p.price !== undefined && p.price !== null ? Number(p.price) : 0
             const quantity = Number(p.quantity) || 0
             const strength = Number(p.strength) || 0
-            // Use strength for calculation (not quantity) - strength is the actual number of students/items
-            const total = Number(p.total) || (price * strength)
+            // Total = strength * price (from database) - always recalculate, don't use stored total
+            const total = strength * price
             totalAmount += total
             return {
               product: p.product || '',
@@ -600,47 +604,61 @@ export default function ClientDCPage() {
         }
       }
       
-      // If still no breakdown but we have total_amount from DcOrder, estimate
-      if (paymentBreakdown.length === 0 && dcOrder && dcOrder.total_amount && Number(dcOrder.total_amount) > 0) {
-        totalAmount = Number(dcOrder.total_amount)
-        // Try to get from DC productDetails and estimate prices
-        if (fullDC.productDetails && Array.isArray(fullDC.productDetails) && fullDC.productDetails.length > 0) {
-          // Use strength for calculation (not quantity)
-          const totalStrength = fullDC.productDetails.reduce((sum: number, p: any) => 
-            sum + (Number(p.strength) || 0), 0
-          )
-          const estimatedUnitPrice = totalStrength > 0 ? totalAmount / totalStrength : 0
-          
-          paymentBreakdown = fullDC.productDetails.map((pd: any) => {
-            const quantity = Number(pd.quantity) || 0
-            const strength = Number(pd.strength) || 0
-            const total = estimatedUnitPrice * strength
-            return {
-              product: pd.product || '',
-              class: pd.class || '1',
-              category: pd.category || 'New School',
-              specs: pd.specs || 'Regular',
-              subject: pd.subject || undefined,
-              quantity: quantity,
-              strength: Number(pd.strength) || 0,
-              level: pd.level || 'L2',
-              unitPrice: estimatedUnitPrice,
-              total: total,
-              term: pd.term || 'Term 1',
-            }
-          })
-        }
+      // If still no breakdown but we have DC productDetails, use prices from database
+      if (paymentBreakdown.length === 0 && fullDC.productDetails && Array.isArray(fullDC.productDetails) && fullDC.productDetails.length > 0) {
+        // Recalculate totalAmount from database prices: sum of (strength * price) for each product
+        paymentBreakdown = fullDC.productDetails.map((pd: any) => {
+          // Get price from database (DC productDetails.price)
+          const price = pd.price !== undefined && pd.price !== null ? Number(pd.price) : 0
+          const quantity = Number(pd.quantity) || 0
+          const strength = Number(pd.strength) || 0
+          // Total = strength * price (from database)
+          const total = strength * price
+          totalAmount += total
+          return {
+            product: pd.product || '',
+            class: pd.class || '1',
+            category: pd.category || 'New School',
+            specs: pd.specs || 'Regular',
+            subject: pd.subject || undefined,
+            quantity: quantity,
+            strength: strength,
+            level: pd.level || 'L2',
+            unitPrice: price,
+            total: total,
+            term: pd.term || 'Term 1',
+          }
+        })
       }
+      
+      // Recalculate totalAmount to ensure it's sum of (strength * price) for all products
+      // This ensures accuracy even if some products had stored totals
+      totalAmount = paymentBreakdown.reduce((sum: number, product: any) => {
+        const strength = Number(product.strength) || 0
+        const price = Number(product.unitPrice) || 0
+        return sum + (strength * price)
+      }, 0)
 
       // Calculate payment and return totals
       let totalPaidAsOn = 0
       let totalReturnValue = 0
+      let previousDue = 0
 
       try {
-        // Get all approved payments for this DC (advance or first payment)
-        // TotalPaidAsOn = sum of all approved payments from payments database
+        // Get all approved payments for this DC
         const payments = await apiRequest<any[]>(`/payments?dcId=${dc._id}&status=Approved`).catch(() => [])
-        totalPaidAsOn = payments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0)
+        
+        // TotalPaidAsOn = advance or first payment only
+        // Sort by paymentDate (earliest first) and take the first payment
+        if (payments.length > 0) {
+          const sortedPayments = payments.sort((a: any, b: any) => {
+            const dateA = new Date(a.paymentDate || a.createdAt || 0).getTime()
+            const dateB = new Date(b.paymentDate || b.createdAt || 0).getTime()
+            return dateA - dateB
+          })
+          // Take the first payment (advance/first payment)
+          totalPaidAsOn = Number(sortedPayments[0]?.amount) || 0
+        }
 
         // Get all returns for this DC - fetch all executive returns and filter by dcOrderId
         let returns: any[] = []
@@ -655,27 +673,59 @@ export default function ClientDCPage() {
             console.error('Error fetching returns:', e)
           }
         }
-        
         // Calculate return value from approved returns
-        // Return value = sum of return products' prices
         const approvedReturns = returns.filter((r: any) => ['Approved', 'Partially Approved', 'Stock Updated', 'Closed'].includes(r.status))
         totalReturnValue = approvedReturns.reduce((sum: number, r: any) => {
-          // Calculate return value from products - use product prices from database
+          // Calculate return value from products
           const returnValue = r.products?.reduce((productSum: number, product: any) => {
             const approvedQty = Number(product.approvedQty) || 0
-            // Get price from matching product in paymentBreakdown (from DC database)
+            // Try to get price from matching product in paymentBreakdown
             const matchingProduct = paymentBreakdown.find((pb: any) => {
               const pbName = (pb.product || '').toLowerCase().trim()
               const returnName = (product.product || '').toLowerCase().trim()
               return pbName === returnName || pbName.includes(returnName) || returnName.includes(pbName)
             })
-            // Use unitPrice from paymentBreakdown (from DC database), or fallback to 0
             const unitPrice = matchingProduct?.unitPrice || 0
-            // Return value = approved quantity * unit price
             return productSum + (approvedQty * unitPrice)
           }, 0) || 0
           return sum + returnValue
         }, 0)
+
+        // Get previous DCs for this customer to calculate previous due
+        const customerName = schoolInfo.customerName || dc.customerName || ''
+        if (customerName) {
+          const allDCs = await apiRequest<any[]>(`/dc/employee/my`).catch(() => [])
+          const previousDCs = allDCs.filter((prevDC: any) => {
+            const prevCustomerName = prevDC.customerName || prevDC.dcOrderId?.school_name || ''
+            return prevCustomerName === customerName && prevDC._id !== dc._id
+          })
+          
+          // Calculate total from previous DCs
+          let previousTotal = 0
+          for (const prevDC of previousDCs) {
+            if (prevDC.productDetails && Array.isArray(prevDC.productDetails)) {
+              const prevTotal = prevDC.productDetails.reduce((sum: number, p: any) => 
+                sum + (Number(p.total) || (Number(p.price) || 0) * (Number(p.strength) || 0)), 0
+              )
+              previousTotal += prevTotal
+            }
+          }
+          
+          // Get payments for previous DCs
+          const previousDCIds = previousDCs.map((d: any) => d._id)
+          let previousPaid = 0
+          if (previousDCIds.length > 0) {
+            // Fetch payments for each previous DC
+            const paymentPromises = previousDCIds.map((dcId: string) => 
+              apiRequest<any[]>(`/payments?dcId=${dcId}&status=Approved`).catch(() => [])
+            )
+            const paymentResults = await Promise.all(paymentPromises)
+            const allPreviousPayments = paymentResults.flat()
+            previousPaid = allPreviousPayments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0)
+          }
+          
+          previousDue = Math.max(0, previousTotal - previousPaid)
+        }
       } catch (e) {
         console.error('Error calculating payment/return totals:', e)
       }
@@ -694,7 +744,7 @@ export default function ClientDCPage() {
       const otherCharges = Number((dcOrder as any)?.otherCharges) || 0
       const discount = Number((dcOrder as any)?.discount) || 0
       const currentTotalBill = totalAmount + otherCharges - discount
-      // TotalDue = TotalPaidAsOn - ReturnValue
+      // TotalDue = TotalPaid - ReturnValue (as per user requirement)
       const totalDue = Math.max(0, totalPaidAsOn - totalReturnValue)
       
       setInvoiceData({
@@ -702,7 +752,7 @@ export default function ClientDCPage() {
         paymentBreakdown,
         totalAmount: currentTotalBill,
         dcDate: fullDC.dcDate || undefined,
-        previousDue: 0, // Not used in new calculation
+        previousDue,
         totalPaidAsOn,
         totalReturnValue,
         totalDue,
@@ -3389,7 +3439,7 @@ export default function ClientDCPage() {
                   invoiceData.paymentBreakdown.map((product: any, index: number) => {
                     // Use strength as quantity (number of students/items), fallback to quantity field
                     const quantity = product.strength !== undefined ? product.strength : (product.quantity !== undefined ? product.quantity : 0)
-                    // Get price from database - prioritize unitPrice (from DcOrder), then price (from DC productDetails)
+                    // Get price from database - unitPrice comes from DcOrder or DC productDetails (both from database)
                     const price = product.unitPrice !== undefined && product.unitPrice !== null 
                       ? Number(product.unitPrice) 
                       : (product.price !== undefined && product.price !== null 
@@ -3406,10 +3456,10 @@ export default function ClientDCPage() {
                           <span className="text-teal-600 font-medium">{productName}:</span>
                           <span className="text-black">{quantity}</span>
                         </div>
-                        {/* Product Price - from database, always show the price value */}
+                        {/* Product Price - from database (DcOrder.unit_price or DC.productDetails.price) */}
                         <div className={`flex justify-between items-center p-4 ${bgColor2}`}>
                           <span className="text-teal-600 font-medium">{productName}Price:</span>
-                          <span className="text-black">Rs.{price.toFixed(2)}</span>
+                          <span className="text-black">{price > 0 ? `Rs.${price.toFixed(2)}` : '-'}</span>
                         </div>
                       </div>
                     )
