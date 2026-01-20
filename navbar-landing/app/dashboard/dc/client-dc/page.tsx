@@ -83,6 +83,15 @@ export default function ClientDCPage() {
     paymentBreakdown: any[]
     totalAmount: number
     dcDate?: string
+    previousDue?: number
+    totalPaidAsOn?: number
+    totalReturnValue?: number
+    totalDue?: number
+    otherCharges?: number
+    otherChargesRemarks?: string
+    discount?: number
+    discountRemarks?: string
+    financialYear?: string
   } | null>(null)
   // Delivery and Address data (read-only)
   const [deliveryAddress, setDeliveryAddress] = useState({
@@ -243,11 +252,19 @@ export default function ClientDCPage() {
       
       // Check for pending edit requests in DcOrders (in parallel for better performance)
       const pendingEditCheckPromises = finalClients.map(async (dc) => {
-        const dcOrderId = typeof dc.dcOrderId === 'object' ? dc.dcOrderId._id : dc.dcOrderId
+        // Check if dcOrderId exists and is not null before accessing _id
+        let dcOrderId = null
+        if (dc.dcOrderId) {
+          if (typeof dc.dcOrderId === 'object' && dc.dcOrderId !== null && dc.dcOrderId._id) {
+            dcOrderId = dc.dcOrderId._id
+          } else if (typeof dc.dcOrderId === 'string') {
+            dcOrderId = dc.dcOrderId
+          }
+        }
         if (!dcOrderId) return null
         
         // First check if dcOrderId object already has pendingEdit info
-        if (typeof dc.dcOrderId === 'object' && dc.dcOrderId.pendingEdit) {
+        if (typeof dc.dcOrderId === 'object' && dc.dcOrderId !== null && dc.dcOrderId.pendingEdit) {
           if (dc.dcOrderId.pendingEdit.status === 'pending') {
             return dc._id
           }
@@ -419,19 +436,30 @@ export default function ClientDCPage() {
       let dcOrder: any = null
       
       if (dc.dcOrderId) {
-        const dcOrderId = typeof dc.dcOrderId === 'object' 
-          ? dc.dcOrderId._id 
-          : dc.dcOrderId
-        dcOrder = await apiRequest<any>(`/dc-orders/${dcOrderId}`)
-        
-        schoolInfo = {
-          customerName: dcOrder.school_name || dc.customerName || '',
-          schoolCode: dcOrder.school_code || '',
-          contactName: dcOrder.contact_person || '',
-          mobileNumber: dcOrder.contact_mobile || dc.customerPhone || '',
-          location: dcOrder.location || dcOrder.area || '',
-          zone: dcOrder.zone || '',
-          email: dcOrder.email || dc.customerEmail || '',
+        let dcOrderId = null
+        if (typeof dc.dcOrderId === 'object' && dc.dcOrderId !== null && dc.dcOrderId._id) {
+          dcOrderId = dc.dcOrderId._id
+        } else if (typeof dc.dcOrderId === 'string') {
+          dcOrderId = dc.dcOrderId
+        }
+        if (dcOrderId) {
+          dcOrder = await apiRequest<any>(`/dc-orders/${dcOrderId}`)
+          
+          schoolInfo = {
+            customerName: dcOrder.school_name || dc.customerName || '',
+            schoolCode: dcOrder.school_code || '',
+            contactName: dcOrder.contact_person || '',
+            mobileNumber: dcOrder.contact_mobile || dc.customerPhone || '',
+            location: dcOrder.location || dcOrder.area || '',
+            zone: dcOrder.zone || '',
+            email: dcOrder.email || dc.customerEmail || '',
+          }
+        } else {
+          // If dcOrderId is null, use DC data directly
+          schoolInfo = {
+            customerName: dc.customerName || '',
+            mobileNumber: dc.customerPhone || '',
+          }
         }
       } else {
         schoolInfo = {
@@ -603,12 +631,86 @@ export default function ClientDCPage() {
           })
         }
       }
+
+      // Calculate payment and return totals
+      let totalPaidAsOn = 0
+      let totalReturnValue = 0
+
+      try {
+        // Get all approved payments for this DC (advance or first payment)
+        // TotalPaidAsOn = sum of all approved payments from payments database
+        const payments = await apiRequest<any[]>(`/payments?dcId=${dc._id}&status=Approved`).catch(() => [])
+        totalPaidAsOn = payments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0)
+
+        // Get all returns for this DC - fetch all executive returns and filter by dcOrderId
+        let returns: any[] = []
+        if (dcOrder?._id) {
+          try {
+            const allReturns = await apiRequest<any[]>(`/stock-returns/executive/list`).catch(() => [])
+            returns = allReturns.filter((r: any) => {
+              const returnDcOrderId = typeof r.dcOrderId === 'object' ? r.dcOrderId?._id : r.dcOrderId
+              return returnDcOrderId === dcOrder._id
+            })
+          } catch (e) {
+            console.error('Error fetching returns:', e)
+          }
+        }
+        
+        // Calculate return value from approved returns
+        // Return value = sum of return products' prices
+        const approvedReturns = returns.filter((r: any) => ['Approved', 'Partially Approved', 'Stock Updated', 'Closed'].includes(r.status))
+        totalReturnValue = approvedReturns.reduce((sum: number, r: any) => {
+          // Calculate return value from products - use product prices from database
+          const returnValue = r.products?.reduce((productSum: number, product: any) => {
+            const approvedQty = Number(product.approvedQty) || 0
+            // Get price from matching product in paymentBreakdown (from DC database)
+            const matchingProduct = paymentBreakdown.find((pb: any) => {
+              const pbName = (pb.product || '').toLowerCase().trim()
+              const returnName = (product.product || '').toLowerCase().trim()
+              return pbName === returnName || pbName.includes(returnName) || returnName.includes(pbName)
+            })
+            // Use unitPrice from paymentBreakdown (from DC database), or fallback to 0
+            const unitPrice = matchingProduct?.unitPrice || 0
+            // Return value = approved quantity * unit price
+            return productSum + (approvedQty * unitPrice)
+          }, 0) || 0
+          return sum + returnValue
+        }, 0)
+      } catch (e) {
+        console.error('Error calculating payment/return totals:', e)
+      }
+
+      // Products will be displayed directly from paymentBreakdown
+      // No need to group - show each product as it appears in the database
+
+      // Get financial year (current year - next year format)
+      const currentDate = new Date()
+      const currentYear = currentDate.getFullYear()
+      const nextYear = currentYear + 1
+      const financialYear = `${currentYear}-${nextYear.toString().slice(-2)}`
+
+      // Calculate total due
+      // Note: otherCharges and discount fields may need to be added to DcOrder model
+      const otherCharges = Number((dcOrder as any)?.otherCharges) || 0
+      const discount = Number((dcOrder as any)?.discount) || 0
+      const currentTotalBill = totalAmount + otherCharges - discount
+      // TotalDue = TotalPaidAsOn - ReturnValue
+      const totalDue = Math.max(0, totalPaidAsOn - totalReturnValue)
       
       setInvoiceData({
         schoolInfo,
         paymentBreakdown,
-        totalAmount,
+        totalAmount: currentTotalBill,
         dcDate: fullDC.dcDate || undefined,
+        previousDue: 0, // Not used in new calculation
+        totalPaidAsOn,
+        totalReturnValue,
+        totalDue,
+        otherCharges,
+        otherChargesRemarks: (dcOrder as any)?.otherChargesRemarks || '',
+        discount,
+        discountRemarks: (dcOrder as any)?.discountRemarks || '',
+        financialYear,
       })
       setInvoiceModalOpen(true)
     } catch (e: any) {
@@ -638,7 +740,14 @@ export default function ClientDCPage() {
     }
     
     // Get dcOrderId to fetch delivery address and all DcOrder data
-    const dcOrderId = typeof dc.dcOrderId === 'object' ? dc.dcOrderId._id : dc.dcOrderId
+    let dcOrderId = null
+    if (dc.dcOrderId) {
+      if (typeof dc.dcOrderId === 'object' && dc.dcOrderId !== null && dc.dcOrderId._id) {
+        dcOrderId = dc.dcOrderId._id
+      } else if (typeof dc.dcOrderId === 'string') {
+        dcOrderId = dc.dcOrderId
+      }
+    }
     if (dcOrderId) {
       try {
         const dcOrder = await apiRequest<any>(`/dc-orders/${dcOrderId}`)
@@ -951,8 +1060,22 @@ export default function ClientDCPage() {
 
         // Create Term 2 DC (goes to Term-Wise DC)
         const term2Quantity = term2Products.reduce((sum, p) => sum + (p.quantity || 0), 0)
-        const dcOrderId = typeof selectedDC.dcOrderId === 'object' ? selectedDC.dcOrderId._id : selectedDC.dcOrderId
-        const employeeId = typeof selectedDC.employeeId === 'object' ? selectedDC.employeeId._id : selectedDC.employeeId
+        let dcOrderId = null
+        if (selectedDC.dcOrderId) {
+          if (typeof selectedDC.dcOrderId === 'object' && selectedDC.dcOrderId !== null && selectedDC.dcOrderId._id) {
+            dcOrderId = selectedDC.dcOrderId._id
+          } else if (typeof selectedDC.dcOrderId === 'string') {
+            dcOrderId = selectedDC.dcOrderId
+          }
+        }
+        let employeeId = null
+        if (selectedDC.employeeId) {
+          if (typeof selectedDC.employeeId === 'object' && selectedDC.employeeId !== null && selectedDC.employeeId._id) {
+            employeeId = selectedDC.employeeId._id
+          } else if (typeof selectedDC.employeeId === 'string') {
+            employeeId = selectedDC.employeeId
+          }
+        }
         
         const term2Payload: any = {
           dcOrderId: dcOrderId,
@@ -1539,7 +1662,14 @@ export default function ClientDCPage() {
 
   const openEditPODialog = async (dc: DC) => {
     // Get the DcOrder ID from the DC
-    const dcOrderId = typeof dc.dcOrderId === 'object' ? dc.dcOrderId._id : dc.dcOrderId
+    let dcOrderId = null
+    if (dc.dcOrderId) {
+      if (typeof dc.dcOrderId === 'object' && dc.dcOrderId !== null && dc.dcOrderId._id) {
+        dcOrderId = dc.dcOrderId._id
+      } else if (typeof dc.dcOrderId === 'string') {
+        dcOrderId = dc.dcOrderId
+      }
+    }
     
     if (!dcOrderId) {
       toast.error('Cannot edit: DC Order not found')
@@ -3199,142 +3329,136 @@ export default function ClientDCPage() {
 
       {/* Invoice View Modal */}
       <Dialog open={invoiceModalOpen} onOpenChange={setInvoiceModalOpen}>
-        <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Invoice - {invoiceData?.schoolInfo?.customerName || 'Client'}</DialogTitle>
-            <DialogDescription>
-              Product details and costs for this DC request
-            </DialogDescription>
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto p-0">
+          <DialogHeader className="bg-green-600 text-white p-4">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-white hover:bg-green-700 p-0 h-auto"
+                onClick={() => setInvoiceModalOpen(false)}
+              >
+                ←
+              </Button>
+              <DialogTitle className="text-white">Payments Info [{invoiceData?.financialYear || '2025-26'}]</DialogTitle>
+            </div>
           </DialogHeader>
           
           {invoiceData && (
-            <div className="space-y-6 py-4">
-              {/* School Information */}
-              <div className="border rounded-lg p-4 bg-neutral-50">
-                <h3 className="font-semibold text-lg mb-3">School Information</h3>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <span className="text-neutral-600">School Name:</span>
-                    <span className="ml-2 font-medium">{invoiceData.schoolInfo.customerName || '-'}</span>
-                  </div>
-                  {invoiceData.schoolInfo.schoolCode && (
-                    <div>
-                      <span className="text-neutral-600">School Code:</span>
-                      <span className="ml-2 font-medium">{invoiceData.schoolInfo.schoolCode}</span>
-                    </div>
-                  )}
-                  {invoiceData.schoolInfo.contactName && (
-                    <div>
-                      <span className="text-neutral-600">Contact Person:</span>
-                      <span className="ml-2 font-medium">{invoiceData.schoolInfo.contactName}</span>
-                    </div>
-                  )}
-                  {invoiceData.schoolInfo.mobileNumber && (
-                    <div>
-                      <span className="text-neutral-600">Mobile:</span>
-                      <span className="ml-2 font-medium">{invoiceData.schoolInfo.mobileNumber}</span>
-                    </div>
-                  )}
-                  {invoiceData.schoolInfo.location && (
-                    <div>
-                      <span className="text-neutral-600">Location:</span>
-                      <span className="ml-2 font-medium">{invoiceData.schoolInfo.location}</span>
-                    </div>
-                  )}
-                  {invoiceData.schoolInfo.zone && (
-                    <div>
-                      <span className="text-neutral-600">Zone:</span>
-                      <span className="ml-2 font-medium">{invoiceData.schoolInfo.zone}</span>
-                    </div>
-                  )}
-                  {invoiceData.dcDate && (
-                    <div>
-                      <span className="text-neutral-600">DC Date:</span>
-                      <span className="ml-2 font-medium">{new Date(invoiceData.dcDate).toLocaleDateString()}</span>
-                    </div>
-                  )}
+            <div className="bg-white">
+              {/* Payment Information List */}
+              <div className="divide-y divide-neutral-200">
+                {/* School Name */}
+                <div className="flex justify-between items-center p-4 bg-neutral-50">
+                  <span className="text-teal-600 font-medium">School Name:</span>
+                  <span className="text-black font-medium">{invoiceData.schoolInfo.customerName || '-'}</span>
                 </div>
-              </div>
 
-              {/* Products Table */}
-              <div className="border rounded-lg overflow-hidden">
-                <div className="bg-neutral-100 px-4 py-3 border-b">
-                  <h3 className="font-semibold text-lg">Products & Pricing</h3>
+                {/* Previous Due */}
+                <div className="flex justify-between items-center p-4 bg-white">
+                  <span className="text-teal-600 font-medium">Previous Due:</span>
+                  <span className="text-black">Rs.{invoiceData.previousDue?.toFixed(2) || '0.00'}</span>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-neutral-50 border-b">
-                        <th className="py-3 px-4 text-left font-semibold">Product</th>
-                        <th className="py-3 px-4 text-left font-semibold">Term</th>
-                        <th className="py-3 px-4 text-left font-semibold">Class</th>
-                        <th className="py-3 px-4 text-left font-semibold">Category</th>
-                        <th className="py-3 px-4 text-left font-semibold">Specs</th>
-                        <th className="py-3 px-4 text-left font-semibold">Subject</th>
-                        <th className="py-3 px-4 text-right font-semibold">Quantity</th>
-                        <th className="py-3 px-4 text-right font-semibold">Strength</th>
-                        <th className="py-3 px-4 text-right font-semibold">Level</th>
-                        <th className="py-3 px-4 text-right font-semibold">Unit Price</th>
-                        <th className="py-3 px-4 text-right font-semibold">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {invoiceData.paymentBreakdown.map((item, idx) => (
-                        <tr key={idx} className="border-b hover:bg-neutral-50">
-                          <td className="py-3 px-4 font-medium">{item.product}</td>
-                          <td className="py-3 px-4">{item.term || 'Term 1'}</td>
-                          <td className="py-3 px-4">{item.class}</td>
-                          <td className="py-3 px-4">{item.category}</td>
-                          <td className="py-3 px-4">{item.specs}</td>
-                          <td className="py-3 px-4">{item.subject || '-'}</td>
-                          <td className="py-3 px-4 text-right">{item.quantity}</td>
-                          <td className="py-3 px-4 text-right">{item.strength}</td>
-                          <td className="py-3 px-4 text-right">{item.level}</td>
-                          <td className="py-3 px-4 text-right">₹{item.unitPrice.toFixed(2)}</td>
-                          <td className="py-3 px-4 text-right font-semibold">₹{item.total.toFixed(2)}</td>
-                        </tr>
-                      ))}
-                      <tr className="bg-neutral-100 border-t-2 border-neutral-400 font-bold">
-                        <td colSpan={10} className="py-4 px-4 text-right">
-                          Grand Total:
-                        </td>
-                        <td className="py-4 px-4 text-right text-lg">
-                          ₹{invoiceData.totalAmount.toFixed(2)}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
 
-              {/* Payment Status */}
-              <div className="border rounded-lg p-4 bg-blue-50">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-neutral-600">Payment Status</p>
-                    <p className="text-lg font-semibold text-blue-700">Pending</p>
-                    <p className="text-xs text-neutral-500 mt-1">
-                      Payment will be updated when received (Cash, UPI, etc.)
-                    </p>
+                {/* Current Total Bill */}
+                <div className="flex justify-between items-center p-4 bg-neutral-50">
+                  <span className="text-teal-600 font-medium">Current Total Bill:</span>
+                  <span className="text-black">Rs.{invoiceData.totalAmount?.toFixed(2) || '0.00'}</span>
+                </div>
+
+                {/* TotalPaidAsOn */}
+                <div className="flex justify-between items-center p-4 bg-white">
+                  <span className="text-teal-600 font-medium">TotalPaidAsOn:</span>
+                  <span className="text-black">Rs.{invoiceData.totalPaidAsOn?.toFixed(2) || '0.00'}</span>
+                </div>
+
+                {/* TotalReturnValue */}
+                <div className="flex justify-between items-center p-4 bg-neutral-50">
+                  <span className="text-teal-600 font-medium">TotalReturnValue:</span>
+                  <span className="text-black">Rs.{invoiceData.totalReturnValue?.toFixed(2) || '0.00'}</span>
+                </div>
+
+                {/* TotalDue */}
+                <div className="flex justify-between items-center p-4 bg-white">
+                  <span className="text-teal-600 font-medium">TotalDue:</span>
+                  <span className="text-black">Rs.{invoiceData.totalDue?.toFixed(2) || '0.00'}</span>
+                </div>
+
+                {/* Products from Database */}
+                {invoiceData.paymentBreakdown && invoiceData.paymentBreakdown.length > 0 ? (
+                  invoiceData.paymentBreakdown.map((product: any, index: number) => {
+                    // Use strength as quantity (number of students/items), fallback to quantity field
+                    const quantity = product.strength !== undefined ? product.strength : (product.quantity !== undefined ? product.quantity : 0)
+                    // Get price from database - prioritize unitPrice (from DcOrder), then price (from DC productDetails)
+                    const price = product.unitPrice !== undefined && product.unitPrice !== null 
+                      ? Number(product.unitPrice) 
+                      : (product.price !== undefined && product.price !== null 
+                          ? Number(product.price) 
+                          : 0)
+                    const productName = product.product || 'Product'
+                    const bgColor1 = (index * 2) % 2 === 0 ? 'bg-neutral-50' : 'bg-white'
+                    const bgColor2 = (index * 2 + 1) % 2 === 0 ? 'bg-neutral-50' : 'bg-white'
+                    
+                    return (
+                      <div key={index}>
+                        {/* Product Quantity - show 0 if quantity is 0 */}
+                        <div className={`flex justify-between items-center p-4 ${bgColor1}`}>
+                          <span className="text-teal-600 font-medium">{productName}:</span>
+                          <span className="text-black">{quantity}</span>
+                        </div>
+                        {/* Product Price - from database, always show the price value */}
+                        <div className={`flex justify-between items-center p-4 ${bgColor2}`}>
+                          <span className="text-teal-600 font-medium">{productName}Price:</span>
+                          <span className="text-black">Rs.{price.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    )
+                  })
+                ) : (
+                  <div className="flex justify-between items-center p-4 bg-neutral-50">
+                    <span className="text-teal-600 font-medium">No products found</span>
+                    <span className="text-black">-</span>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm text-neutral-600">Total Amount</p>
-                    <p className="text-2xl font-bold text-blue-700">₹{invoiceData.totalAmount.toFixed(2)}</p>
+                )}
+
+                {/* OtherCharges */}
+                <div className="flex justify-between items-center p-4 bg-neutral-50">
+                  <span className="text-teal-600 font-medium">OtherCharges:</span>
+                  <span className="text-black">{invoiceData.otherCharges?.toFixed(2) || '0.00'}</span>
+                </div>
+
+                {/* OtherChargesRemarks */}
+                <div className="flex justify-between items-center p-4 bg-white">
+                  <span className="text-teal-600 font-medium">OtherChargesRemarks:</span>
+                  <span className="text-black">{invoiceData.otherChargesRemarks || '-'}</span>
+                </div>
+
+                {/* Discount */}
+                <div className="flex justify-between items-center p-4 bg-neutral-50">
+                  <span className="text-teal-600 font-medium">Discount:</span>
+                  <span className="text-black">{invoiceData.discount?.toFixed(2) || '0.00'}</span>
+                </div>
+
+                {/* DiscountRemarks */}
+                <div className="flex justify-between items-center p-4 bg-white">
+                  <span className="text-teal-600 font-medium">DiscountRemarks:</span>
+                  <div className="flex-1 max-w-[200px] ml-4">
+                    <Textarea
+                      value={invoiceData.discountRemarks || ''}
+                      readOnly
+                      disabled
+                      className="bg-neutral-100 rounded-lg text-sm min-h-[40px]"
+                      placeholder=""
+                    />
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="p-4 border-t">
             <Button variant="outline" onClick={() => setInvoiceModalOpen(false)}>
               Close
-            </Button>
-            <Button onClick={() => {
-              setInvoiceModalOpen(false)
-              router.push('/dashboard/payments')
-            }}>
-              View in Payments
             </Button>
           </DialogFooter>
         </DialogContent>

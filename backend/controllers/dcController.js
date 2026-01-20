@@ -1331,10 +1331,15 @@ const getMyDCs = async (req, res) => {
     // This ensures closed leads always appear in "My Clients" for the employee to manage
     const dcOrderAsDCs = savedDcOrders.map(order => {
       // Check if a DC already exists for this DcOrder
-      const existingDC = dcs.find(dc => 
-        dc.dcOrderId && 
-        (typeof dc.dcOrderId === 'object' ? dc.dcOrderId._id.toString() : dc.dcOrderId.toString()) === order._id.toString()
-      );
+      const existingDC = dcs.find(dc => {
+        if (!dc.dcOrderId) return false;
+        if (typeof dc.dcOrderId === 'object') {
+          // Check if _id exists and is not null
+          if (!dc.dcOrderId._id) return false;
+          return dc.dcOrderId._id.toString() === order._id.toString();
+        }
+        return dc.dcOrderId.toString() === order._id.toString();
+      });
       
       // If DC exists with status 'created' or 'po_submitted', skip this DcOrder (it's already in the dcs array and will be shown)
       if (existingDC && (existingDC.status === 'created' || existingDC.status === 'po_submitted')) {
@@ -1359,7 +1364,7 @@ const getMyDCs = async (req, res) => {
           school_type: order.school_type, // Include school_type for category determination
           createdAt: order.createdAt, // Include createdAt for client turned date
         },
-        employeeId: order.assigned_to ? (typeof order.assigned_to === 'object' ? order.assigned_to._id : order.assigned_to) : employeeId,
+        employeeId: order.assigned_to ? (typeof order.assigned_to === 'object' && order.assigned_to._id ? order.assigned_to._id : (typeof order.assigned_to === 'string' ? order.assigned_to : employeeId)) : employeeId,
         customerName: order.school_name,
         customerEmail: order.email,
         customerAddress: order.address || order.location || 'N/A',
@@ -1394,9 +1399,17 @@ const getMyDCs = async (req, res) => {
     const seenDcOrderIds = new Set();
     
     allDCs.forEach(dc => {
-      const dcOrderId = dc.dcOrderId 
-        ? (typeof dc.dcOrderId === 'object' ? dc.dcOrderId._id.toString() : dc.dcOrderId.toString())
-        : null;
+      let dcOrderId = null;
+      if (dc.dcOrderId) {
+        if (typeof dc.dcOrderId === 'object') {
+          // Check if _id exists and is not null before accessing
+          if (dc.dcOrderId._id) {
+            dcOrderId = dc.dcOrderId._id.toString();
+          }
+        } else {
+          dcOrderId = dc.dcOrderId.toString();
+        }
+      }
       
       if (dcOrderId && !seenDcOrderIds.has(dcOrderId)) {
         seenDcOrderIds.add(dcOrderId);
