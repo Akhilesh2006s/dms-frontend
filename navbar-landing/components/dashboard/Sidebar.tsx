@@ -48,7 +48,7 @@ type NavItem = {
   label: string
   icon?: any
   href?: string
-  children?: { label: string; href: string; icon?: any }[]
+  children?: { label: string; href: string; icon?: any; adminOnly?: boolean }[]
 }
 
 function HoverTooltip({ item, pathname, onClose }: { item: NavItem; pathname: string; onClose: () => void }) {
@@ -180,6 +180,7 @@ const NAV: NavItem[] = [
       { label: 'Completed DC', href: '/dashboard/warehouse/completed-dc' },
       { label: 'Hold DC', href: '/dashboard/warehouse/hold-dc' },
       { label: 'DC listed', href: '/dashboard/warehouse/dc-listed' },
+      { label: 'Search DC', href: '/dashboard/warehouse/search-dc', adminOnly: true },
     ],
   },
   {
@@ -613,12 +614,18 @@ export function Sidebar() {
         }
       }
       // Filter Warehouse menu items to exclude "DC listed" for roles other than Manager and Coordinator
+      // and only show adminOnly items for Admin/Super Admin
       if (item.label === 'Warehouse' && item.children) {
+        const isAdmin = user?.role === 'Admin' || user?.role === 'Super Admin'
         return {
           ...item,
-          children: item.children.filter(child => 
-            child.label !== 'DC listed'
-          )
+          children: item.children.filter(child => {
+            // Exclude "DC listed" for non-Manager/Coordinator
+            if (child.label === 'DC listed') return false
+            // Only show adminOnly items for Admin
+            if (child.adminOnly && !isAdmin) return false
+            return true
+          })
         }
       }
       return item
