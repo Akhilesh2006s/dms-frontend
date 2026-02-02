@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import ApiService from '../../services/api';
-
-const apiService = new ApiService('https://crm-backend-production-2ffd.up.railway.app/api');
+import { apiService } from '../../services/api';
+import MessageBanner from '../../components/MessageBanner';
+import LogoutButton from '../../components/LogoutButton';
 
 export default function TrainingAssignScreen({ navigation }: any) {
   const [form, setForm] = useState({
@@ -25,6 +25,9 @@ export default function TrainingAssignScreen({ navigation }: any) {
   const [employees, setEmployees] = useState<any[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     loadOptions();
@@ -46,21 +49,31 @@ export default function TrainingAssignScreen({ navigation }: any) {
     }
   };
 
+  const clearMessages = () => {
+    setSuccessMessage(null);
+    setErrorMessage(null);
+  };
+
   const handleSubmit = async () => {
+    clearMessages();
     if (!form.schoolName?.trim()) {
-      Alert.alert('Error', 'School Name is required');
+      setErrorMessage('School Name is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (!form.trainerId?.trim()) {
-      Alert.alert('Error', 'Trainer is required');
+      setErrorMessage('Trainer is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (!form.trainingDate?.trim()) {
-      Alert.alert('Error', 'Training Date is required');
+      setErrorMessage('Training Date is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (!form.subject?.trim()) {
-      Alert.alert('Error', 'Subject is required');
+      setErrorMessage('Subject is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
 
@@ -71,11 +84,13 @@ export default function TrainingAssignScreen({ navigation }: any) {
         status: 'Scheduled',
       };
       await apiService.post('/training', payload);
-      Alert.alert('Success', 'Training assigned successfully', [
-        { text: 'OK', onPress: () => navigation.navigate('TrainingList') },
-      ]);
+      setSuccessMessage('Training assigned successfully.');
+      setErrorMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to assign training');
+      setErrorMessage(error.message || 'Failed to assign training');
+      setSuccessMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } finally {
       setSubmitting(false);
     }
@@ -98,10 +113,21 @@ export default function TrainingAssignScreen({ navigation }: any) {
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Assign Training</Text>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+      <ScrollView ref={scrollRef} style={styles.content} contentContainerStyle={styles.contentContainer}>
+        {successMessage && (
+          <MessageBanner
+            type="success"
+            message={successMessage}
+            actionLabel="View Trainings"
+            onAction={() => navigation.navigate('TrainingList')}
+          />
+        )}
+        {errorMessage && (
+          <MessageBanner type="error" message={errorMessage} onDismiss={clearMessages} />
+        )}
         <FormField label="School Code" value={form.schoolCode} onChangeText={(text: string) => setForm((f) => ({ ...f, schoolCode: text }))} placeholder="Enter school code" />
         <FormField label="School Name *" value={form.schoolName} onChangeText={(text: string) => setForm((f) => ({ ...f, schoolName: text }))} placeholder="Enter school name" />
         <FormField label="Zone" value={form.zone} onChangeText={(text: string) => setForm((f) => ({ ...f, zone: text }))} placeholder="Enter zone" />

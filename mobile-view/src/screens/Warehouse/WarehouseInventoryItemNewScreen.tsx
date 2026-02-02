@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import ApiService from '../../services/api';
-
-const apiService = new ApiService('https://crm-backend-production-2ffd.up.railway.app/api');
+import { apiService } from '../../services/api';
+import MessageBanner from '../../components/MessageBanner';
+import LogoutButton from '../../components/LogoutButton';
 
 export default function WarehouseInventoryItemNewScreen({ navigation }: any) {
   const [form, setForm] = useState({
@@ -23,6 +23,9 @@ export default function WarehouseInventoryItemNewScreen({ navigation }: any) {
   const [hasSubjects, setHasSubjects] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     loadProducts();
@@ -69,17 +72,26 @@ export default function WarehouseInventoryItemNewScreen({ navigation }: any) {
     }
   };
 
+  const clearMessages = () => {
+    setSuccessMessage(null);
+    setErrorMessage(null);
+  };
+
   const handleSubmit = async () => {
+    clearMessages();
     if (!form.productName?.trim()) {
-      Alert.alert('Error', 'Product is required');
+      setErrorMessage('Product is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (!form.category?.trim()) {
-      Alert.alert('Error', 'Category is required');
+      setErrorMessage('Category is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (hasSubjects && !form.subject?.trim()) {
-      Alert.alert('Error', 'Subject is required for this product');
+      setErrorMessage('Subject is required for this product');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
 
@@ -94,11 +106,13 @@ export default function WarehouseInventoryItemNewScreen({ navigation }: any) {
         currentStock: parseFloat(form.quantity) || 0,
       };
       await apiService.post('/warehouse', payload);
-      Alert.alert('Success', 'Item added successfully', [
-        { text: 'OK', onPress: () => navigation.navigate('WarehouseInventoryItems') },
-      ]);
+      setSuccessMessage('Item added successfully.');
+      setErrorMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to add item');
+      setErrorMessage(error.message || 'Failed to add item');
+      setSuccessMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } finally {
       setSubmitting(false);
     }
@@ -121,10 +135,21 @@ export default function WarehouseInventoryItemNewScreen({ navigation }: any) {
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Add Inventory Item</Text>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+      <ScrollView ref={scrollRef} style={styles.content} contentContainerStyle={styles.contentContainer}>
+        {successMessage && (
+          <MessageBanner
+            type="success"
+            message={successMessage}
+            actionLabel="View Inventory"
+            onAction={() => navigation.navigate('WarehouseInventoryItems')}
+          />
+        )}
+        {errorMessage && (
+          <MessageBanner type="error" message={errorMessage} onDismiss={clearMessages} />
+        )}
         <View style={styles.fieldContainer}>
           <Text style={styles.label}>Product *</Text>
           <ScrollView style={styles.optionsContainer}>

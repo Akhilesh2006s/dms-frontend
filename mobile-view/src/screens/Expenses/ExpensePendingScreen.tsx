@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { apiService } from '../../services/api';
+import LogoutButton from '../../components/LogoutButton';
 
 interface Expense {
   _id: string;
@@ -107,7 +108,7 @@ export default function ExpensePendingScreen({ navigation }: any) {
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Manager Pending Expenses</Text>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
       <ScrollView

@@ -68,6 +68,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (email: string, password: string) => {
     try {
+      console.log('Attempting login with email:', email);
       const response = await apiService.post('/auth/login', { email, password });
       const { token, ...userData } = response;
       
@@ -80,24 +81,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       apiService.setToken(token);
       setUser(userData);
+      console.log('Login successful for user:', userData.email);
     } catch (error: any) {
-      // Provide more helpful error messages
-      if (error.message) {
-        throw error; // Already has a helpful message
+      console.error('Login error:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        code: error.code,
+      });
+      
+      // Handle 401 Unauthorized (invalid credentials)
+      if (error.response?.status === 401) {
+        const errorMessage = error.response?.data?.message || 'Invalid email or password';
+        throw new Error(errorMessage);
       }
+      
+      // Handle network errors
+      if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.message?.includes('Network Error') || error.message?.includes('timeout')) {
+        throw new Error('Cannot connect to server. Make sure:\n1. Backend is running on port 5000\n2. API URL is correct\n3. Device and computer are on same network\n4. Firewall allows port 5000');
+      }
+      
+      // Handle other axios errors
       if (error.response?.data?.message) {
         throw new Error(error.response.data.message);
       }
-      if (error.code === 'ECONNREFUSED' || error.message?.includes('Network Error')) {
-        throw new Error('Cannot connect to server. Please check API_SETUP.md for configuration help.');
+      
+      // Handle custom error messages
+      if (error.message && !error.message.includes('Request failed')) {
+        throw error;
       }
-      throw new Error(error.message || 'Login failed. Please try again.');
+      
+      // Default error message
+      throw new Error(error.message || 'Login failed. Please check your credentials and try again.');
     }
   };
 
   const logout = async () => {
-    await AsyncStorage.removeItem('authToken');
-    await AsyncStorage.removeItem('userData');
+    try {
+      await AsyncStorage.multiRemove(['authToken', 'userData', 'authUser']);
+    } catch (e) {
+      await AsyncStorage.removeItem('authToken');
+      await AsyncStorage.removeItem('userData');
+      await AsyncStorage.removeItem('authUser');
+    }
     apiService.setToken('');
     setUser(null);
   };

@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
+import LogoutButton from '../../components/LogoutButton';
 
 export default function PlaceholderScreen({ navigation, route }: any) {
   const screenName = route?.name || 'Screen';
@@ -23,7 +24,7 @@ export default function PlaceholderScreen({ navigation, route }: any) {
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{screenName}</Text>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
       <View style={styles.content}>

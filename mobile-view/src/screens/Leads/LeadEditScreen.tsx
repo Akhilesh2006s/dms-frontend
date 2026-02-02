@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,12 +13,17 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { apiService } from '../../services/api';
+import MessageBanner from '../../components/MessageBanner';
+import LogoutButton from '../../components/LogoutButton';
 
 export default function LeadEditScreen({ navigation, route }: any) {
   const { id } = route.params;
   const [form, setForm] = useState<any>({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     loadLead();
@@ -43,20 +48,27 @@ export default function LeadEditScreen({ navigation, route }: any) {
     }
   };
 
+  const clearMessages = () => {
+    setSuccessMessage(null);
+    setErrorMessage(null);
+  };
+
   const handleSubmit = async () => {
+    clearMessages();
     setSubmitting(true);
     try {
-      // Try dc-orders first, then leads API
       try {
         await apiService.put(`/dc-orders/${id}`, form);
       } catch (err: any) {
         await apiService.put(`/leads/${id}`, form);
       }
-      Alert.alert('Success', 'Lead updated successfully', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      setSuccessMessage('Lead updated successfully.');
+      setErrorMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to update lead');
+      setErrorMessage(error.message || 'Failed to update lead');
+      setSuccessMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } finally {
       setSubmitting(false);
     }
@@ -79,10 +91,21 @@ export default function LeadEditScreen({ navigation, route }: any) {
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Edit Lead</Text>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+      <ScrollView ref={scrollRef} style={styles.content} contentContainerStyle={styles.contentContainer}>
+        {successMessage && (
+          <MessageBanner
+            type="success"
+            message={successMessage}
+            actionLabel="Back to Leads"
+            onAction={() => navigation.goBack()}
+          />
+        )}
+        {errorMessage && (
+          <MessageBanner type="error" message={errorMessage} onDismiss={clearMessages} />
+        )}
         <FormField label="School Name" value={form.school_name || ''} onChangeText={(text: string) => setForm((f: any) => ({ ...f, school_name: text }))} placeholder="Enter school name" />
         <FormField label="Contact Person" value={form.contact_person || ''} onChangeText={(text: string) => setForm((f: any) => ({ ...f, contact_person: text }))} placeholder="Enter contact person" />
         <FormField label="Contact Mobile" value={form.contact_mobile || ''} onChangeText={(text: string) => setForm((f: any) => ({ ...f, contact_mobile: text }))} placeholder="Enter mobile" keyboardType="phone-pad" />

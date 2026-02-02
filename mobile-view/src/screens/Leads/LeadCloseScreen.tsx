@@ -10,14 +10,17 @@ import {
   ActivityIndicator,
   Modal,
   Image,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Picker } from '@react-native-picker/picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { apiService } from '../../services/api';
+import LogoutButton from '../../components/LogoutButton';
 import { useAuth } from '../../context/AuthContext';
 
 type ProductDetail = {
@@ -55,7 +58,8 @@ export default function LeadCloseScreen({ navigation, route }: any) {
   const [uploadingPO, setUploadingPO] = useState(false);
   const [showClassPicker, setShowClassPicker] = useState(false);
   const [pickingFor, setPickingFor] = useState<{id: string, field: 'fromClass' | 'toClass'} | null>(null);
-  
+  const [showDeliveryDatePicker, setShowDeliveryDatePicker] = useState(false);
+
   const [form, setForm] = useState({
     school_name: '',
     contact_person: '',
@@ -79,19 +83,16 @@ export default function LeadCloseScreen({ navigation, route }: any) {
   const loadProducts = async () => {
     try {
       setLoadingProducts(true);
-      // Try /products endpoint (like web app)
+      // Use /products/active first (no auth required, works for executives; /products requires Admin)
       let data: any;
       try {
-        data = await apiService.get('/products');
-        console.log('Products API response:', JSON.stringify(data, null, 2));
+        data = await apiService.get('/products/active');
       } catch (err: any) {
-        console.error('Failed to load from /products:', err);
-        // Try /products/active as fallback
+        // Fallback to /products for admin users if /active fails
         try {
-          data = await apiService.get('/products/active');
-          console.log('Products /active API response:', JSON.stringify(data, null, 2));
+          data = await apiService.get('/products');
         } catch (err2: any) {
-          console.error('Failed to load from /products/active:', err2);
+          console.error('Failed to load products:', err2?.message || err2);
           throw err2;
         }
       }
@@ -437,9 +438,9 @@ export default function LeadCloseScreen({ navigation, route }: any) {
       return;
     }
     
-    const invalidProducts = actualProductDetails.filter(p => !p.product || !p.strength);
+    const invalidProducts = actualProductDetails.filter(p => !p.product || p.strength == null || p.strength === '' || p.price == null);
     if (invalidProducts.length > 0) {
-      Alert.alert('Error', 'Please fill in Product and Strength for all products');
+      Alert.alert('Error', 'Please fill in Quantity (Strength) * and Unit Price * for all product rows');
       return;
     }
     
@@ -556,7 +557,7 @@ export default function LeadCloseScreen({ navigation, route }: any) {
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Close Lead</Text>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
       
@@ -567,8 +568,55 @@ export default function LeadCloseScreen({ navigation, route }: any) {
         <FormField label="Mob 1 *" value={form.contact_mobile} onChangeText={(text: string) => setForm({ ...form, contact_mobile: text })} placeholder="Enter mobile" keyboardType="phone-pad" />
         <FormField label="Decision Maker" value={form.contact_person2} onChangeText={(text: string) => setForm({ ...form, contact_person2: text })} placeholder="Enter decision maker name" />
         <FormField label="Email" value={form.contact_mobile2} onChangeText={(text: string) => setForm({ ...form, contact_mobile2: text })} placeholder="Enter decision maker email" keyboardType="email-address" />
-        <FormField label="Delivery Date *" value={form.delivery_date} onChangeText={(text: string) => setForm({ ...form, delivery_date: text })} placeholder="YYYY-MM-DD" />
-        
+        <View style={styles.fieldContainer}>
+          <Text style={styles.label}>Delivery Date *</Text>
+          <TouchableOpacity
+            style={styles.dateTouchable}
+            onPress={() => setShowDeliveryDatePicker(true)}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.dateTouchableText, !form.delivery_date && styles.datePlaceholder]}>
+              {form.delivery_date || 'Tap to pick date'}
+            </Text>
+            <Text style={styles.dateCalendarIcon}>📅</Text>
+          </TouchableOpacity>
+        </View>
+        {showDeliveryDatePicker && (
+          <Modal visible transparent animationType="slide">
+            <TouchableOpacity
+              style={styles.datePickerOverlay}
+              activeOpacity={1}
+              onPress={() => setShowDeliveryDatePicker(false)}
+            />
+            <View style={styles.datePickerContainer}>
+              <View style={styles.datePickerHeader}>
+                <Text style={styles.datePickerTitle}>Select Delivery Date</Text>
+                <TouchableOpacity onPress={() => setShowDeliveryDatePicker(false)}>
+                  <Text style={styles.datePickerDone}>Done</Text>
+                </TouchableOpacity>
+              </View>
+              <DateTimePicker
+                value={form.delivery_date ? new Date(form.delivery_date) : new Date()}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'calendar'}
+                minimumDate={new Date()}
+                onChange={(_, selectedDate) => {
+                  if (selectedDate) {
+                    setForm((f) => ({
+                      ...f,
+                      delivery_date: selectedDate.toISOString().split('T')[0],
+                    }));
+                    if (Platform.OS === 'android') {
+                      setShowDeliveryDatePicker(false);
+                    }
+                  }
+                }}
+                style={Platform.OS === 'ios' ? styles.datePickerIos : undefined}
+              />
+            </View>
+          </Modal>
+        )}
+
         <View style={styles.fieldContainer}>
           <Text style={styles.label}>Select Year *</Text>
           <Picker
@@ -802,7 +850,9 @@ export default function LeadCloseScreen({ navigation, route }: any) {
                         <Text style={[styles.tableHeaderText, styles.colCategory]}>Category</Text>
                         <Text style={[styles.tableHeaderText, styles.colSpecs]}>Specs</Text>
                         <Text style={[styles.tableHeaderText, styles.colSubject]}>Subject</Text>
-                        <Text style={[styles.tableHeaderText, styles.colStrength]}>Strength</Text>
+                        <Text style={[styles.tableHeaderText, styles.colStrength]}>Quantity (Strength) *</Text>
+                        <Text style={[styles.tableHeaderText, styles.colPrice]}>Unit Price *</Text>
+                        <Text style={[styles.tableHeaderText, styles.colTotal]}>Total</Text>
                         <Text style={[styles.tableHeaderText, styles.colLevel]}>Level</Text>
                         <Text style={[styles.tableHeaderText, styles.colAction]}>Action</Text>
                       </View>
@@ -830,6 +880,14 @@ export default function LeadCloseScreen({ navigation, route }: any) {
                             keyboardType="numeric"
                             placeholder="0"
                           />
+                          <TextInput
+                            style={[styles.tableInput, styles.colPrice]}
+                            value={pd.price.toString()}
+                            onChangeText={(text) => updateProductDetail(pd.id, 'price', Number(text) || 0)}
+                            keyboardType="numeric"
+                            placeholder="0"
+                          />
+                          <Text style={[styles.tableCell, styles.colTotal]}>{pd.total ?? (Number(pd.strength) || 0) * (Number(pd.price) || 0)}</Text>
                           <View style={[styles.tableCell, styles.colLevel]}>
                             <Picker
                               selectedValue={pd.level}
@@ -967,6 +1025,40 @@ const styles = StyleSheet.create({
   fieldContainer: { marginBottom: 16 },
   label: { ...typography.label.medium, color: colors.textPrimary, marginBottom: 8 },
   input: { ...typography.body.medium, backgroundColor: colors.backgroundLight, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 14, color: colors.textPrimary },
+  dateTouchable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.backgroundLight,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: 14,
+  },
+  dateTouchableText: { ...typography.body.medium, color: colors.textPrimary },
+  datePlaceholder: { color: colors.textSecondary },
+  dateCalendarIcon: { fontSize: 20 },
+  datePickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  datePickerContainer: {
+    backgroundColor: colors.backgroundLight,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+  },
+  datePickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  datePickerTitle: { ...typography.heading.h3, color: colors.textPrimary },
+  datePickerDone: { ...typography.label.medium, color: colors.primary, fontWeight: '600' },
+  datePickerIos: { height: 200 },
   picker: { height: 50, backgroundColor: colors.backgroundLight, borderWidth: 1, borderColor: colors.border, borderRadius: 12 },
   uploadButton: { backgroundColor: colors.primary, borderRadius: 12, padding: 14, alignItems: 'center' },
   uploadButtonText: { ...typography.body.medium, color: colors.textLight, fontWeight: '600' },
@@ -1076,7 +1168,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   detailsTableContainer: { marginBottom: 20 },
-  tableWrapper: { minWidth: 1000 },
+  tableWrapper: { minWidth: 1160 },
   tableHeader: { flexDirection: 'row', backgroundColor: colors.background, padding: 8, borderBottomWidth: 2, borderBottomColor: colors.border, alignItems: 'center' },
   tableHeaderText: { ...typography.body.small, color: colors.textPrimary, fontWeight: '600', textAlign: 'center' },
   tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border, padding: 8, alignItems: 'center', minHeight: 50 },

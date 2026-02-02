@@ -3,9 +3,8 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Refres
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import ApiService from '../../services/api';
-
-const apiService = new ApiService('https://crm-backend-production-2ffd.up.railway.app/api');
+import { apiService } from '../../services/api';
+import LogoutButton from '../../components/LogoutButton';
 
 interface Stats {
   total: number;
@@ -72,7 +71,7 @@ export default function ReportsTrainingServiceScreen({ navigation }: any) {
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Training & Service</Text>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
       <ScrollView

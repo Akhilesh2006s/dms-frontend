@@ -13,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { apiService } from '../../services/api';
+import LogoutButton from '../../components/LogoutButton';
 
 export default function ReturnsWarehouseScreen({ navigation }: any) {
   const [returns, setReturns] = useState<any[]>([]);
@@ -89,7 +90,7 @@ export default function ReturnsWarehouseScreen({ navigation }: any) {
             <Text style={styles.headerTitle}>Warehouse Returns</Text>
             <Text style={styles.headerSubtitle}>Submit warehouse returns</Text>
           </View>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
 

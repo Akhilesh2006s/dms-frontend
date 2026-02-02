@@ -13,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { apiService } from '../../services/api';
+import LogoutButton from '../../components/LogoutButton';
 
 export default function SalesScreen({ navigation }: any) {
   const [sales, setSales] = useState<any[]>([]);
@@ -64,7 +65,7 @@ export default function SalesScreen({ navigation }: any) {
             <Text style={styles.headerTitle}>Sales</Text>
             <Text style={styles.headerSubtitle}>Sales Overview</Text>
           </View>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
 

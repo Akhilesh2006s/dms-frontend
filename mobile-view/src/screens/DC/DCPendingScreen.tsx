@@ -1,34 +1,38 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, RefreshControl, Alert, ActivityIndicator } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import ApiService from '../../services/api';
-
-const apiService = new ApiService('https://crm-backend-production-2ffd.up.railway.app/api');
+import { apiService } from '../../services/api';
+import LogoutButton from '../../components/LogoutButton';
 
 export default function DCPendingScreen({ navigation }: any) {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiService.get('/dc/sent-to-manager');
+      // Only DCs with status pending_dc appear here; once sent to warehouse (sent_to_manager) they disappear
+      const response = await apiService.get('/dc?status=pending_dc');
       const data = Array.isArray(response) ? response : (response?.data || []);
-      setItems(data);
+      const pendingOnly = (data as any[]).filter((d: any) => d.status === 'pending_dc');
+      setItems(pendingOnly);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to load pending DCs');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -52,7 +56,7 @@ export default function DCPendingScreen({ navigation }: any) {
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Pending DC</Text>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
       <ScrollView style={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
@@ -63,10 +67,21 @@ export default function DCPendingScreen({ navigation }: any) {
           </View>
         ) : (
           items.map((item) => (
-            <TouchableOpacity key={item._id} style={styles.card} activeOpacity={0.7}>
-              <Text style={styles.schoolName}>{item.customerName || item.dcOrderId?.school_name || 'N/A'}</Text>
-              <Text style={styles.infoText}>Status: {item.status || 'Pending'}</Text>
-            </TouchableOpacity>
+            <View key={item._id} style={styles.card}>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => navigation.navigate('DCPendingOpen', { dcId: item._id })}
+              >
+                <Text style={styles.schoolName}>{item.customerName || item.dcOrderId?.school_name || 'N/A'}</Text>
+                <Text style={styles.infoText}>Status: {item.status || 'Pending'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.openButton}
+                onPress={() => navigation.navigate('DCPendingOpen', { dcId: item._id })}
+              >
+                <Text style={styles.openButtonText}>Open</Text>
+              </TouchableOpacity>
+            </View>
           ))
         )}
       </ScrollView>
@@ -91,6 +106,8 @@ const styles = StyleSheet.create({
   card: { backgroundColor: colors.backgroundLight, borderRadius: 16, padding: 16, marginBottom: 12, shadowColor: colors.shadowDark, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
   schoolName: { ...typography.heading.h3, color: colors.textPrimary, marginBottom: 8 },
   infoText: { ...typography.body.medium, color: colors.textSecondary },
+  openButton: { marginTop: 12, alignSelf: 'flex-end', backgroundColor: colors.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
+  openButtonText: { ...typography.label.small, color: colors.textLight, fontWeight: '600' },
 });
 
 

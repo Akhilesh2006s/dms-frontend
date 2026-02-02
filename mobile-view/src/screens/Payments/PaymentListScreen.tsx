@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { apiService } from '../../services/api';
+import MessageBanner from '../../components/MessageBanner';
 
 export default function PaymentListScreen({ navigation }: any) {
   const { user } = useAuth();
@@ -28,6 +29,8 @@ export default function PaymentListScreen({ navigation }: any) {
   const [paymentMethod, setPaymentMethod] = useState('');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [remarks, setRemarks] = useState('');
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     loadPayments();
@@ -45,9 +48,16 @@ export default function PaymentListScreen({ navigation }: any) {
     }
   };
 
+  const clearMessages = () => {
+    setSuccessMessage(null);
+    setErrorMessage(null);
+  };
+
   const handleSubmit = async () => {
+    setSuccessMessage(null);
+    setErrorMessage(null);
     if (!schoolCode || !customerName || !amount || !paymentMethod) {
-      Alert.alert('Error', 'Please fill all required fields');
+      setErrorMessage('Please fill all required fields');
       return;
     }
 
@@ -63,12 +73,12 @@ export default function PaymentListScreen({ navigation }: any) {
         remarks,
         createdBy: user?._id,
       });
-      Alert.alert('Success', 'Payment added successfully');
+      setSuccessMessage('Payment added successfully.');
       setShowAddModal(false);
       resetForm();
       loadPayments();
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || 'Failed to add payment');
+      setErrorMessage(error.response?.data?.message || 'Failed to add payment');
     } finally {
       setSubmitting(false);
     }
@@ -104,6 +114,12 @@ export default function PaymentListScreen({ navigation }: any) {
         </View>
       ) : (
         <ScrollView style={styles.content}>
+          {successMessage && (
+            <MessageBanner type="success" message={successMessage} onDismiss={clearMessages} />
+          )}
+          {errorMessage && (
+            <MessageBanner type="error" message={errorMessage} onDismiss={clearMessages} />
+          )}
           {payments.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>No payments found</Text>
@@ -144,6 +160,9 @@ export default function PaymentListScreen({ navigation }: any) {
           </View>
 
           <View style={styles.modalContent}>
+            {errorMessage && showAddModal && (
+              <MessageBanner type="error" message={errorMessage} onDismiss={clearMessages} />
+            )}
             <View style={styles.inputGroup}>
               <Text style={styles.label}>School Code *</Text>
               <TextInput

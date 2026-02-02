@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
+import LogoutButton from '../../components/LogoutButton';
 import { typography } from '../../theme/typography';
 
 export default function LeadAddScreen({ navigation }: any) {
@@ -27,7 +28,7 @@ export default function LeadAddScreen({ navigation }: any) {
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Add Lead</Text>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
 

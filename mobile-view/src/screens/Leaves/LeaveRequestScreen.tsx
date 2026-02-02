@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import ApiService from '../../services/api';
+import { apiService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-
-const apiService = new ApiService('https://crm-backend-production-2ffd.up.railway.app/api');
+import MessageBanner from '../../components/MessageBanner';
+import LogoutButton from '../../components/LogoutButton';
 
 export default function LeaveRequestScreen({ navigation }: any) {
   const { user } = useAuth();
@@ -18,8 +18,16 @@ export default function LeaveRequestScreen({ navigation }: any) {
     days: 0,
   });
   const [submitting, setSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
 
   const leaveTypes = ['Sick Leave', 'Casual Leave', 'Earned Leave', 'Compensatory Off', 'Other'];
+
+  const clearMessages = () => {
+    setSuccessMessage(null);
+    setErrorMessage(null);
+  };
 
   useEffect(() => {
     if (form.startDate && form.endDate) {
@@ -32,16 +40,20 @@ export default function LeaveRequestScreen({ navigation }: any) {
   }, [form.startDate, form.endDate]);
 
   const handleSubmit = async () => {
+    clearMessages();
     if (!form.startDate?.trim()) {
-      Alert.alert('Error', 'Start date is required');
+      setErrorMessage('Start date is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (!form.endDate?.trim()) {
-      Alert.alert('Error', 'End date is required');
+      setErrorMessage('End date is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (!form.reason?.trim()) {
-      Alert.alert('Error', 'Reason is required');
+      setErrorMessage('Reason is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
 
@@ -53,11 +65,13 @@ export default function LeaveRequestScreen({ navigation }: any) {
         status: 'Pending',
       };
       await apiService.post('/leaves', payload);
-      Alert.alert('Success', 'Leave request submitted successfully', [
-        { text: 'OK', onPress: () => navigation.navigate('LeaveList') },
-      ]);
+      setSuccessMessage('Leave request submitted successfully.');
+      setErrorMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to submit leave request');
+      setErrorMessage(error.message || 'Failed to submit leave request');
+      setSuccessMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } finally {
       setSubmitting(false);
     }
@@ -71,10 +85,21 @@ export default function LeaveRequestScreen({ navigation }: any) {
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Request Leave</Text>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+      <ScrollView ref={scrollRef} style={styles.content} contentContainerStyle={styles.contentContainer}>
+        {successMessage && (
+          <MessageBanner
+            type="success"
+            message={successMessage}
+            actionLabel="View My Leaves"
+            onAction={() => navigation.navigate('LeaveList')}
+          />
+        )}
+        {errorMessage && (
+          <MessageBanner type="error" message={errorMessage} onDismiss={clearMessages} />
+        )}
         <FormField label="Leave Type" value={form.leaveType} onChangeText={(text: string) => setForm((f) => ({ ...f, leaveType: text }))} placeholder="Select leave type" />
         <View style={styles.leaveTypeContainer}>
           {leaveTypes.map((type) => (

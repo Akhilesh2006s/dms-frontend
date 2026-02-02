@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,16 +6,15 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import ApiService from '../../services/api';
+import { apiService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-
-const apiService = new ApiService('https://crm-backend-production-2ffd.up.railway.app/api');
+import MessageBanner from '../../components/MessageBanner';
+import LogoutButton from '../../components/LogoutButton';
 
 export default function LeadAddRenewalScreen({ navigation }: any) {
   const { user } = useAuth();
@@ -31,14 +30,30 @@ export default function LeadAddRenewalScreen({ navigation }: any) {
     follow_up_date: '',
   });
   const [submitting, setSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+
+  const clearMessages = () => {
+    setSuccessMessage(null);
+    setErrorMessage(null);
+  };
 
   const handleSubmit = async () => {
+    clearMessages();
     if (!form.school_name?.trim()) {
-      Alert.alert('Error', 'School Name is required');
+      setErrorMessage('School Name is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
+    }
+    if (!form.contact_person?.trim()) {
+      setErrorMessage('Contact Person is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (!form.contact_mobile?.trim()) {
-      Alert.alert('Error', 'Contact Mobile is required');
+      setErrorMessage('Contact Mobile is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
 
@@ -46,15 +61,17 @@ export default function LeadAddRenewalScreen({ navigation }: any) {
     try {
       const payload = {
         ...form,
-        status: 'Open',
+        status: 'Pending',
         createdBy: user?._id,
       };
       await apiService.post('/leads', payload);
-      Alert.alert('Success', 'Renewal lead created successfully', [
-        { text: 'OK', onPress: () => navigation.navigate('LeadsList') },
-      ]);
+      setSuccessMessage('Renewal lead created successfully.');
+      setErrorMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to create lead');
+      setErrorMessage(error.message || 'Failed to create lead');
+      setSuccessMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } finally {
       setSubmitting(false);
     }
@@ -68,12 +85,24 @@ export default function LeadAddRenewalScreen({ navigation }: any) {
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Renewal Cross Sale</Text>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+      <ScrollView ref={scrollRef} style={styles.content} contentContainerStyle={styles.contentContainer}>
+        {successMessage && (
+          <MessageBanner
+            type="success"
+            message={successMessage}
+            actionLabel="View Leads"
+            onAction={() => navigation.navigate('LeadsList')}
+          />
+        )}
+        {errorMessage && (
+          <MessageBanner type="error" message={errorMessage} onDismiss={clearMessages} />
+        )}
+        <Text style={styles.mandatoryNote}>Fields marked with * are mandatory.</Text>
         <FormField label="School Name *" value={form.school_name} onChangeText={(text: string) => setForm((f) => ({ ...f, school_name: text }))} placeholder="Enter school name" />
-        <FormField label="Contact Person" value={form.contact_person} onChangeText={(text: string) => setForm((f) => ({ ...f, contact_person: text }))} placeholder="Enter contact person" />
+        <FormField label="Contact Person *" value={form.contact_person} onChangeText={(text: string) => setForm((f) => ({ ...f, contact_person: text }))} placeholder="Enter contact person" />
         <FormField label="Contact Mobile *" value={form.contact_mobile} onChangeText={(text: string) => setForm((f) => ({ ...f, contact_mobile: text }))} placeholder="Enter mobile" keyboardType="phone-pad" />
         <FormField label="Location" value={form.location} onChangeText={(text: string) => setForm((f) => ({ ...f, location: text }))} placeholder="Enter location" />
         <FormField label="Zone" value={form.zone} onChangeText={(text: string) => setForm((f) => ({ ...f, zone: text }))} placeholder="Enter zone" />
@@ -112,6 +141,7 @@ const styles = StyleSheet.create({
   placeholder: { width: 40 },
   content: { flex: 1 },
   contentContainer: { padding: 20, paddingBottom: 40 },
+  mandatoryNote: { ...typography.body.small, color: colors.textSecondary, marginBottom: 16 },
   fieldContainer: { marginBottom: 16 },
   label: { ...typography.label.medium, color: colors.textPrimary, marginBottom: 8 },
   input: { ...typography.body.medium, backgroundColor: colors.backgroundLight, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 14, color: colors.textPrimary },

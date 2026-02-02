@@ -15,6 +15,8 @@ import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { apiService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import MessageBanner from '../../components/MessageBanner';
+import LogoutButton from '../../components/LogoutButton';
 
 type ProductSelection = {
   product_name: string;
@@ -31,6 +33,8 @@ export default function SamplesRequestScreen({ navigation }: any) {
   const [availableProducts, setAvailableProducts] = useState<string[]>([]);
   const [showAddProductModal, setShowAddProductModal] = useState(false);
   const [newProduct, setNewProduct] = useState({ product_name: '', quantity: 1 });
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -65,15 +69,22 @@ export default function SamplesRequestScreen({ navigation }: any) {
     setProducts(products.filter((_, i) => i !== index));
   };
 
+  const clearMessages = () => {
+    setSuccessMessage(null);
+    setErrorMessage(null);
+  };
+
   const submitRequest = async () => {
+    setSuccessMessage(null);
+    setErrorMessage(null);
     if (products.length === 0) {
-      Alert.alert('Error', 'Please add at least one product');
+      setErrorMessage('Please add at least one product');
       return;
     }
 
     for (const product of products) {
       if (!product.product_name || !product.quantity || product.quantity < 1) {
-        Alert.alert('Error', 'Please fill all product fields correctly');
+        setErrorMessage('Please fill all product fields correctly');
         return;
       }
     }
@@ -81,12 +92,12 @@ export default function SamplesRequestScreen({ navigation }: any) {
     setSubmitting(true);
     try {
       await apiService.post('/sample-requests', { products, purpose });
-      Alert.alert('Success', 'Sample request submitted successfully!');
+      setSuccessMessage('Sample request submitted successfully!');
       setProducts([]);
       setPurpose('To show schools');
       loadData();
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to submit request');
+      setErrorMessage(error.message || 'Failed to submit request');
     } finally {
       setSubmitting(false);
     }
@@ -120,11 +131,17 @@ export default function SamplesRequestScreen({ navigation }: any) {
             <Text style={styles.headerTitle}>Sample Requests</Text>
             <Text style={styles.headerSubtitle}>Request product samples</Text>
           </View>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+        {successMessage && (
+          <MessageBanner type="success" message={successMessage} onDismiss={clearMessages} />
+        )}
+        {errorMessage && (
+          <MessageBanner type="error" message={errorMessage} onDismiss={clearMessages} />
+        )}
         <View style={styles.formCard}>
           <Text style={styles.formTitle}>New Sample Request</Text>
           

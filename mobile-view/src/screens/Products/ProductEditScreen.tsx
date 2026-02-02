@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,12 +15,17 @@ import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { apiService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import MessageBanner from '../../components/MessageBanner';
+import LogoutButton from '../../components/LogoutButton';
 
 export default function ProductEditScreen({ navigation, route }: any) {
   const { user } = useAuth();
   const { id } = route.params || {};
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
   const [form, setForm] = useState({
     productName: '',
     productLevels: [] as string[],
@@ -113,17 +118,26 @@ export default function ProductEditScreen({ navigation, route }: any) {
     });
   };
 
+  const clearMessages = () => {
+    setSuccessMessage(null);
+    setErrorMessage(null);
+  };
+
   const onSubmit = async () => {
+    clearMessages();
     if (!form.productName.trim()) {
-      Alert.alert('Error', 'Product name is required');
+      setErrorMessage('Product name is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (form.hasSubjects && form.subjects.length === 0) {
-      Alert.alert('Error', 'At least one subject is required when subjects are enabled');
+      setErrorMessage('At least one subject is required when subjects are enabled');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (form.hasSpecs && form.specs.length === 0) {
-      Alert.alert('Error', 'At least one spec is required when specs are enabled');
+      setErrorMessage('At least one spec is required when specs are enabled');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
 
@@ -138,11 +152,13 @@ export default function ProductEditScreen({ navigation, route }: any) {
         specs: form.hasSpecs ? form.specs : [],
         prodStatus: form.prodStatus,
       });
-      Alert.alert('Success', 'Product updated successfully!', [
-        { text: 'OK', onPress: () => navigation.goBack() }
-      ]);
+      setSuccessMessage('Product updated successfully.');
+      setErrorMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to update product');
+      setErrorMessage(error.message || 'Failed to update product');
+      setSuccessMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } finally {
       setSaving(false);
     }
@@ -176,11 +192,22 @@ export default function ProductEditScreen({ navigation, route }: any) {
             <Text style={styles.headerTitle}>Edit Product</Text>
             <Text style={styles.headerSubtitle}>Update product details</Text>
           </View>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+      <ScrollView ref={scrollRef} style={styles.content} contentContainerStyle={styles.contentContainer}>
+        {successMessage && (
+          <MessageBanner
+            type="success"
+            message={successMessage}
+            actionLabel="Back to Products"
+            onAction={() => navigation.goBack()}
+          />
+        )}
+        {errorMessage && (
+          <MessageBanner type="error" message={errorMessage} onDismiss={clearMessages} />
+        )}
         <View style={styles.formCard}>
           <View style={styles.formSection}>
             <Text style={styles.label}>Product Name *</Text>

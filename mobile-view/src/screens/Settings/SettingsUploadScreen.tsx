@@ -4,9 +4,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 // import { getDocumentAsync, DocumentPickerAsset } from 'expo-document-picker'; // Requires development build
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import ApiService from '../../services/api';
-
-const apiService = new ApiService('https://crm-backend-production-2ffd.up.railway.app/api');
+import { apiService } from '../../services/api';
+import LogoutButton from '../../components/LogoutButton';
 
 export default function SettingsUploadScreen({ navigation }: any) {
   const [file, setFile] = useState<{ name: string } | null>(null);
@@ -47,7 +46,7 @@ export default function SettingsUploadScreen({ navigation }: any) {
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Upload Documents</Text>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
       <ScrollView contentContainerStyle={styles.content}>

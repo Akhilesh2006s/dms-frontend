@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { apiService } from '../../services/api';
+import MessageBanner from '../../components/MessageBanner';
 
 export default function ExpenseListScreen({ navigation, route }: any) {
   const { user } = useAuth();
@@ -27,6 +28,8 @@ export default function ExpenseListScreen({ navigation, route }: any) {
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [remarks, setRemarks] = useState('');
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     loadExpenses();
@@ -45,9 +48,16 @@ export default function ExpenseListScreen({ navigation, route }: any) {
     }
   };
 
+  const clearMessages = () => {
+    setSuccessMessage(null);
+    setErrorMessage(null);
+  };
+
   const handleSubmit = async () => {
+    setSuccessMessage(null);
+    setErrorMessage(null);
     if (!date || !category || !amount || !description) {
-      Alert.alert('Error', 'Please fill all required fields');
+      setErrorMessage('Please fill all required fields');
       return;
     }
 
@@ -62,12 +72,12 @@ export default function ExpenseListScreen({ navigation, route }: any) {
         employeeId: user?._id,
         createdBy: user?._id,
       });
-      Alert.alert('Success', 'Expense submitted successfully');
+      setSuccessMessage('Expense submitted successfully.');
       setShowAddModal(false);
       resetForm();
       loadExpenses();
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || 'Failed to submit expense');
+      setErrorMessage(error.response?.data?.message || 'Failed to submit expense');
     } finally {
       setSubmitting(false);
     }
@@ -126,6 +136,9 @@ export default function ExpenseListScreen({ navigation, route }: any) {
         </View>
       ) : (
         <ScrollView style={styles.content}>
+          {successMessage && (
+            <MessageBanner type="success" message={successMessage} onDismiss={clearMessages} />
+          )}
           {expenses.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>No expenses found</Text>
@@ -168,6 +181,9 @@ export default function ExpenseListScreen({ navigation, route }: any) {
           </View>
 
           <View style={styles.modalContent}>
+            {errorMessage && showAddModal && (
+              <MessageBanner type="error" message={errorMessage} onDismiss={clearMessages} />
+            )}
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Date *</Text>
               <TextInput

@@ -14,6 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { apiService } from '../../services/api';
+import LogoutButton from '../../components/LogoutButton';
 
 export default function DCEmpScreen({ navigation }: any) {
   const [activeTab, setActiveTab] = useState<'samples' | 'kits'>('samples');
@@ -139,7 +140,7 @@ export default function DCEmpScreen({ navigation }: any) {
             <Text style={styles.headerTitle}>EMP DC</Text>
             <Text style={styles.headerSubtitle}>Employee Kits & Samples</Text>
           </View>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
 

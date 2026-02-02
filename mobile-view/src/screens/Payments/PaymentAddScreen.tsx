@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import ApiService from '../../services/api';
+import { apiService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-
-const apiService = new ApiService('https://crm-backend-production-2ffd.up.railway.app/api');
+import MessageBanner from '../../components/MessageBanner';
+import LogoutButton from '../../components/LogoutButton';
 
 const PAYMENT_MODES = ['Cash', 'Bank Transfer', 'Credit Card', 'Debit Card', 'Online Payment', 'Cheque', 'Other'];
 
@@ -28,18 +28,30 @@ export default function PaymentAddScreen({ navigation }: any) {
     handoverRemarks: '',
   });
   const [submitting, setSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const scrollRef = React.useRef<ScrollView>(null);
+
+  const clearMessages = () => {
+    setSuccessMessage(null);
+    setErrorMessage(null);
+  };
 
   const handleSubmit = async () => {
+    clearMessages();
     if (!form.customerName?.trim()) {
-      Alert.alert('Error', 'Customer Name is required');
+      setErrorMessage('Customer Name is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (!form.amount?.trim() || parseFloat(form.amount) <= 0) {
-      Alert.alert('Error', 'Valid amount is required');
+      setErrorMessage('Valid amount is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (!form.paymentDate?.trim()) {
-      Alert.alert('Error', 'Payment Date is required');
+      setErrorMessage('Payment Date is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
 
@@ -52,11 +64,13 @@ export default function PaymentAddScreen({ navigation }: any) {
         createdBy: user?._id,
       };
       await apiService.post('/payments', payload);
-      Alert.alert('Success', 'Payment added successfully', [
-        { text: 'OK', onPress: () => navigation.navigate('PaymentList') },
-      ]);
+      setSuccessMessage('Payment added successfully.');
+      setErrorMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to add payment');
+      setErrorMessage(error.message || 'Failed to add payment');
+      setSuccessMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } finally {
       setSubmitting(false);
     }
@@ -70,10 +84,21 @@ export default function PaymentAddScreen({ navigation }: any) {
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Add Payment</Text>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+      <ScrollView ref={scrollRef} style={styles.content} contentContainerStyle={styles.contentContainer}>
+        {successMessage && (
+          <MessageBanner
+            type="success"
+            message={successMessage}
+            actionLabel="View Payments"
+            onAction={() => navigation.navigate('PaymentList')}
+          />
+        )}
+        {errorMessage && (
+          <MessageBanner type="error" message={errorMessage} onDismiss={clearMessages} />
+        )}
         <FormField label="Customer Name *" value={form.customerName} onChangeText={(text: string) => setForm((f) => ({ ...f, customerName: text }))} placeholder="Enter customer name" />
         <FormField label="School Code" value={form.schoolCode} onChangeText={(text: string) => setForm((f) => ({ ...f, schoolCode: text }))} placeholder="Enter school code" />
         <FormField label="Contact Name" value={form.contactName} onChangeText={(text: string) => setForm((f) => ({ ...f, contactName: text }))} placeholder="Enter contact name" />

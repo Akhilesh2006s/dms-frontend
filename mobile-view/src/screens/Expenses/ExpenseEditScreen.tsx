@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { apiService } from '../../services/api';
+import LogoutButton from '../../components/LogoutButton';
 
 export default function ExpenseEditScreen({ navigation, route }: any) {
   const { id } = route.params;
@@ -85,7 +86,7 @@ export default function ExpenseEditScreen({ navigation, route }: any) {
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Edit Expense</Text>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
       <ScrollView style={styles.content} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>

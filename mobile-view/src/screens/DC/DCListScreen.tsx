@@ -12,6 +12,7 @@ import { apiService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
+import { Alert } from 'react-native';
 
 interface DCItem {
   _id: string;
@@ -27,11 +28,25 @@ interface DCItem {
 }
 
 export default function DCListScreen({ navigation, route }: any) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [dcs, setDcs] = useState<DCItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const type = route.params?.type || 'sales';
+
+  const handleLogout = () => {
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Logout',
+        style: 'destructive',
+        onPress: async () => {
+          await logout();
+          (navigation as any).reset({ index: 0, routes: [{ name: 'Login' }] });
+        },
+      },
+    ]);
+  };
 
   useEffect(() => {
     loadDCs();
@@ -123,9 +138,14 @@ export default function DCListScreen({ navigation, route }: any) {
         <Text style={styles.headerTitle}>
           {type === 'training' ? 'Training DCs' : 'Sales DCs'}
         </Text>
-        <TouchableOpacity onPress={() => navigation.navigate('DCCapture')}>
-          <Text style={styles.addButton}>+ New</Text>
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity onPress={() => navigation.navigate('DCCapture')}>
+            <Text style={styles.addButton}>+ New</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+            <Text style={styles.logoutText}>🚪</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <FlatList
@@ -178,10 +198,21 @@ const styles = StyleSheet.create({
     ...typography.heading.h2,
     color: colors.textLight,
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   addButton: {
     ...typography.body.medium,
     color: colors.textLight,
     fontWeight: '700',
+  },
+  logoutButton: {
+    padding: 4,
+  },
+  logoutText: {
+    fontSize: 20,
   },
   list: {
     padding: 20,

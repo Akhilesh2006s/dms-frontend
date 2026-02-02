@@ -12,9 +12,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import ApiService from '../../services/api';
-
-const apiService = new ApiService('https://crm-backend-production-2ffd.up.railway.app/api');
+import { useAuth } from '../../context/AuthContext';
+import { apiService } from '../../services/api';
 
 interface Lead {
   _id: string;
@@ -30,10 +29,25 @@ interface Lead {
 }
 
 export default function LeadsListScreen({ navigation }: any) {
+  const { logout } = useAuth();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'open' | 'followup' | 'closed'>('all');
+
+  const handleLogout = () => {
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Logout',
+        style: 'destructive',
+        onPress: async () => {
+          await logout();
+          (navigation as any).reset({ index: 0, routes: [{ name: 'Login' }] });
+        },
+      },
+    ]);
+  };
 
   useEffect(() => {
     loadLeads();
@@ -45,7 +59,7 @@ export default function LeadsListScreen({ navigation }: any) {
       let endpoint = '/leads';
       
       if (filter === 'open') {
-        endpoint += '?status=Open';
+        endpoint += '?status=Pending';
       } else if (filter === 'followup') {
         endpoint += '?status=Follow-up';
       } else if (filter === 'closed') {
@@ -129,12 +143,20 @@ export default function LeadsListScreen({ navigation }: any) {
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Leads</Text>
-          <TouchableOpacity
-            onPress={() => navigation.navigate('LeadAdd')}
-            style={styles.addButton}
-          >
-            <Text style={styles.addIcon}>+</Text>
-          </TouchableOpacity>
+          <View style={styles.headerRight}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('LeadAdd')}
+              style={styles.addButton}
+            >
+              <Text style={styles.addIcon}>+</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleLogout}
+              style={styles.logoutButton}
+            >
+              <Text style={styles.logoutIcon}>🚪</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </LinearGradient>
 
@@ -330,6 +352,11 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'center',
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   addButton: {
     width: 40,
     height: 40,
@@ -342,6 +369,17 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: colors.textLight,
     fontWeight: 'bold',
+  },
+  logoutButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoutIcon: {
+    fontSize: 20,
   },
   filterContainer: {
     backgroundColor: colors.backgroundLight,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,16 +6,15 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import ApiService from '../../services/api';
+import { apiService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-
-const apiService = new ApiService('https://crm-backend-production-2ffd.up.railway.app/api');
+import MessageBanner from '../../components/MessageBanner';
+import LogoutButton from '../../components/LogoutButton';
 
 export default function LeadAddNewSchoolScreen({ navigation }: any) {
   const { user } = useAuth();
@@ -45,6 +44,9 @@ export default function LeadAddNewSchoolScreen({ navigation }: any) {
   const [submitting, setSubmitting] = useState(false);
   const [loadingPincode, setLoadingPincode] = useState(false);
   const [areas, setAreas] = useState<Array<{ name: string; district: string }>>([]);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     // Auto-fill zone from user profile
@@ -100,34 +102,61 @@ export default function LeadAddNewSchoolScreen({ navigation }: any) {
     }
   };
 
+  const clearMessages = () => {
+    setSuccessMessage(null);
+    setErrorMessage(null);
+  };
+
   const handleSubmit = async () => {
-    // Validate required fields
+    clearMessages();
+    if (!form.school_name?.trim()) {
+      setErrorMessage('School Name is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
+    }
+    if (!form.contact_person?.trim()) {
+      setErrorMessage('Contact Person is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
+    }
+    if (!form.contact_mobile?.trim()) {
+      setErrorMessage('Contact Mobile is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      return;
+    }
     if (!form.decision_maker_name?.trim()) {
-      Alert.alert('Error', 'Decision Maker Name is required');
+      setErrorMessage('Decision Maker Name is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (!form.decision_maker_mobile?.trim()) {
-      Alert.alert('Error', 'Decision Maker Mobile Number is required');
+      setErrorMessage('Decision Maker Mobile Number is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (!form.area?.trim()) {
-      Alert.alert('Error', 'Area is required. Please enter pincode and select an area.');
+      setErrorMessage('Area is required. Please enter pincode and select an area.');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (!form.average_fee?.trim()) {
-      Alert.alert('Error', 'Average School Fee is required');
+      setErrorMessage('Average School Fee is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (!form.branches?.trim()) {
-      Alert.alert('Error', 'No. of Branches is required');
+      setErrorMessage('No. of Branches is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (!form.strength?.trim()) {
-      Alert.alert('Error', 'School Strength is required');
+      setErrorMessage('School Strength is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (!form.remarks?.trim()) {
-      Alert.alert('Error', 'Remarks is required');
+      setErrorMessage('Remarks is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
 
@@ -135,16 +164,18 @@ export default function LeadAddNewSchoolScreen({ navigation }: any) {
     try {
       const payload = {
         ...form,
-        status: 'Open',
+        status: 'Pending',
         createdBy: user?._id,
       };
 
       await apiService.post('/leads', payload);
-      Alert.alert('Success', 'Lead created successfully', [
-        { text: 'OK', onPress: () => navigation.navigate('LeadsList') },
-      ]);
+      setSuccessMessage('Lead created successfully.');
+      setErrorMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to create lead');
+      setErrorMessage(error.message || 'Failed to create lead');
+      setSuccessMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } finally {
       setSubmitting(false);
     }
@@ -166,11 +197,23 @@ export default function LeadAddNewSchoolScreen({ navigation }: any) {
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>New School</Text>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+      <ScrollView ref={scrollRef} style={styles.content} contentContainerStyle={styles.contentContainer}>
+        {successMessage && (
+          <MessageBanner
+            type="success"
+            message={successMessage}
+            actionLabel="View Leads"
+            onAction={() => navigation.navigate('LeadsList')}
+          />
+        )}
+        {errorMessage && (
+          <MessageBanner type="error" message={errorMessage} onDismiss={clearMessages} />
+        )}
+        <Text style={styles.mandatoryNote}>Fields marked with * are mandatory.</Text>
         <FormField
           label="School Name *"
           value={form.school_name}
@@ -178,13 +221,13 @@ export default function LeadAddNewSchoolScreen({ navigation }: any) {
           placeholder="Enter school name"
         />
         <FormField
-          label="Contact Person"
+          label="Contact Person *"
           value={form.contact_person}
           onChangeText={(text) => setForm((f) => ({ ...f, contact_person: text }))}
           placeholder="Enter contact person name"
         />
         <FormField
-          label="Contact Mobile"
+          label="Contact Mobile *"
           value={form.contact_mobile}
           onChangeText={(text) => setForm((f) => ({ ...f, contact_mobile: text }))}
           placeholder="Enter mobile number"
@@ -401,6 +444,11 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: 20,
     paddingBottom: 40,
+  },
+  mandatoryNote: {
+    ...typography.body.small,
+    color: colors.textSecondary,
+    marginBottom: 16,
   },
   fieldContainer: {
     marginBottom: 16,

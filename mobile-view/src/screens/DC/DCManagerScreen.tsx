@@ -12,6 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { apiService } from '../../services/api';
+import LogoutButton from '../../components/LogoutButton';
 
 export default function DCManagerScreen({ navigation }: any) {
   const [stats, setStats] = useState<any>(null);
@@ -53,7 +54,7 @@ export default function DCManagerScreen({ navigation }: any) {
             <Text style={styles.headerTitle}>Manager DC Dashboard</Text>
             <Text style={styles.headerSubtitle}>DC Statistics Overview</Text>
           </View>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
 

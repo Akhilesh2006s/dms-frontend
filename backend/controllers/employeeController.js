@@ -71,7 +71,17 @@ const createEmployee = async (req, res) => {
     const employeeData = await User.findById(employee._id).select('-password');
     res.status(201).json(employeeData);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    // Duplicate email (MongoDB E11000)
+    if (error.code === 11000 || error.code === 11001) {
+      return res.status(400).json({ message: 'Email already exists. Please use a different email.' });
+    }
+    // Mongoose validation error
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map((e) => e.message).join('. ');
+      return res.status(400).json({ message: messages || error.message });
+    }
+    console.error('Create employee error:', error);
+    res.status(500).json({ message: error.message || 'Failed to create employee' });
   }
 };
 

@@ -16,6 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { apiService } from '../../services/api';
+import LogoutButton from '../../components/LogoutButton';
 import { useAuth } from '../../context/AuthContext';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -152,7 +153,7 @@ export default function DCAdminMyScreen({ navigation }: any) {
             <Text style={styles.headerTitle}>All Created DCs</Text>
             <Text style={styles.headerSubtitle}>Admin View</Text>
           </View>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
 

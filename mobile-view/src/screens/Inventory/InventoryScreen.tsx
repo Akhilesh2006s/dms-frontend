@@ -9,6 +9,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
+import LogoutButton from '../../components/LogoutButton';
 
 export default function InventoryScreen({ navigation }: any) {
   return (
@@ -22,7 +23,7 @@ export default function InventoryScreen({ navigation }: any) {
             <Text style={styles.headerTitle}>Stock Returns</Text>
             <Text style={styles.headerSubtitle}>Inventory Management</Text>
           </View>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
 

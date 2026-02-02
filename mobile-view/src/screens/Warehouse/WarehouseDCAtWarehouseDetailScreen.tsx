@@ -3,9 +3,8 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert,
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import ApiService from '../../services/api';
-
-const apiService = new ApiService('https://crm-backend-production-2ffd.up.railway.app/api');
+import { apiService } from '../../services/api';
+import LogoutButton from '../../components/LogoutButton';
 
 export default function WarehouseDCAtWarehouseDetailScreen({ navigation, route }: any) {
   const { id } = route.params;
@@ -31,18 +30,19 @@ export default function WarehouseDCAtWarehouseDetailScreen({ navigation, route }
   const loadDC = async () => {
     try {
       setLoading(true);
-      const data = await apiService.get(`/dc-orders/${id}`);
+      const data = await apiService.get(`/dc/${id}`);
       setDc(data);
+      const order = data.dcOrderId || {};
       setForm({
-        dcDate: data.dcDate || '',
-        dcRemarks: data.dcRemarks || '',
+        dcDate: data.dcDate ? new Date(data.dcDate).toISOString().split('T')[0] : '',
+        dcRemarks: data.dcRemarks || data.deliveryNotes || '',
         dcCategory: data.dcCategory || '',
         dcNotes: data.dcNotes || '',
-        contactPerson: data.contactPerson || '',
-        contactMobile: data.contactMobile || '',
-        zone: data.zone || '',
-        cluster: data.cluster || '',
-        remarks: data.remarks || '',
+        contactPerson: order.contact_person || data.customerName || '',
+        contactMobile: order.contact_mobile || data.customerPhone || '',
+        zone: order.zone || '',
+        cluster: '',
+        remarks: data.deliveryNotes || '',
       });
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to load DC details');
@@ -53,16 +53,13 @@ export default function WarehouseDCAtWarehouseDetailScreen({ navigation, route }
   };
 
   const handleProcess = async () => {
-    if (!form.dcDate?.trim()) {
-      Alert.alert('Error', 'DC Date is required');
-      return;
-    }
-
+    const deliverableQty = dc?.requestedQuantity ?? 0;
     setProcessing(true);
     try {
-      await apiService.put(`/dc-orders/${id}/process`, {
-        ...form,
-        status: 'dc_completed',
+      await apiService.post(`/dc/${id}/warehouse-process`, {
+        availableQuantity: dc?.requestedQuantity ?? deliverableQty,
+        deliverableQuantity: deliverableQty,
+        remarks: form.dcRemarks || form.remarks || undefined,
       });
       Alert.alert('Success', 'DC processed successfully', [
         { text: 'OK', onPress: () => navigation.navigate('WarehouseDCAtWarehouse') },
@@ -77,9 +74,8 @@ export default function WarehouseDCAtWarehouseDetailScreen({ navigation, route }
   const handleHold = async () => {
     setProcessing(true);
     try {
-      await apiService.put(`/dc-orders/${id}/hold`, {
-        status: 'dc_on_hold',
-        remarks: form.remarks,
+      await apiService.post(`/dc/${id}/hold`, {
+        holdReason: form.remarks || form.dcRemarks || 'On hold',
       });
       Alert.alert('Success', 'DC put on hold', [
         { text: 'OK', onPress: () => navigation.navigate('WarehouseDCAtWarehouse') },
@@ -108,16 +104,16 @@ export default function WarehouseDCAtWarehouseDetailScreen({ navigation, route }
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>DC Details</Text>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         {dc && (
           <>
             <View style={styles.infoCard}>
-              <Text style={styles.infoTitle}>{dc.customerName || dc.saleId?.customerName || 'N/A'}</Text>
-              <Text style={styles.infoText}>Product: {dc.product || dc.saleId?.product || '-'}</Text>
-              <Text style={styles.infoText}>Quantity: {dc.requestedQuantity || dc.saleId?.quantity || '-'}</Text>
+              <Text style={styles.infoTitle}>{dc.customerName || dc.dcOrderId?.school_name || dc.saleId?.customerName || 'N/A'}</Text>
+              <Text style={styles.infoText}>Product: {dc.product || (dc.productDetails?.[0]?.product) || dc.saleId?.product || '-'}</Text>
+              <Text style={styles.infoText}>Quantity: {dc.requestedQuantity ?? dc.saleId?.quantity ?? '-'}</Text>
             </View>
             <FormField label="DC Date *" value={form.dcDate} onChangeText={(text: string) => setForm((f) => ({ ...f, dcDate: text }))} placeholder="YYYY-MM-DD" />
             <FormField label="DC Category" value={form.dcCategory} onChangeText={(text: string) => setForm((f) => ({ ...f, dcCategory: text }))} placeholder="Enter category" />

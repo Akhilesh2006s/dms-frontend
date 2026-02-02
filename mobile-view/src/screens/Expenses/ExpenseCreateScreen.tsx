@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import { apiService } from '../../services/api';
+import { apiService, getApiUrl } from '../../services/api';
+import MessageBanner from '../../components/MessageBanner';
+import LogoutButton from '../../components/LogoutButton';
 
 interface DcItem {
   _id: string;
@@ -35,6 +37,9 @@ export default function ExpenseCreateScreen({ navigation }: any) {
   const [submitting, setSubmitting] = useState(false);
   const [billUri, setBillUri] = useState<string | null>(null);
   const [uploadingBill, setUploadingBill] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     const fetchDcs = async () => {
@@ -88,7 +93,7 @@ export default function ExpenseCreateScreen({ navigation }: any) {
       } as any);
 
       const token = await AsyncStorage.getItem('authToken');
-      const baseURL = 'http://localhost:5000/api';
+      const baseURL = getApiUrl();
       const response = await fetch(`${baseURL}/expenses/upload-bill`, {
         method: 'POST',
         headers: {
@@ -112,23 +117,28 @@ export default function ExpenseCreateScreen({ navigation }: any) {
     }
   };
 
+  const clearMessages = () => {
+    setSuccessMessage(null);
+    setErrorMessage(null);
+  };
+
   const handleSubmit = async () => {
-    // Validate required fields
+    clearMessages();
     if (!form.type || !form.amount || !form.date) {
-      Alert.alert('Error', 'Please fill in all required fields (Type, Date, Amount).');
+      setErrorMessage('Please fill in all required fields (Type, Date, Amount).');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
-
-    // Validate travel-specific fields if type is travel
     if (form.type === 'travel') {
       if (!form.transportType || !form.travelFrom || !form.travelTo) {
-        Alert.alert('Error', 'Please fill in all required travel fields (Transport Type, From, To).');
+        setErrorMessage('Please fill in all required travel fields (Transport Type, From, To).');
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
         return;
       }
     }
-
     if (dcs.length > 0 && !form.dcId) {
-      Alert.alert('Error', 'Please select a School/DC for this expense.');
+      setErrorMessage('Please select a School/DC for this expense.');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
 
@@ -171,11 +181,13 @@ export default function ExpenseCreateScreen({ navigation }: any) {
       }
 
       await apiService.post('/expenses/create', payload);
-      Alert.alert('Success', 'Expense created successfully', [
-        { text: 'OK', onPress: () => navigation.navigate('ExpenseMy') },
-      ]);
+      setSuccessMessage('Expense created successfully.');
+      setErrorMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to create expense');
+      setErrorMessage(error.message || 'Failed to create expense');
+      setSuccessMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } finally {
       setSubmitting(false);
     }
@@ -191,10 +203,21 @@ export default function ExpenseCreateScreen({ navigation }: any) {
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Create Expense</Text>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+      <ScrollView ref={scrollRef} style={styles.content} contentContainerStyle={styles.contentContainer}>
+        {successMessage && (
+          <MessageBanner
+            type="success"
+            message={successMessage}
+            actionLabel="View My Expenses"
+            onAction={() => navigation.navigate('ExpenseMy')}
+          />
+        )}
+        {errorMessage && (
+          <MessageBanner type="error" message={errorMessage} onDismiss={clearMessages} />
+        )}
         {/* Type Dropdown */}
         <DropdownField
           label="Type *"

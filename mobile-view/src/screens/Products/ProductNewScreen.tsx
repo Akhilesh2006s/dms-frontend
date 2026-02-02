@@ -1,11 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Alert,
   ActivityIndicator,
   TextInput,
   Switch,
@@ -14,12 +13,20 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { apiService } from '../../services/api';
+import LogoutButton from '../../components/LogoutButton';
 import { useAuth } from '../../context/AuthContext';
 
 export default function ProductNewScreen({ navigation }: any) {
   const { user } = useAuth();
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+
+  const clearMessages = () => {
+    setSuccessMessage(null);
+    setErrorMessage(null);
+  };
 
   const [form, setForm] = useState({
     productName: '',
@@ -86,22 +93,25 @@ export default function ProductNewScreen({ navigation }: any) {
   };
 
   const onSubmit = async () => {
+    clearMessages();
     setSubmitting(true);
-    setError(null);
 
     if (!form.productName.trim()) {
-      setError('Product name is required');
+      setErrorMessage('Product name is required');
       setSubmitting(false);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (form.hasSubjects && form.subjects.length === 0) {
-      setError('At least one subject is required when subjects are enabled');
+      setErrorMessage('At least one subject is required when subjects are enabled');
       setSubmitting(false);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (form.hasSpecs && form.specs.length === 0) {
-      setError('At least one spec is required when specs are enabled');
+      setErrorMessage('At least one spec is required when specs are enabled');
       setSubmitting(false);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
 
@@ -117,12 +127,14 @@ export default function ProductNewScreen({ navigation }: any) {
       };
 
       await apiService.post('/products', payload);
-      Alert.alert('Success', 'Product created successfully!', [
-        { text: 'OK', onPress: () => navigation.goBack() }
-      ]);
+      setSuccessMessage('Product created successfully.');
+      setErrorMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } catch (err: any) {
-      setError(err?.message || 'Failed to create product');
-      Alert.alert('Error', err?.message || 'Failed to create product');
+      const msg = err?.response?.data?.message || err?.message || 'Failed to create product';
+      setErrorMessage(msg);
+      setSuccessMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } finally {
       setSubmitting(false);
     }
@@ -147,11 +159,32 @@ export default function ProductNewScreen({ navigation }: any) {
             <Text style={styles.headerTitle}>Add New Product</Text>
             <Text style={styles.headerSubtitle}>Create a new product</Text>
           </View>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+      <ScrollView ref={scrollRef} style={styles.content} contentContainerStyle={styles.contentContainer}>
+        {successMessage ? (
+          <View style={styles.successBanner}>
+            <Text style={styles.successIcon}>✓</Text>
+            <Text style={styles.successText}>{successMessage}</Text>
+            <TouchableOpacity
+              style={styles.viewProductsButton}
+              onPress={() => navigation.navigate('ProductsList')}
+            >
+              <Text style={styles.viewProductsButtonText}>View Products</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+        {errorMessage ? (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorBannerIcon}>!</Text>
+            <Text style={styles.errorBannerText}>{errorMessage}</Text>
+            <TouchableOpacity onPress={clearMessages} style={styles.dismissError}>
+              <Text style={styles.dismissErrorText}>Dismiss</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
         <View style={styles.formCard}>
           <View style={styles.formSection}>
             <Text style={styles.label}>Product Name *</Text>
@@ -300,12 +333,6 @@ export default function ProductNewScreen({ navigation }: any) {
             </View>
           </View>
 
-          {error && (
-            <View style={styles.errorContainer}>
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          )}
-
           <View style={styles.buttonRow}>
             <TouchableOpacity
               style={[styles.button, styles.buttonCancel]}
@@ -363,7 +390,30 @@ const styles = StyleSheet.create({
   statusButtonActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   statusButtonText: { ...typography.body.medium, color: colors.textPrimary },
   statusButtonTextActive: { color: colors.textLight, fontWeight: '600' },
-  errorContainer: { backgroundColor: colors.errorLight, padding: 12, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: colors.error + '30' },
+  successBanner: {
+    backgroundColor: '#D1FAE5',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#10B981',
+  },
+  successIcon: { fontSize: 24, color: '#10B981', marginBottom: 8, fontWeight: 'bold' },
+  successText: { ...typography.body.medium, color: '#065F46', fontWeight: '600', marginBottom: 12 },
+  viewProductsButton: { alignSelf: 'flex-start', backgroundColor: '#10B981', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8 },
+  viewProductsButtonText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  errorBanner: {
+    backgroundColor: '#FEE2E2',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#EF4444',
+  },
+  errorBannerIcon: { fontSize: 24, color: '#EF4444', marginBottom: 8, fontWeight: 'bold' },
+  errorBannerText: { ...typography.body.medium, color: '#991B1B', marginBottom: 12 },
+  dismissError: { alignSelf: 'flex-start' },
+  dismissErrorText: { color: '#EF4444', fontWeight: '600', fontSize: 14 },
   errorText: { ...typography.body.medium, color: colors.error },
   buttonRow: { flexDirection: 'row', gap: 12, marginTop: 8 },
   button: { flex: 1, padding: 16, borderRadius: 12, alignItems: 'center' },

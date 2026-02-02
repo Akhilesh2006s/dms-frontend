@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../context/AuthContext';
+import LogoutButton from '../../components/LogoutButton';
 import { apiService } from '../../services/api';
 import { getCurrentLocation, getTownFromPincode } from '../../services/location';
 
@@ -129,6 +130,11 @@ export default function FirstTimeAttendanceScreen({ navigation }: any) {
 
   return (
     <ScrollView style={styles.container}>
+      <View style={styles.header}>
+        <View style={styles.headerSpacer} />
+        <Text style={styles.headerTitle}>First Time Setup</Text>
+        <LogoutButton />
+      </View>
       <View style={styles.content}>
         <Text style={styles.title}>First Time Setup</Text>
         <Text style={styles.subtitle}>Please complete your attendance details</Text>
@@ -241,6 +247,21 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 50,
+    paddingBottom: 16,
+    backgroundColor: '#007AFF',
+  },
+  headerSpacer: { width: 40 },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
   },
   content: {
     padding: 20,

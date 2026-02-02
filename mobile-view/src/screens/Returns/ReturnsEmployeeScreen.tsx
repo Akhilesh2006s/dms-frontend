@@ -14,6 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { apiService } from '../../services/api';
+import LogoutButton from '../../components/LogoutButton';
 import { useAuth } from '../../context/AuthContext';
 
 export default function ReturnsEmployeeScreen({ navigation }: any) {
@@ -117,7 +118,7 @@ export default function ReturnsEmployeeScreen({ navigation }: any) {
             <Text style={styles.headerTitle}>Employee Stock Returns</Text>
             <Text style={styles.headerSubtitle}>Submit stock returns</Text>
           </View>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
 

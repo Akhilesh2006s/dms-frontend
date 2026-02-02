@@ -1,33 +1,38 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, RefreshControl, Alert, ActivityIndicator } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import ApiService from '../../services/api';
-
-const apiService = new ApiService('https://crm-backend-production-2ffd.up.railway.app/api');
+import { apiService } from '../../services/api';
+import LogoutButton from '../../components/LogoutButton';
 
 export default function WarehouseDCAtWarehouseScreen({ navigation }: any) {
   const [dcs, setDcs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await apiService.get('/dc-orders?status=dc_accepted');
-      setDcs(Array.isArray(data) ? data : []);
+      // Only DCs with status sent_to_manager appear here; once processed (completed) or on hold they disappear
+      const data = await apiService.get('/dc/pending-warehouse');
+      const arr = Array.isArray(data) ? data : (data?.data ?? []);
+      const atWarehouseOnly = (arr as any[]).filter((d: any) => d.status === 'sent_to_manager');
+      setDcs(atWarehouseOnly);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to load DCs at warehouse');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -67,7 +72,7 @@ export default function WarehouseDCAtWarehouseScreen({ navigation }: any) {
             <Text style={styles.headerTitle}>DC At Warehouse</Text>
             <Text style={styles.headerSubtitle}>{dcs.length} {dcs.length === 1 ? 'order' : 'orders'} pending</Text>
           </View>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
       <ScrollView 
@@ -100,10 +105,10 @@ export default function WarehouseDCAtWarehouseScreen({ navigation }: any) {
                       </View>
                       <View style={styles.customerDetails}>
                         <Text style={styles.customerName} numberOfLines={1}>
-                          {dc.customerName || dc.saleId?.customerName || 'Unknown Customer'}
+                          {dc.customerName || dc.dcOrderId?.school_name || dc.saleId?.customerName || 'Unknown Customer'}
                         </Text>
-                        {dc.zone && (
-                          <Text style={styles.zoneText}>📍 {dc.zone}</Text>
+                        {(dc.dcOrderId?.zone || dc.zone) && (
+                          <Text style={styles.zoneText}>📍 {dc.dcOrderId?.zone || dc.zone}</Text>
                         )}
                       </View>
                     </View>
@@ -123,7 +128,7 @@ export default function WarehouseDCAtWarehouseScreen({ navigation }: any) {
                       <View style={styles.infoContent}>
                         <Text style={styles.infoLabel}>Product</Text>
                         <Text style={styles.infoValue} numberOfLines={2}>
-                          {dc.product || dc.saleId?.product || 'N/A'}
+                          {dc.product || (dc.productDetails?.[0]?.product) || dc.saleId?.product || 'N/A'}
                         </Text>
                       </View>
                     </View>
@@ -133,17 +138,17 @@ export default function WarehouseDCAtWarehouseScreen({ navigation }: any) {
                       <View style={styles.infoContent}>
                         <Text style={styles.infoLabel}>Quantity</Text>
                         <Text style={styles.infoValue}>
-                          {dc.requestedQuantity || dc.saleId?.quantity || '0'}
+                          {dc.requestedQuantity ?? dc.saleId?.quantity ?? '0'}
                         </Text>
                       </View>
                     </View>
                   </View>
                   
-                  {dc.managerRequestedAt && (
+                  {(dc.managerRequestedAt || dc.sentToManagerAt || dc.createdAt) && (
                     <View style={styles.dateContainer}>
                       <Text style={styles.dateIcon}>📅</Text>
                       <Text style={styles.dateLabel}>Requested on </Text>
-                      <Text style={styles.dateValue}>{formatDate(dc.managerRequestedAt)}</Text>
+                      <Text style={styles.dateValue}>{formatDate(dc.managerRequestedAt || dc.sentToManagerAt || dc.createdAt)}</Text>
                     </View>
                   )}
                 </View>

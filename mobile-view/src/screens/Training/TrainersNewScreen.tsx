@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import ApiService from '../../services/api';
-
-const apiService = new ApiService('https://crm-backend-production-2ffd.up.railway.app/api');
+import { apiService } from '../../services/api';
+import MessageBanner from '../../components/MessageBanner';
+import LogoutButton from '../../components/LogoutButton';
 
 export default function TrainersNewScreen({ navigation }: any) {
   const [form, setForm] = useState({
@@ -16,29 +16,43 @@ export default function TrainersNewScreen({ navigation }: any) {
     status: 'active',
   });
   const [submitting, setSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+
+  const clearMessages = () => {
+    setSuccessMessage(null);
+    setErrorMessage(null);
+  };
 
   const handleSubmit = async () => {
+    clearMessages();
     if (!form.name?.trim()) {
-      Alert.alert('Error', 'Name is required');
+      setErrorMessage('Name is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (!form.email?.trim()) {
-      Alert.alert('Error', 'Email is required');
+      setErrorMessage('Email is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (!form.password?.trim()) {
-      Alert.alert('Error', 'Password is required');
+      setErrorMessage('Password is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
 
     setSubmitting(true);
     try {
       await apiService.post('/trainers', form);
-      Alert.alert('Success', 'Trainer created successfully', [
-        { text: 'OK', onPress: () => navigation.navigate('TrainersActive') },
-      ]);
+      setSuccessMessage('Trainer created successfully.');
+      setErrorMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to create trainer');
+      setErrorMessage(error.message || 'Failed to create trainer');
+      setSuccessMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } finally {
       setSubmitting(false);
     }
@@ -52,10 +66,21 @@ export default function TrainersNewScreen({ navigation }: any) {
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>New Trainer</Text>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+      <ScrollView ref={scrollRef} style={styles.content} contentContainerStyle={styles.contentContainer}>
+        {successMessage && (
+          <MessageBanner
+            type="success"
+            message={successMessage}
+            actionLabel="View Trainers"
+            onAction={() => navigation.navigate('TrainersActive')}
+          />
+        )}
+        {errorMessage && (
+          <MessageBanner type="error" message={errorMessage} onDismiss={clearMessages} />
+        )}
         <FormField label="Name *" value={form.name} onChangeText={(text: string) => setForm((f) => ({ ...f, name: text }))} placeholder="Enter name" />
         <FormField label="Email *" value={form.email} onChangeText={(text: string) => setForm((f) => ({ ...f, email: text }))} placeholder="Enter email" keyboardType="email-address" />
         <FormField label="Mobile" value={form.mobile} onChangeText={(text: string) => setForm((f) => ({ ...f, mobile: text }))} placeholder="Enter mobile" keyboardType="phone-pad" />

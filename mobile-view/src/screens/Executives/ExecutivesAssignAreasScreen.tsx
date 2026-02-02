@@ -14,6 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { apiService } from '../../services/api';
+import LogoutButton from '../../components/LogoutButton';
 import { useAuth } from '../../context/AuthContext';
 
 export default function ExecutivesAssignAreasScreen({ navigation }: any) {
@@ -107,7 +108,7 @@ export default function ExecutivesAssignAreasScreen({ navigation }: any) {
             <Text style={styles.headerTitle}>Assign Areas</Text>
             <Text style={styles.headerSubtitle}>Assign areas to executives</Text>
           </View>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
 

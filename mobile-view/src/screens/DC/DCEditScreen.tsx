@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,12 +13,17 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { apiService } from '../../services/api';
+import MessageBanner from '../../components/MessageBanner';
+import LogoutButton from '../../components/LogoutButton';
 
 export default function DCEditScreen({ navigation, route }: any) {
   const { id } = route.params || {};
   const [dc, setDC] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
   const [form, setForm] = useState({
     customerName: '',
     customerEmail: '',
@@ -55,7 +60,13 @@ export default function DCEditScreen({ navigation, route }: any) {
     }
   };
 
+  const clearMessages = () => {
+    setSuccessMessage(null);
+    setErrorMessage(null);
+  };
+
   const onSubmit = async () => {
+    clearMessages();
     setSaving(true);
     try {
       await apiService.put(`/dc/${id}`, {
@@ -67,11 +78,13 @@ export default function DCEditScreen({ navigation, route }: any) {
         requestedQuantity: Number(form.requestedQuantity),
         deliveryNotes: form.deliveryNotes,
       });
-      Alert.alert('Success', 'DC updated successfully!', [
-        { text: 'OK', onPress: () => navigation.goBack() }
-      ]);
+      setSuccessMessage('DC updated successfully.');
+      setErrorMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to save');
+      setErrorMessage(error.message || 'Failed to save');
+      setSuccessMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } finally {
       setSaving(false);
     }
@@ -94,11 +107,22 @@ export default function DCEditScreen({ navigation, route }: any) {
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Edit DC</Text>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+      <ScrollView ref={scrollRef} style={styles.content} contentContainerStyle={styles.contentContainer}>
+        {successMessage && (
+          <MessageBanner
+            type="success"
+            message={successMessage}
+            actionLabel="Go Back"
+            onAction={() => navigation.goBack()}
+          />
+        )}
+        {errorMessage && (
+          <MessageBanner type="error" message={errorMessage} onDismiss={clearMessages} />
+        )}
         <View style={styles.formCard}>
           <View style={styles.formSection}>
             <Text style={styles.label}>Customer Name</Text>

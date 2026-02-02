@@ -187,9 +187,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import ApiService from '../../services/api';
-
-const apiService = new ApiService('https://crm-backend-production-2ffd.up.railway.app/api');
+import { apiService } from '../../services/api';
 
 export default function YourScreen({ navigation }: any) {
   const [data, setData] = useState([]);
@@ -303,9 +301,9 @@ const styles = StyleSheet.create({
 
 ## 📱 API Integration
 
-All API calls should use the `ApiService` class:
+All API calls should use the shared `apiService` from `../../services/api`:
 ```typescript
-const apiService = new ApiService('https://crm-backend-production-2ffd.up.railway.app/api');
+import { apiService } from '../../services/api';
 ```
 
 Common API endpoints (match web app):

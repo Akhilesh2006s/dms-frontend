@@ -1,11 +1,10 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import ApiService from '../../services/api';
-
-const apiService = new ApiService('https://crm-backend-production-2ffd.up.railway.app/api');
+import { apiService } from '../../services/api';
+import LogoutButton from '../../components/LogoutButton';
 
 export default function EmployeeNewScreen({ navigation }: any) {
   const [form, setForm] = useState({
@@ -26,51 +25,74 @@ export default function EmployeeNewScreen({ navigation }: any) {
     role: 'Executive',
   });
   const [submitting, setSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const roles = ['Executive', 'Trainer', 'Finance Manager', 'Coordinator', 'Senior Coordinator', 'Manager', 'Admin', 'Super Admin'];
 
+  const scrollRef = useRef<ScrollView>(null);
+
+  const clearMessages = () => {
+    setSuccessMessage(null);
+    setErrorMessage(null);
+  };
+
   const handleSubmit = async () => {
+    clearMessages();
     if (!form.firstName?.trim()) {
-      Alert.alert('Error', 'First Name is required');
+      setErrorMessage('First Name is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (!form.email?.trim()) {
-      Alert.alert('Error', 'Email is required');
+      setErrorMessage('Email is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (!form.mobile?.trim()) {
-      Alert.alert('Error', 'Mobile is required');
+      setErrorMessage('Mobile is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (!form.password?.trim()) {
-      Alert.alert('Error', 'Password is required');
+      setErrorMessage('Password is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (!form.state?.trim()) {
-      Alert.alert('Error', 'State is required');
+      setErrorMessage('State is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (!form.zone?.trim()) {
-      Alert.alert('Error', 'Zone is required');
+      setErrorMessage('Zone is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
-    if (!form.cluster?.trim()) {
-      Alert.alert('Error', 'Cluster is required');
+    if (form.role === 'Executive' && !form.cluster?.trim()) {
+      setErrorMessage('Cluster is required for Executive role');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
 
     setSubmitting(true);
     try {
-      const payload = {
+      const payload: any = {
         ...form,
         name: `${form.firstName} ${form.lastName}`.trim() || form.firstName || form.lastName || 'Executive',
       };
+      if (form.role !== 'Executive') {
+        delete payload.cluster;
+      }
       await apiService.post('/employees/create', payload);
-      Alert.alert('Success', 'Employee created successfully', [
-        { text: 'OK', onPress: () => navigation.navigate('EmployeesActive') },
-      ]);
+      setSuccessMessage('Employee created successfully.');
+      setErrorMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to create employee');
+      const msg = error.response?.data?.message || error.message || 'Failed to create employee';
+      setErrorMessage(msg);
+      setSuccessMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } finally {
       setSubmitting(false);
     }
@@ -84,10 +106,31 @@ export default function EmployeeNewScreen({ navigation }: any) {
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>New Employee</Text>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
-      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+      <ScrollView ref={scrollRef} style={styles.content} contentContainerStyle={styles.contentContainer}>
+        {successMessage ? (
+          <View style={styles.successBanner}>
+            <Text style={styles.successIcon}>✓</Text>
+            <Text style={styles.successText}>{successMessage}</Text>
+            <TouchableOpacity
+              style={styles.viewEmployeesButton}
+              onPress={() => navigation.navigate('EmployeesActive')}
+            >
+              <Text style={styles.viewEmployeesButtonText}>View Employees</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+        {errorMessage ? (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorIcon}>!</Text>
+            <Text style={styles.errorText}>{errorMessage}</Text>
+            <TouchableOpacity onPress={clearMessages} style={styles.dismissError}>
+              <Text style={styles.dismissErrorText}>Dismiss</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
         <Text style={styles.sectionTitle}>Personal Data</Text>
         <FormField label="First Name *" value={form.firstName} onChangeText={(text: string) => setForm((f) => ({ ...f, firstName: text }))} placeholder="First Name" />
         <FormField label="Last Name" value={form.lastName} onChangeText={(text: string) => setForm((f) => ({ ...f, lastName: text }))} placeholder="Last Name" />
@@ -161,6 +204,30 @@ const styles = StyleSheet.create({
   roleOptionSelected: { backgroundColor: colors.primary + '20', borderColor: colors.primary },
   roleOptionText: { ...typography.body.medium, color: colors.textPrimary },
   roleOptionTextSelected: { color: colors.primary, fontWeight: '600' },
+  successBanner: {
+    backgroundColor: '#D1FAE5',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#10B981',
+  },
+  successIcon: { fontSize: 24, color: '#10B981', marginBottom: 8, fontWeight: 'bold' },
+  successText: { ...typography.body.medium, color: '#065F46', fontWeight: '600', marginBottom: 12 },
+  viewEmployeesButton: { alignSelf: 'flex-start', backgroundColor: '#10B981', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8 },
+  viewEmployeesButtonText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  errorBanner: {
+    backgroundColor: '#FEE2E2',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#EF4444',
+  },
+  errorIcon: { fontSize: 24, color: '#EF4444', marginBottom: 8, fontWeight: 'bold' },
+  errorText: { ...typography.body.medium, color: '#991B1B', marginBottom: 12 },
+  dismissError: { alignSelf: 'flex-start' },
+  dismissErrorText: { color: '#EF4444', fontWeight: '600', fontSize: 14 },
   submitButton: { marginTop: 24, borderRadius: 12, overflow: 'hidden' },
   submitButtonDisabled: { opacity: 0.6 },
   submitButtonGradient: { paddingVertical: 16, alignItems: 'center' },

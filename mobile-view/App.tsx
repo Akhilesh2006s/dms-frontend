@@ -3,13 +3,14 @@ import React from 'react';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator, StyleSheet, Text, Alert } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, Text, Alert, TouchableOpacity } from 'react-native';
 import LoginScreen from './src/screens/Auth/LoginScreen';
 import FirstTimeAttendanceScreen from './src/screens/Attendance/FirstTimeAttendanceScreen';
 import DashboardScreen from './src/screens/Dashboard/DashboardScreen';
 import DCCaptureScreen from './src/screens/DC/DCCaptureScreen';
 import DCListScreen from './src/screens/DC/DCListScreen';
 import DCClosedScreen from './src/screens/DC/DCClosedScreen';
+import DCCompletedScreen from './src/screens/DC/DCCompletedScreen';
 import PaymentListScreen from './src/screens/Payments/PaymentListScreen';
 import ExpenseListScreen from './src/screens/Expenses/ExpenseListScreen';
 import ExpenseCreateScreen from './src/screens/Expenses/ExpenseCreateScreen';
@@ -29,6 +30,7 @@ import LeadCloseScreen from './src/screens/Leads/LeadCloseScreen';
 import DCCreateScreen from './src/screens/DC/DCCreateScreen';
 import DCSavedScreen from './src/screens/DC/DCSavedScreen';
 import DCPendingScreen from './src/screens/DC/DCPendingScreen';
+import DCPendingOpenScreen from './src/screens/DC/DCPendingOpenScreen';
 import DCAdminMyScreen from './src/screens/DC/DCAdminMyScreen';
 import DCEditScreen from './src/screens/DC/DCEditScreen';
 import DCManagerScreen from './src/screens/DC/DCManagerScreen';
@@ -55,6 +57,8 @@ import TrainersActiveScreen from './src/screens/Training/TrainersActiveScreen';
 import TrainersInactiveScreen from './src/screens/Training/TrainersInactiveScreen';
 import ServicesListScreen from './src/screens/Training/ServicesListScreen';
 import ServiceEditScreen from './src/screens/Training/ServiceEditScreen';
+import TrainingTrainerMyScreen from './src/screens/Training/TrainingTrainerMyScreen';
+import TrainingTrainerCompletedScreen from './src/screens/Training/TrainingTrainerCompletedScreen';
 import WarehouseInventoryItemsScreen from './src/screens/Warehouse/WarehouseInventoryItemsScreen';
 import WarehouseInventoryItemNewScreen from './src/screens/Warehouse/WarehouseInventoryItemNewScreen';
 import WarehouseInventoryItemEditScreen from './src/screens/Warehouse/WarehouseInventoryItemEditScreen';
@@ -65,13 +69,18 @@ import WarehouseDCAtWarehouseDetailScreen from './src/screens/Warehouse/Warehous
 import WarehouseCompletedDCScreen from './src/screens/Warehouse/WarehouseCompletedDCScreen';
 import WarehouseHoldDCScreen from './src/screens/Warehouse/WarehouseHoldDCScreen';
 import WarehouseDCListedScreen from './src/screens/Warehouse/WarehouseDCListedScreen';
+import WarehouseSearchDCScreen from './src/screens/Warehouse/WarehouseSearchDCScreen';
+import DCTermWiseScreen from './src/screens/DC/DCTermWiseScreen';
 import ProductsListScreen from './src/screens/Products/ProductsListScreen';
 import ProductNewScreen from './src/screens/Products/ProductNewScreen';
 import ProductEditScreen from './src/screens/Products/ProductEditScreen';
 import SalesScreen from './src/screens/Sales/SalesScreen';
+import ClientsClosedSalesScreen from './src/screens/Clients/ClientsClosedSalesScreen';
 import InventoryScreen from './src/screens/Inventory/InventoryScreen';
 import ReturnsEmployeeScreen from './src/screens/Returns/ReturnsEmployeeScreen';
 import ReturnsWarehouseScreen from './src/screens/Returns/ReturnsWarehouseScreen';
+import ReturnsWarehouseExecutiveScreen from './src/screens/Returns/ReturnsWarehouseExecutiveScreen';
+import ReturnsWarehouseManagerScreen from './src/screens/Returns/ReturnsWarehouseManagerScreen';
 import SamplesRequestScreen from './src/screens/Samples/SamplesRequestScreen';
 import ExecutivesAssignAreasScreen from './src/screens/Executives/ExecutivesAssignAreasScreen';
 import PaymentAddScreen from './src/screens/Payments/PaymentAddScreen';
@@ -102,7 +111,7 @@ import SettingsUploadScreen from './src/screens/Settings/SettingsUploadScreen';
 import SettingsSMSScreen from './src/screens/Settings/SettingsSMSScreen';
 import SettingsBackupScreen from './src/screens/Settings/SettingsBackupScreen';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 
 const Stack = createNativeStackNavigator();
 
@@ -113,24 +122,28 @@ function AppNavigator() {
   // Debug logging
   console.log('AppNavigator - user:', user?.email || 'null', 'loading:', loading);
 
-  // Navigate based on auth state (like web app)
+  const handleLogout = useCallback(() => {
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Logout',
+        style: 'destructive',
+        onPress: async () => {
+          await logout();
+          if (navigationRef.isReady()) {
+            navigationRef.reset({ index: 0, routes: [{ name: 'Login' }] });
+          }
+        },
+      },
+    ]);
+  }, [logout]);
+
+  // Navigate based on auth state
   useEffect(() => {
     if (!loading && navigationRef.isReady()) {
       if (!user) {
         navigationRef.reset({ index: 0, routes: [{ name: 'Login' }] });
       } else {
-        // Block Admin/Super Admin - they should use web app
-        const userRole = user.role || '';
-        if (userRole === 'Super Admin' || userRole === 'Admin') {
-          Alert.alert(
-            'Access Restricted',
-            'Admin and Super Admin roles must use the web application. Please login via the web interface.',
-            [{ text: 'OK', onPress: logout }]
-          );
-          return;
-        }
-        
-        // Always go directly to Dashboard after login (like web app)
         navigationRef.reset({ index: 0, routes: [{ name: 'Dashboard' }] });
       }
     }
@@ -145,14 +158,48 @@ function AppNavigator() {
     );
   }
 
+  // Default screen options with logout button for all authenticated screens
+  const defaultScreenOptions = {
+    headerShown: true,
+    headerStyle: {
+      backgroundColor: '#007AFF',
+    },
+    headerTintColor: '#fff',
+    headerTitleStyle: {
+      fontWeight: 'bold',
+    },
+    headerRight: () => (
+      <TouchableOpacity
+        onPress={handleLogout}
+        style={styles.logoutHeaderButton}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.logoutHeaderText}>Logout</Text>
+      </TouchableOpacity>
+    ),
+  };
+
   return (
     <NavigationContainer ref={navigationRef}>
       <StatusBar style="auto" />
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="Login" component={LoginScreen} />
-        <Stack.Screen name="FirstTimeAttendance" component={FirstTimeAttendanceScreen} />
-        <Stack.Screen name="Dashboard" component={DashboardScreen} />
-        
+      <Stack.Navigator 
+        screenOptions={defaultScreenOptions}
+      >
+        <Stack.Screen 
+          name="Login" 
+          component={LoginScreen} 
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+          name="FirstTimeAttendance" 
+          component={FirstTimeAttendanceScreen} 
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+          name="Dashboard" 
+          component={DashboardScreen} 
+          options={{ headerShown: false }}
+        />
         {/* Leads */}
         <Stack.Screen name="LeadsList" component={LeadsListScreen} />
         <Stack.Screen name="LeadAdd" component={LeadAddScreen} />
@@ -166,9 +213,11 @@ function AppNavigator() {
         <Stack.Screen name="DCList" component={DCListScreen} />
         <Stack.Screen name="DCCapture" component={DCCaptureScreen} />
         <Stack.Screen name="DCClosed" component={DCClosedScreen} />
+        <Stack.Screen name="DCCompleted" component={DCCompletedScreen} />
         <Stack.Screen name="DCCreate" component={DCCreateScreen} />
         <Stack.Screen name="DCSaved" component={DCSavedScreen} />
         <Stack.Screen name="DCPending" component={DCPendingScreen} />
+        <Stack.Screen name="DCPendingOpen" component={DCPendingOpenScreen} />
         <Stack.Screen name="DCAdminMy" component={DCAdminMyScreen} />
         <Stack.Screen name="DCEdit" component={DCEditScreen} />
         <Stack.Screen name="DCManager" component={DCManagerScreen} />
@@ -204,6 +253,8 @@ function AppNavigator() {
         <Stack.Screen name="TrainersInactive" component={TrainersInactiveScreen} />
         <Stack.Screen name="ServicesList" component={ServicesListScreen} />
         <Stack.Screen name="ServiceEdit" component={ServiceEditScreen} />
+        <Stack.Screen name="TrainingTrainerMy" component={TrainingTrainerMyScreen} />
+        <Stack.Screen name="TrainingTrainerCompleted" component={TrainingTrainerCompletedScreen} />
         
         {/* Warehouse */}
         <Stack.Screen name="WarehouseInventoryItems" component={WarehouseInventoryItemsScreen} />
@@ -216,6 +267,10 @@ function AppNavigator() {
         <Stack.Screen name="WarehouseCompletedDC" component={WarehouseCompletedDCScreen} />
         <Stack.Screen name="WarehouseHoldDC" component={WarehouseHoldDCScreen} />
         <Stack.Screen name="WarehouseDCListed" component={WarehouseDCListedScreen} />
+        <Stack.Screen name="WarehouseSearchDC" component={WarehouseSearchDCScreen} />
+        
+        {/* Term-Wise DC */}
+        <Stack.Screen name="DCTermWise" component={DCTermWiseScreen} />
         
         {/* Payments */}
         <Stack.Screen name="PaymentList" component={PaymentListScreen} />
@@ -267,6 +322,11 @@ function AppNavigator() {
         {/* Returns */}
         <Stack.Screen name="ReturnsEmployee" component={ReturnsEmployeeScreen} />
         <Stack.Screen name="ReturnsWarehouse" component={ReturnsWarehouseScreen} />
+        <Stack.Screen name="ReturnsWarehouseExecutive" component={ReturnsWarehouseExecutiveScreen} />
+        <Stack.Screen name="ReturnsWarehouseManager" component={ReturnsWarehouseManagerScreen} />
+        
+        {/* Clients (Executive Manager PO Edit) */}
+        <Stack.Screen name="ClientsClosedSales" component={ClientsClosedSalesScreen} />
         
         {/* Samples */}
         <Stack.Screen name="SamplesRequest" component={SamplesRequestScreen} />
@@ -301,6 +361,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#f5f5f5',
+  },
+  logoutHeaderButton: {
+    marginRight: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  logoutHeaderText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

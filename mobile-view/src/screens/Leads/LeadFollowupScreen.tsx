@@ -16,6 +16,8 @@ import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { apiService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import MessageBanner from '../../components/MessageBanner';
+import LogoutButton from '../../components/LogoutButton';
 
 export default function LeadFollowupScreen({ navigation }: any) {
   const { user } = useAuth();
@@ -30,6 +32,8 @@ export default function LeadFollowupScreen({ navigation }: any) {
     priority: 'Hot',
     remarks: '',
   });
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     loadLeads();
@@ -136,15 +140,22 @@ export default function LeadFollowupScreen({ navigation }: any) {
     setUpdateForm({ follow_up_date: '', priority: 'Hot', remarks: '' });
   };
 
+  const clearMessages = () => {
+    setSuccessMessage(null);
+    setErrorMessage(null);
+  };
+
   const handleUpdateFollowup = async () => {
     if (!selectedLead) return;
+    setSuccessMessage(null);
+    setErrorMessage(null);
 
     if (!updateForm.follow_up_date || !updateForm.follow_up_date.trim()) {
-      Alert.alert('Error', 'Next Follow-up Date is required');
+      setErrorMessage('Next Follow-up Date is required');
       return;
     }
     if (!updateForm.remarks || !updateForm.remarks.trim()) {
-      Alert.alert('Error', 'Remarks is required');
+      setErrorMessage('Remarks is required');
       return;
     }
 
@@ -156,18 +167,17 @@ export default function LeadFollowupScreen({ navigation }: any) {
         remarks: updateForm.remarks,
       };
 
-      // Try dc-orders API first, then leads API
       try {
         await apiService.put(`/dc-orders/${selectedLead._id}`, payload);
       } catch (err: any) {
         await apiService.put(`/leads/${selectedLead._id}`, payload);
       }
 
-      Alert.alert('Success', 'Follow-up created successfully!');
+      setSuccessMessage('Follow-up created successfully!');
       closeUpdateModal();
       loadLeads();
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to update follow-up');
+      setErrorMessage(error.message || 'Failed to update follow-up');
     } finally {
       setUpdating(false);
     }
@@ -255,7 +265,7 @@ export default function LeadFollowupScreen({ navigation }: any) {
             <Text style={styles.headerTitle}>Follow-up Leads</Text>
             <Text style={styles.headerSubtitle}>{leads.length} {leads.length === 1 ? 'lead' : 'leads'} pending</Text>
           </View>
-          <View style={styles.placeholder} />
+          <LogoutButton />
         </View>
       </LinearGradient>
       <ScrollView 
@@ -263,6 +273,12 @@ export default function LeadFollowupScreen({ navigation }: any) {
         contentContainerStyle={styles.contentContainer}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       >
+        {successMessage && (
+          <MessageBanner type="success" message={successMessage} onDismiss={clearMessages} />
+        )}
+        {errorMessage && (
+          <MessageBanner type="error" message={errorMessage} onDismiss={clearMessages} />
+        )}
         {leads.length === 0 ? (
           <View style={styles.emptyContainer}>
             <View style={styles.emptyIconContainer}>
@@ -388,6 +404,9 @@ export default function LeadFollowupScreen({ navigation }: any) {
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.modalBody}>
+              {errorMessage && (
+                <MessageBanner type="error" message={errorMessage} onDismiss={clearMessages} />
+              )}
               {selectedLead && (
                 <>
                   <Text style={styles.modalLabel}>School: {selectedLead.school_name || 'Unknown'}</Text>

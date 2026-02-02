@@ -2,16 +2,55 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
-// IMPORTANT: Update this to your computer's IP address for physical device testing
-// For iOS Simulator/Android Emulator: use 'localhost' or '127.0.0.1'
-// For physical device: use your computer's IP address (e.g., 'http://192.168.1.100:5000/api')
-// To find your IP: Windows: ipconfig | Mac/Linux: ifconfig
-// Look for IPv4 Address (usually 192.168.x.x or 10.0.x.x)
+// Get dev machine IP from Expo - when running on physical device, Expo knows the dev server's IP
+const getDevHostFromExpo = (): string | null => {
+  try {
+    const Constants = require('expo-constants').default;
+    const manifest = Constants.expoConfig ?? Constants.manifest ?? Constants.manifest2;
+    const hostUri = manifest?.hostUri ?? manifest?.extra?.expoGo?.debuggerHost;
+    const debuggerHost = Constants.expoConfig?.hostUri ?? Constants.manifest?.debuggerHost ?? hostUri;
+    if (debuggerHost && typeof debuggerHost === 'string') {
+      const host = debuggerHost.split(':')[0];
+      if (host && host !== 'localhost' && host !== '127.0.0.1') return host;
+    }
+    if (hostUri && typeof hostUri === 'string') {
+      const host = hostUri.split(':')[0]?.replace(/^\/+/, '');
+      if (host && host !== 'localhost' && host !== '127.0.0.1') return host;
+    }
+  } catch (_) {}
+  return null;
+};
 
-// Local development API URL
-const DEV_API_URL = Platform.OS === 'web' 
-  ? 'http://localhost:5000/api'
-  : 'http://localhost:5000/api'; // For emulator/simulator, use localhost
+// API URL - set EXPO_PUBLIC_API_URL in .env to override
+// For web: always localhost. For device: Expo IP or EXPO_PUBLIC_API_IP
+const getApiUrl = (): string => {
+  const envUrl = typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_API_URL;
+  if (envUrl) {
+    const url = String(envUrl).trim().replace(/\/$/, '');
+    return url.includes('/api') ? url : `${url}/api`;
+  }
+  if (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_USE_PRODUCTION === 'true') {
+    return 'https://crm-backend-production-2ffd.up.railway.app/api';
+  }
+
+  // Web (browser) or React Native Web - always use localhost
+  const isWeb = Platform.OS === 'web' || (typeof window !== 'undefined' && typeof document !== 'undefined');
+  if (isWeb) {
+    return 'http://localhost:5000/api';
+  }
+
+  // Native (iOS/Android) - use Expo dev host IP so device can reach backend on same WiFi
+  const envIp = typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_API_IP;
+  const ip = envIp || getDevHostFromExpo();
+  if (ip) return `http://${ip}:5000/api`;
+
+  // Fallback - likely wrong; user should set EXPO_PUBLIC_API_URL
+  return 'http://localhost:5000/api';
+};
+
+const DEV_API_URL = getApiUrl();
+
+export { getApiUrl, DEV_API_URL };
 
 // Production API URL (Railway backend)
 const PROD_API_URL = 'https://crm-backend-production-2ffd.up.railway.app/api';
@@ -70,14 +109,35 @@ class ApiService {
   async post(endpoint: string, data: any) {
     try {
       const headers = await this.getHeaders();
+      console.log(`POST ${this.baseURL}${endpoint}`, { data: { ...data, password: '***' } });
       const response = await axios.post(`${this.baseURL}${endpoint}`, data, { 
         headers,
         timeout: 30000, // 30 second timeout for posts (may have image uploads)
       });
       return response.data;
     } catch (error: any) {
+      // Log error details for debugging
+      if (error.response) {
+        console.error(`API Error [${error.response.status}]:`, {
+          endpoint: `${this.baseURL}${endpoint}`,
+          status: error.response.status,
+          data: error.response.data,
+        });
+      } else {
+        console.error('Network Error:', {
+          endpoint: `${this.baseURL}${endpoint}`,
+          code: error.code,
+          message: error.message,
+        });
+      }
+      
       if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.message?.includes('Network Error') || error.message?.includes('timeout')) {
         throw new Error(`Cannot connect to server. Make sure:\n1. Backend is running on port 5000\n2. API URL is correct (currently: ${this.baseURL})\n3. Device and computer are on same network\n4. Firewall allows port 5000`);
+      }
+      // Throw with backend error message so UI can display it
+      const backendMsg = error.response?.data?.message;
+      if (backendMsg) {
+        throw new Error(backendMsg);
       }
       throw error;
     }

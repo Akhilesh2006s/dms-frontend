@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { apiService } from '../../services/api';
 import { getCurrentLocation, getTownFromPincode } from '../../services/location';
 import { useAuth } from '../../context/AuthContext';
+import MessageBanner from '../../components/MessageBanner';
 
 const PRODUCTS = [
   'Abacus',
@@ -82,6 +83,9 @@ export default function DCCaptureScreen({ navigation, route }: any) {
     },
   ]);
   const [loading, setLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     if (existingDC?.productDetails && existingDC.productDetails.length > 0) {
@@ -175,29 +179,38 @@ export default function DCCaptureScreen({ navigation, route }: any) {
     );
   };
 
+  const clearMessages = () => {
+    setSuccessMessage(null);
+    setErrorMessage(null);
+  };
+
   const handleSubmit = async () => {
-    // Validation
+    setSuccessMessage(null);
+    setErrorMessage(null);
     if (!schoolName) {
-      Alert.alert('Error', 'School name is required');
+      setErrorMessage('School name is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (!contactMobile) {
-      Alert.alert('Error', 'Contact mobile is required');
+      setErrorMessage('Contact mobile is required');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (schoolCategory && !schoolRemarks) {
-      Alert.alert('Error', 'Remarks are mandatory when school category is selected');
+      setErrorMessage('Remarks are mandatory when school category is selected');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
     if (!locationData) {
-      Alert.alert('Error', 'Please capture location');
+      setErrorMessage('Please capture location');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
-
-    // Validate product categories
     const productsWithoutCategory = products.filter((p) => p.product && !p.productCategory);
     if (productsWithoutCategory.length > 0) {
-      Alert.alert('Error', 'Please select category for all products');
+      setErrorMessage('Please select category for all products');
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       return;
     }
 
@@ -231,16 +244,14 @@ export default function DCCaptureScreen({ navigation, route }: any) {
       };
 
       if (dcId) {
-        // Update existing DC
         await apiService.put(`/dc/${dcId}`, {
           ...dcData,
           dcOrderId: existingDC?.dcOrderId?._id,
         });
-        Alert.alert('Success', 'DC updated successfully', [
-          { text: 'OK', onPress: () => navigation.goBack() },
-        ]);
+        setSuccessMessage('DC updated successfully.');
+        setErrorMessage(null);
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
       } else {
-        // Create new DC Order first, then DC
         const dcOrderData = {
           school_name: schoolName,
           contact_person: contactPerson,
@@ -262,27 +273,37 @@ export default function DCCaptureScreen({ navigation, route }: any) {
         };
 
         const dcOrder = await apiService.post('/dc-orders', dcOrderData);
-        
-        // Raise DC from the order
         await apiService.post('/dc/raise', {
           dcOrderId: dcOrder._id,
           ...dcData,
         });
-
-        Alert.alert('Success', 'DC created successfully', [
-          { text: 'OK', onPress: () => navigation.navigate('DCList') },
-        ]);
+        setSuccessMessage('DC created successfully.');
+        setErrorMessage(null);
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
       }
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || 'Failed to save DC');
+      setErrorMessage(error.response?.data?.message || error.message || 'Failed to save DC');
+      setSuccessMessage(null);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView ref={scrollRef} style={styles.container}>
       <View style={styles.content}>
+        {successMessage && (
+          <MessageBanner
+            type="success"
+            message={successMessage}
+            actionLabel={dcId ? 'Go Back' : 'View DCs'}
+            onAction={() => (dcId ? navigation.goBack() : navigation.navigate('DCList'))}
+          />
+        )}
+        {errorMessage && (
+          <MessageBanner type="error" message={errorMessage} onDismiss={clearMessages} />
+        )}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Text style={styles.backButton}>← Back</Text>

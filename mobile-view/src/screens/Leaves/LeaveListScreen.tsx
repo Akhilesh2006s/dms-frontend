@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { apiService } from '../../services/api';
+import MessageBanner from '../../components/MessageBanner';
 
 export default function LeaveListScreen({ navigation }: any) {
   const { user } = useAuth();
@@ -25,6 +26,8 @@ export default function LeaveListScreen({ navigation }: any) {
   const [endDate, setEndDate] = useState('');
   const [leaveType, setLeaveType] = useState('');
   const [reason, setReason] = useState('');
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     loadLeaves();
@@ -55,9 +58,16 @@ export default function LeaveListScreen({ navigation }: any) {
     }
   };
 
+  const clearMessages = () => {
+    setSuccessMessage(null);
+    setErrorMessage(null);
+  };
+
   const handleSubmit = async () => {
+    setSuccessMessage(null);
+    setErrorMessage(null);
     if (!startDate || !endDate || !leaveType || !reason) {
-      Alert.alert('Error', 'Please fill all required fields');
+      setErrorMessage('Please fill all required fields');
       return;
     }
 
@@ -70,12 +80,12 @@ export default function LeaveListScreen({ navigation }: any) {
         leaveType,
         reason,
       });
-      Alert.alert('Success', 'Leave request submitted successfully');
+      setSuccessMessage('Leave request submitted successfully.');
       setShowAddModal(false);
       resetForm();
       loadLeaves();
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.message || 'Failed to submit leave request');
+      setErrorMessage(error.response?.data?.message || 'Failed to submit leave request');
     } finally {
       setSubmitting(false);
     }
@@ -121,6 +131,9 @@ export default function LeaveListScreen({ navigation }: any) {
         </View>
       ) : (
         <ScrollView style={styles.content}>
+          {successMessage && (
+            <MessageBanner type="success" message={successMessage} onDismiss={clearMessages} />
+          )}
           {leaves.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>No leave requests found</Text>
@@ -164,6 +177,9 @@ export default function LeaveListScreen({ navigation }: any) {
           </View>
 
           <View style={styles.modalContent}>
+            {errorMessage && showAddModal && (
+              <MessageBanner type="error" message={errorMessage} onDismiss={clearMessages} />
+            )}
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Leave Type *</Text>
               <View style={styles.typeGrid}>
