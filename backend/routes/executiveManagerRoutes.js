@@ -13,8 +13,12 @@ const {
   approveManagerEmployeeLeave,
   updateManagerState,
 } = require('../controllers/executiveManagerController');
+const { listPoChangeRequests } = require('../controllers/dcOrderController');
 const { authMiddleware, roleMiddleware } = require('../middleware/authMiddleware');
 const { checkDbHealth } = require('../middleware/dbHealthMiddleware');
+
+// Executive Manager: PO change requests list (static path before /:managerId)
+router.get('/po-change-requests', authMiddleware, listPoChangeRequests);
 
 // Admin only routes
 router.post('/create', authMiddleware, roleMiddleware('Super Admin', 'Admin'), createExecutiveManager);

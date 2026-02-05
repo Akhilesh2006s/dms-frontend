@@ -151,6 +151,11 @@ app.use('/api/stock-returns', stockReturnRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/location', locationRoutes);
 app.use('/api/products', productRoutes);
+// Explicit route so PO change list is never 404 (mobile: GET /api/executive-managers/po-change-requests)
+const { authMiddleware } = require('./middleware/authMiddleware');
+const { listPoChangeRequests } = require('./controllers/dcOrderController');
+app.get('/api/executive-managers/po-change-requests', authMiddleware, listPoChangeRequests);
+
 app.use('/api/executive-managers', executiveManagerRoutes);
 app.use('/api/sample-requests', sampleRequestRoutes);
 app.use('/api/ai', aiRoutes);

@@ -71,6 +71,7 @@ type DcOrderData = {
 
 export default function DCPendingOpenScreen({ navigation, route }: any) {
   const dcId = route?.params?.dcId as string | undefined;
+  const fromTermWise = route?.params?.fromTermWise === true;
   const scrollRef = useRef<ScrollView>(null);
   const { user } = useAuth();
 
@@ -97,7 +98,8 @@ export default function DCPendingOpenScreen({ navigation, route }: any) {
 
   const isSeniorCoordinator = user?.role === 'Senior Coordinator';
   const isAdmin = user?.role === 'Admin' || user?.role === 'Super Admin';
-  const canSubmitToWarehouse = isSeniorCoordinator || isAdmin;
+  const isTermWiseDc = fromTermWise || dc?.status === 'scheduled_for_later';
+  const canSubmitToWarehouse = !isTermWiseDc && (isSeniorCoordinator || isAdmin);
 
   useEffect(() => {
     if (dcId) {
@@ -348,7 +350,7 @@ export default function DCPendingOpenScreen({ navigation, route }: any) {
             <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
               <Text style={styles.backIcon}>←</Text>
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Pending DC - Open</Text>
+            <Text style={styles.headerTitle}>{isTermWiseDc ? 'Edit PO' : 'Pending DC - Open'}</Text>
             <LogoutButton />
           </View>
         </LinearGradient>
@@ -374,7 +376,7 @@ export default function DCPendingOpenScreen({ navigation, route }: any) {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Pending DC - Open</Text>
+          <Text style={styles.headerTitle}>{isTermWiseDc ? 'Edit PO' : 'Pending DC - Open'}</Text>
           <LogoutButton />
         </View>
       </LinearGradient>
@@ -504,11 +506,12 @@ export default function DCPendingOpenScreen({ navigation, route }: any) {
                 <Text style={[styles.th, styles.colSubject]}>Subject</Text>
                 <Text style={[styles.th, styles.colStrength]}>Strength</Text>
                 <Text style={[styles.th, styles.colLevel]}>Level</Text>
+                <Text style={[styles.th, styles.colTerm]}>Term</Text>
                 <Text style={[styles.th, styles.colAction]}>Action</Text>
               </View>
               {productRows.map((row) => (
                 <View key={row.id} style={styles.tableRow}>
-                  <View style={[styles.td, styles.colProduct]}>
+                  <View style={[styles.td, styles.tdPickerWrap, styles.colProduct]}>
                     <Picker
                       selectedValue={row.product}
                       onValueChange={(v) => {
@@ -516,6 +519,7 @@ export default function DCPendingOpenScreen({ navigation, route }: any) {
                         updateProductRow(row.id, 'level', getDefaultLevel(v));
                       }}
                       style={styles.tablePicker}
+                      color="#111827"
                     >
                       {products.length
                         ? products.map((p: any) => (
@@ -530,15 +534,15 @@ export default function DCPendingOpenScreen({ navigation, route }: any) {
                           )}
                     </Picker>
                   </View>
-                  <View style={[styles.td, styles.colClass]}>
-                    <Picker selectedValue={row.class} onValueChange={(v) => updateProductRow(row.id, 'class', v)} style={styles.tablePicker}>
+                  <View style={[styles.td, styles.tdPickerWrap, styles.colClass]}>
+                    <Picker selectedValue={row.class} onValueChange={(v) => updateProductRow(row.id, 'class', v)} style={styles.tablePicker} color="#111827">
                       {CLASSES.map((c) => (
                         <Picker.Item key={c} label={c} value={c} />
                       ))}
                     </Picker>
                   </View>
-                  <View style={[styles.td, styles.colCategory]}>
-                    <Picker selectedValue={row.category} onValueChange={(v) => updateProductRow(row.id, 'category', v)} style={styles.tablePicker}>
+                  <View style={[styles.td, styles.tdPickerWrap, styles.colCategory]}>
+                    <Picker selectedValue={row.category} onValueChange={(v) => updateProductRow(row.id, 'category', v)} style={styles.tablePicker} color="#111827">
                       {CATEGORIES.map((c) => (
                         <Picker.Item key={c} label={c} value={c} />
                       ))}
@@ -563,16 +567,33 @@ export default function DCPendingOpenScreen({ navigation, route }: any) {
                     keyboardType="numeric"
                     placeholder="0"
                   />
-                  <View style={[styles.td, styles.colLevel]}>
+                  <View style={[styles.td, styles.tdPickerWrap, styles.colLevel]}>
                     <Picker
                       selectedValue={row.level}
                       onValueChange={(v) => updateProductRow(row.id, 'level', v)}
                       style={styles.tablePicker}
+                      color="#111827"
                     >
                       {getProductLevels(row.product).map((l) => (
                         <Picker.Item key={l} label={l} value={l} />
                       ))}
                     </Picker>
+                  </View>
+                  <View style={[styles.td, styles.tdPickerWrap, styles.colTerm]}>
+                    {isTermWiseDc ? (
+                      <Text style={styles.termReadOnly}>{row.term || 'Term 1'}</Text>
+                    ) : (
+                      <Picker
+                        selectedValue={row.term || 'Term 1'}
+                        onValueChange={(v) => updateProductRow(row.id, 'term', v)}
+                        style={styles.tablePicker}
+                        color="#111827"
+                      >
+                        {TERMS.map((t) => (
+                          <Picker.Item key={t} label={t} value={t} />
+                        ))}
+                      </Picker>
+                    )}
                   </View>
                   <TouchableOpacity style={[styles.td, styles.colAction]} onPress={() => removeProductRow(row.id)}>
                     <Text style={styles.removeBtn}>✕</Text>
@@ -697,7 +718,8 @@ const styles = StyleSheet.create({
   tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border, padding: 8, alignItems: 'center', minHeight: 44 },
   td: { ...typography.body.small, color: colors.textPrimary, justifyContent: 'center', paddingHorizontal: 4 },
   tableInput: { backgroundColor: colors.backgroundLight, borderWidth: 1, borderColor: colors.border, borderRadius: 6, padding: 6, fontSize: 12, minHeight: 32, color: colors.textPrimary },
-  tablePicker: { height: 36, minWidth: 70 },
+  tablePicker: { height: 36, minWidth: 70, color: '#111827', backgroundColor: colors.backgroundLight, fontSize: 14 },
+  tdPickerWrap: { backgroundColor: colors.backgroundLight },
   colProduct: { width: 100 },
   colClass: { width: 48 },
   colCategory: { width: 95 },
@@ -705,7 +727,9 @@ const styles = StyleSheet.create({
   colSubject: { width: 68 },
   colStrength: { width: 64 },
   colLevel: { width: 56 },
+  colTerm: { width: 72 },
   colAction: { width: 48 },
+  termReadOnly: { ...typography.body.small, color: colors.textPrimary },
   removeBtn: { fontSize: 18, color: colors.error, fontWeight: 'bold' },
   tableFooter: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', padding: 12, backgroundColor: colors.background, borderTopWidth: 2, borderTopColor: colors.border, gap: 8 },
   footerLabel: { ...typography.body.medium, fontWeight: '600', color: colors.textPrimary },

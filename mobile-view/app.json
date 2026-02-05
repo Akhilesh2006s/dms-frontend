@@ -48,8 +48,9 @@
         {
           "cameraPermission": "Allow CRM App to access your camera to capture photos."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker",
+      "expo-secure-store"
     ]
   }
 }
-

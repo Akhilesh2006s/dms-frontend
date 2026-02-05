@@ -173,24 +173,6 @@ export default function DashboardScreen({ navigation }: any) {
         <TouchableOpacity
           style={styles.card}
           activeOpacity={0.8}
-          onPress={() => navigation.navigate('DCClosed')}
-        >
-          <View style={[styles.cardContent, styles.cardContentWhite]}>
-            <View style={styles.cardIconContainer}>
-              <Text style={styles.cardIconWhite}>✅</Text>
-            </View>
-            <View style={styles.cardTextContainer}>
-              <Text style={styles.cardTitleWhite}>Closed Sales</Text>
-              <Text style={styles.cardSubtitleWhite}>View closed sales and raise DC</Text>
-            </View>
-            <View style={styles.cardArrowContainer}>
-              <Text style={styles.cardArrowWhite}>›</Text>
-            </View>
-          </View>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.card}
-          activeOpacity={0.8}
           onPress={() => navigation.navigate('DCClient')}
         >
           <View style={[styles.cardContent, styles.cardContentWhite]}>
@@ -1002,7 +984,184 @@ export default function DashboardScreen({ navigation }: any) {
     </View>
   );
 
-  // Coordinator / Senior Coordinator Dashboard
+  // Senior Coordinator: only Dashboard, Clients (all pages), Warehouse (all pages). No Reports, Payments, Training & Services, Users/Employees.
+  const renderSeniorCoordinatorDashboard = () => (
+    <View style={styles.content}>
+      <AttendanceCard />
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionIconContainer}>
+            <View style={[styles.sectionIcon, { backgroundColor: colors.primary + '15' }]}>
+              <Text style={styles.sectionIconText}>📦</Text>
+            </View>
+          </View>
+          <Text style={styles.sectionTitle}>Clients</Text>
+        </View>
+        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('DCCreate')}>
+          <View style={[styles.cardContent, styles.cardContentWhite]}>
+            <View style={styles.cardIconContainer}><Text style={styles.cardIconWhite}>➕</Text></View>
+            <View style={styles.cardTextContainer}>
+              <Text style={styles.cardTitleWhite}>Create Sale</Text>
+              <Text style={styles.cardSubtitleWhite}>Create new sale</Text>
+            </View>
+            <View style={styles.cardArrowContainer}><Text style={styles.cardArrowWhite}>›</Text></View>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('DCClosed')}>
+          <View style={[styles.cardContent, styles.cardContentWhite]}>
+            <View style={styles.cardIconContainer}><Text style={styles.cardIconWhite}>✅</Text></View>
+            <View style={styles.cardTextContainer}>
+              <Text style={styles.cardTitleWhite}>Closed Sales</Text>
+              <Text style={styles.cardSubtitleWhite}>View closed sales</Text>
+            </View>
+            <View style={styles.cardArrowContainer}><Text style={styles.cardArrowWhite}>›</Text></View>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('DCSaved')}>
+          <View style={[styles.cardContent, styles.cardContentWhite]}>
+            <View style={styles.cardIconContainer}><Text style={styles.cardIconWhite}>💾</Text></View>
+            <View style={styles.cardTextContainer}>
+              <Text style={styles.cardTitleWhite}>Saved DC</Text>
+              <Text style={styles.cardSubtitleWhite}>View saved DCs</Text>
+            </View>
+            <View style={styles.cardArrowContainer}><Text style={styles.cardArrowWhite}>›</Text></View>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('DCPending')}>
+          <View style={[styles.cardContent, styles.cardContentWhite]}>
+            <View style={styles.cardIconContainer}><Text style={styles.cardIconWhite}>⏳</Text></View>
+            <View style={styles.cardTextContainer}>
+              <Text style={styles.cardTitleWhite}>Pending DC</Text>
+              <Text style={styles.cardSubtitleWhite}>Review pending DCs</Text>
+            </View>
+            <View style={styles.cardArrowContainer}><Text style={styles.cardArrowWhite}>›</Text></View>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('DCEmp')}>
+          <View style={[styles.cardContent, styles.cardContentWhite]}>
+            <View style={styles.cardIconContainer}><Text style={styles.cardIconWhite}>👤</Text></View>
+            <View style={styles.cardTextContainer}>
+              <Text style={styles.cardTitleWhite}>EMP DC</Text>
+              <Text style={styles.cardSubtitleWhite}>EMP DC list</Text>
+            </View>
+            <View style={styles.cardArrowContainer}><Text style={styles.cardArrowWhite}>›</Text></View>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('DCTermWise')}>
+          <View style={[styles.cardContent, styles.cardContentWhite]}>
+            <View style={styles.cardIconContainer}><Text style={styles.cardIconWhite}>📋</Text></View>
+            <View style={styles.cardTextContainer}>
+              <Text style={styles.cardTitleWhite}>Term-Wise DC</Text>
+              <Text style={styles.cardSubtitleWhite}>Term-wise DC</Text>
+            </View>
+            <View style={styles.cardArrowContainer}><Text style={styles.cardArrowWhite}>›</Text></View>
+          </View>
+        </TouchableOpacity>
+      </View>
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionIconContainer}>
+            <View style={[styles.sectionIcon, { backgroundColor: '#F59E0B' + '15' }]}>
+              <Text style={styles.sectionIconText}>🏢</Text>
+            </View>
+          </View>
+          <Text style={styles.sectionTitle}>Warehouse</Text>
+        </View>
+        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('WarehouseInventoryItems')}>
+          <View style={[styles.cardContent, styles.cardContentWhite]}>
+            <View style={styles.cardIconContainer}><Text style={styles.cardIconWhite}>📦</Text></View>
+            <View style={styles.cardTextContainer}>
+              <Text style={styles.cardTitleWhite}>Inventory Items</Text>
+              <Text style={styles.cardSubtitleWhite}>Manage inventory</Text>
+            </View>
+            <View style={styles.cardArrowContainer}><Text style={styles.cardArrowWhite}>›</Text></View>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('WarehouseStock')}>
+          <View style={[styles.cardContent, styles.cardContentWhite]}>
+            <View style={styles.cardIconContainer}><Text style={styles.cardIconWhite}>📊</Text></View>
+            <View style={styles.cardTextContainer}>
+              <Text style={styles.cardTitleWhite}>Stock</Text>
+              <Text style={styles.cardSubtitleWhite}>View stock</Text>
+            </View>
+            <View style={styles.cardArrowContainer}><Text style={styles.cardArrowWhite}>›</Text></View>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('WarehouseDCAtWarehouse')}>
+          <View style={[styles.cardContent, styles.cardContentWhite]}>
+            <View style={styles.cardIconContainer}><Text style={styles.cardIconWhite}>📦</Text></View>
+            <View style={styles.cardTextContainer}>
+              <Text style={styles.cardTitleWhite}>DC @ Warehouse</Text>
+              <Text style={styles.cardSubtitleWhite}>Process warehouse DCs</Text>
+            </View>
+            <View style={styles.cardArrowContainer}><Text style={styles.cardArrowWhite}>›</Text></View>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('WarehouseCompletedDC')}>
+          <View style={[styles.cardContent, styles.cardContentWhite]}>
+            <View style={styles.cardIconContainer}><Text style={styles.cardIconWhite}>✅</Text></View>
+            <View style={styles.cardTextContainer}>
+              <Text style={styles.cardTitleWhite}>Completed DC</Text>
+              <Text style={styles.cardSubtitleWhite}>View completed DCs</Text>
+            </View>
+            <View style={styles.cardArrowContainer}><Text style={styles.cardArrowWhite}>›</Text></View>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('WarehouseDCListed')}>
+          <View style={[styles.cardContent, styles.cardContentWhite]}>
+            <View style={styles.cardIconContainer}><Text style={styles.cardIconWhite}>📋</Text></View>
+            <View style={styles.cardTextContainer}>
+              <Text style={styles.cardTitleWhite}>DC Listed</Text>
+              <Text style={styles.cardSubtitleWhite}>Listed DCs</Text>
+            </View>
+            <View style={styles.cardArrowContainer}><Text style={styles.cardArrowWhite}>›</Text></View>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('WarehouseHoldDC')}>
+          <View style={[styles.cardContent, styles.cardContentWhite]}>
+            <View style={styles.cardIconContainer}><Text style={styles.cardIconWhite}>⏸️</Text></View>
+            <View style={styles.cardTextContainer}>
+              <Text style={styles.cardTitleWhite}>Hold DC</Text>
+              <Text style={styles.cardSubtitleWhite}>View hold DCs</Text>
+            </View>
+            <View style={styles.cardArrowContainer}><Text style={styles.cardArrowWhite}>›</Text></View>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('WarehouseSearchDC')}>
+          <View style={[styles.cardContent, styles.cardContentWhite]}>
+            <View style={styles.cardIconContainer}><Text style={styles.cardIconWhite}>🔍</Text></View>
+            <View style={styles.cardTextContainer}>
+              <Text style={styles.cardTitleWhite}>Search DC</Text>
+              <Text style={styles.cardSubtitleWhite}>Search DCs</Text>
+            </View>
+            <View style={styles.cardArrowContainer}><Text style={styles.cardArrowWhite}>›</Text></View>
+          </View>
+        </TouchableOpacity>
+      </View>
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionIconContainer}>
+            <View style={[styles.sectionIcon, { backgroundColor: '#6B7280' + '15' }]}>
+              <Text style={styles.sectionIconText}>⚙️</Text>
+            </View>
+          </View>
+          <Text style={styles.sectionTitle}>Settings</Text>
+        </View>
+        <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('SettingsPassword')}>
+          <View style={[styles.cardContent, styles.cardContentWhite]}>
+            <View style={styles.cardIconContainer}><Text style={styles.cardIconWhite}>🔐</Text></View>
+            <View style={styles.cardTextContainer}>
+              <Text style={styles.cardTitleWhite}>Change Password</Text>
+              <Text style={styles.cardSubtitleWhite}>Update password</Text>
+            </View>
+            <View style={styles.cardArrowContainer}><Text style={styles.cardArrowWhite}>›</Text></View>
+          </View>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  // Coordinator Dashboard (includes Employees, Training, Warehouse, Payments, Reports)
   const renderCoordinatorDashboard = () => (
     <View style={styles.content}>
       <AttendanceCard />
@@ -2286,7 +2445,8 @@ export default function DashboardScreen({ navigation }: any) {
     if (isWarehouseManager) return renderWarehouseManagerDashboard();
     if (isTrainer && isSalesBDE) return renderCombinedDashboard();
     if (isTrainer) return renderTrainerDashboard();
-    if (isCoordinator || isSeniorCoordinator) return renderCoordinatorDashboard();
+    if (isSeniorCoordinator) return renderSeniorCoordinatorDashboard();
+    if (isCoordinator) return renderCoordinatorDashboard();
     if (isManager || isFinanceManager) return renderManagerDashboard();
     if (isEmployee || isExecutive) return renderEmployeeDashboard();
     if (isSalesBDE) return renderSalesBDEDashboard();

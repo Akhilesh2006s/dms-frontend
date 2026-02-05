@@ -149,6 +149,45 @@ class ApiService {
     return response.data;
   }
 
+  /** Upload file (FormData). Uses fetch for reliable React Native file uploads (axios can fail with file URIs). */
+  async upload(endpoint: string, formData: FormData) {
+    const headers = await this.getHeaders();
+    delete (headers as any)['Content-Type'];
+    const url = `${this.baseURL}${endpoint}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: headers as Record<string, string>,
+        body: formData,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      const text = await response.text();
+      if (!response.ok) {
+        let message = `Upload failed (${response.status})`;
+        try {
+          const data = text ? JSON.parse(text) : {};
+          if (data.message) message = data.message;
+        } catch (_) {}
+        throw new Error(message);
+      }
+      const data = text ? JSON.parse(text) : {};
+      return data;
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        throw new Error('Upload timed out. Check your connection and try again.');
+      }
+      if (err.message?.includes('Upload failed')) throw err;
+      if (err.message?.includes('Network request failed') || err.message?.includes('Failed to fetch')) {
+        throw new Error(`Cannot connect to server. Ensure backend is running and API URL is correct (${this.baseURL}).`);
+      }
+      throw err;
+    }
+  }
+
   async delete(endpoint: string) {
     const headers = await this.getHeaders();
     const response = await axios.delete(`${this.baseURL}${endpoint}`, { headers });

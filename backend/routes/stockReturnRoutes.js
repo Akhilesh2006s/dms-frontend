@@ -4,8 +4,14 @@ const { authMiddleware } = require('../middleware/authMiddleware');
 const multer = require('multer');
 const {
   createExecutiveReturn,
+  updateExecutiveReturn,
+  getExecutiveReturnById,
   listExecutiveReturns,
   listMyExecutiveReturns,
+  listWarehouseExecutiveQueue,
+  getReturnForWarehouseExecutive,
+  listWarehouseManagerQueue,
+  getReturnForWarehouseManager,
   createWarehouseReturn,
   listWarehouseReturns,
   warehouseVerifyReturn,
@@ -18,6 +24,15 @@ router.post('/executive', authMiddleware, createExecutiveReturn);
 router.get('/executive/list', authMiddleware, listExecutiveReturns);
 router.get('/executive', authMiddleware, listExecutiveReturns); // Keep for backward compatibility
 router.get('/executive/mine', authMiddleware, listMyExecutiveReturns);
+
+router.get('/warehouse-executive/queue', authMiddleware, listWarehouseExecutiveQueue);
+router.get('/warehouse-executive/:id', authMiddleware, getReturnForWarehouseExecutive);
+
+router.get('/warehouse-manager/queue', authMiddleware, listWarehouseManagerQueue);
+router.get('/warehouse-manager/:id', authMiddleware, getReturnForWarehouseManager);
+
+router.get('/:id', authMiddleware, getExecutiveReturnById);
+router.put('/:id', authMiddleware, updateExecutiveReturn);
 
 router.post('/warehouse', authMiddleware, createWarehouseReturn);
 router.get('/warehouse', authMiddleware, listWarehouseReturns);

@@ -447,60 +447,10 @@ export function Sidebar() {
         return item
       })
   } else if (isSeniorCoordinator) {
-    // For Senior Coordinator role, use the same menu as Coordinator
-    // Only show: Dashboard, Clients, Users / Employees, Trainings & Services, Warehouse, Payments, Reports, Settings, Sign out
-    const allowedMenuItems = ['Dashboard', 'Clients', 'Users / Employees', 'Trainings & Services', 'Warehouse', 'Payments', 'Reports', 'Settings', 'Sign out']
+    // Senior Coordinator: only Dashboard, Clients (all pages), Warehouse (all pages), Settings, Sign out.
+    // Reports, Payments, Training & Services, Users/Employees are removed.
+    const allowedMenuItems = ['Dashboard', 'Clients', 'Warehouse', 'Settings', 'Sign out']
     finalNav = NAV.filter(item => allowedMenuItems.includes(item.label))
-      .map(item => {
-        // Filter Users / Employees menu items to only show "Active Employees" for Senior Coordinator
-        if (item.label === 'Users / Employees' && item.children) {
-          return {
-            ...item,
-            children: item.children.filter(child => 
-              child.label === 'Active Employees'
-            )
-          }
-        }
-        // Filter Trainings & Services menu items to exclude "Add Trainer" for Senior Coordinator
-        if (item.label === 'Trainings & Services' && item.children) {
-          return {
-            ...item,
-            children: item.children.filter(child => 
-              child.label !== 'Add Trainer'
-            )
-          }
-        }
-        // Filter Warehouse menu items to only show "DC @ Warehouse" and "Completed DC" for Senior Coordinator
-        if (item.label === 'Warehouse' && item.children) {
-          const allowedWarehouseItems = ['DC @ Warehouse', 'Completed DC']
-          return {
-            ...item,
-            children: item.children.filter(child => 
-              allowedWarehouseItems.includes(child.label)
-            )
-          }
-        }
-        // Filter Payments menu items to exclude "Add Payment" and "HOLD Payments" for Senior Coordinator
-        if (item.label === 'Payments' && item.children) {
-          return {
-            ...item,
-            children: item.children.filter(child => 
-              child.label !== 'Add Payment' && child.label !== 'HOLD Payments'
-            )
-          }
-        }
-        // Filter Reports menu items to only show: Leads, DC, Returns, All Expenses for Senior Coordinator
-        if (item.label === 'Reports' && item.children) {
-          const allowedReportItems = ['Leads', 'DC', 'Returns', 'All Expenses']
-          return {
-            ...item,
-            children: item.children.filter(child => 
-              allowedReportItems.includes(child.label)
-            )
-          }
-        }
-        return item
-      })
   } else if (isExecutiveManager) {
     // For Executive Manager role, show My Dashboard and Executive Manager menu
     // Get the manager's own ID from user data (we'll need to store it in auth)

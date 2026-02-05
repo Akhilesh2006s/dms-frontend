@@ -35,6 +35,8 @@ import DCAdminMyScreen from './src/screens/DC/DCAdminMyScreen';
 import DCEditScreen from './src/screens/DC/DCEditScreen';
 import DCManagerScreen from './src/screens/DC/DCManagerScreen';
 import DCClientScreen from './src/screens/DC/DCClientScreen';
+import DCRequestSummaryScreen from './src/screens/DC/DCRequestSummaryScreen';
+import ClientEditPOScreen from './src/screens/Clients/ClientEditPOScreen';
 import DCEmpScreen from './src/screens/DC/DCEmpScreen';
 import EmployeeNewScreen from './src/screens/Employees/EmployeeNewScreen';
 import EmployeesActiveScreen from './src/screens/Employees/EmployeesActiveScreen';
@@ -44,6 +46,8 @@ import ExecutiveManagersScreen from './src/screens/ExecutiveManagers/ExecutiveMa
 import ExecutiveManagerNewScreen from './src/screens/ExecutiveManagers/ExecutiveManagerNewScreen';
 import ExecutiveManagerDashboardScreen from './src/screens/ExecutiveManagers/ExecutiveManagerDashboardScreen';
 import ExecutiveManagerLeavesScreen from './src/screens/ExecutiveManagers/ExecutiveManagerLeavesScreen';
+import POChangeRequestsScreen from './src/screens/ExecutiveManagers/POChangeRequestsScreen';
+import POChangeRequestDetailScreen from './src/screens/ExecutiveManagers/POChangeRequestDetailScreen';
 import LeavesPendingScreen from './src/screens/Leaves/LeavesPendingScreen';
 import LeavesReportScreen from './src/screens/Leaves/LeavesReportScreen';
 import LeaveRequestScreen from './src/screens/Leaves/LeaveRequestScreen';
@@ -71,6 +75,7 @@ import WarehouseHoldDCScreen from './src/screens/Warehouse/WarehouseHoldDCScreen
 import WarehouseDCListedScreen from './src/screens/Warehouse/WarehouseDCListedScreen';
 import WarehouseSearchDCScreen from './src/screens/Warehouse/WarehouseSearchDCScreen';
 import DCTermWiseScreen from './src/screens/DC/DCTermWiseScreen';
+import DCTermWiseRequestDCScreen from './src/screens/DC/DCTermWiseRequestDCScreen';
 import ProductsListScreen from './src/screens/Products/ProductsListScreen';
 import ProductNewScreen from './src/screens/Products/ProductNewScreen';
 import ProductEditScreen from './src/screens/Products/ProductEditScreen';
@@ -78,9 +83,12 @@ import SalesScreen from './src/screens/Sales/SalesScreen';
 import ClientsClosedSalesScreen from './src/screens/Clients/ClientsClosedSalesScreen';
 import InventoryScreen from './src/screens/Inventory/InventoryScreen';
 import ReturnsEmployeeScreen from './src/screens/Returns/ReturnsEmployeeScreen';
+import StockReturnAddScreen from './src/screens/Returns/StockReturnAddScreen';
 import ReturnsWarehouseScreen from './src/screens/Returns/ReturnsWarehouseScreen';
 import ReturnsWarehouseExecutiveScreen from './src/screens/Returns/ReturnsWarehouseExecutiveScreen';
+import StockReturnWarehouseVerifyScreen from './src/screens/Returns/StockReturnWarehouseVerifyScreen';
 import ReturnsWarehouseManagerScreen from './src/screens/Returns/ReturnsWarehouseManagerScreen';
+import StockReturnWarehouseManagerReviewScreen from './src/screens/Returns/StockReturnWarehouseManagerReviewScreen';
 import SamplesRequestScreen from './src/screens/Samples/SamplesRequestScreen';
 import ExecutivesAssignAreasScreen from './src/screens/Executives/ExecutivesAssignAreasScreen';
 import PaymentAddScreen from './src/screens/Payments/PaymentAddScreen';
@@ -222,6 +230,8 @@ function AppNavigator() {
         <Stack.Screen name="DCEdit" component={DCEditScreen} />
         <Stack.Screen name="DCManager" component={DCManagerScreen} />
         <Stack.Screen name="DCClient" component={DCClientScreen} />
+        <Stack.Screen name="DCRequestSummary" component={DCRequestSummaryScreen} />
+        <Stack.Screen name="ClientEditPO" component={ClientEditPOScreen} />
         <Stack.Screen name="DCEmp" component={DCEmpScreen} />
         <Stack.Screen name="DCAdmin" component={PlaceholderScreen} />
         
@@ -236,6 +246,8 @@ function AppNavigator() {
         <Stack.Screen name="ExecutiveManagerNew" component={ExecutiveManagerNewScreen} />
         <Stack.Screen name="ExecutiveManagerDashboard" component={ExecutiveManagerDashboardScreen} />
         <Stack.Screen name="ExecutiveManagerLeaves" component={ExecutiveManagerLeavesScreen} />
+        <Stack.Screen name="POChangeRequests" component={POChangeRequestsScreen} />
+        <Stack.Screen name="POChangeRequestDetail" component={POChangeRequestDetailScreen} />
         
         {/* Leave Management */}
         <Stack.Screen name="LeavesPending" component={LeavesPendingScreen} />
@@ -271,6 +283,7 @@ function AppNavigator() {
         
         {/* Term-Wise DC */}
         <Stack.Screen name="DCTermWise" component={DCTermWiseScreen} />
+        <Stack.Screen name="DCTermWiseRequestDC" component={DCTermWiseRequestDCScreen} />
         
         {/* Payments */}
         <Stack.Screen name="PaymentList" component={PaymentListScreen} />
@@ -321,9 +334,12 @@ function AppNavigator() {
         
         {/* Returns */}
         <Stack.Screen name="ReturnsEmployee" component={ReturnsEmployeeScreen} />
+        <Stack.Screen name="StockReturnAdd" component={StockReturnAddScreen} />
         <Stack.Screen name="ReturnsWarehouse" component={ReturnsWarehouseScreen} />
         <Stack.Screen name="ReturnsWarehouseExecutive" component={ReturnsWarehouseExecutiveScreen} />
+        <Stack.Screen name="StockReturnWarehouseVerify" component={StockReturnWarehouseVerifyScreen} />
         <Stack.Screen name="ReturnsWarehouseManager" component={ReturnsWarehouseManagerScreen} />
+        <Stack.Screen name="StockReturnWarehouseManagerReview" component={StockReturnWarehouseManagerReviewScreen} />
         
         {/* Clients (Executive Manager PO Edit) */}
         <Stack.Screen name="ClientsClosedSales" component={ClientsClosedSalesScreen} />

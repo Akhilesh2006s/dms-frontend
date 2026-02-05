@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,9 +7,8 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
-  TextInput,
-  Modal,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
@@ -19,34 +18,20 @@ import { useAuth } from '../../context/AuthContext';
 
 export default function ReturnsEmployeeScreen({ navigation }: any) {
   const { user } = useAuth();
-  const [leads, setLeads] = useState<any[]>([]);
   const [myReturns, setMyReturns] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [submittingId, setSubmittingId] = useState<string | null>(null);
-  const [showModal, setShowModal] = useState(false);
-  const [selectedLead, setSelectedLead] = useState<any>(null);
-  const [form, setForm] = useState({
-    returnDate: '',
-    remarks: '',
-    lrNumber: '',
-    finYear: '',
-    schoolType: '',
-    schoolCode: '',
-  });
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [user?._id])
+  );
 
   const loadData = async () => {
     if (!user?._id) return;
     try {
       setLoading(true);
-      const [leadsData, returnsData] = await Promise.all([
-        apiService.get(`/leads?employee=${user._id}`).catch(() => []),
-        apiService.get('/stock-returns/executive/mine').catch(() => [])
-      ]);
-      setLeads(Array.isArray(leadsData) ? leadsData : (leadsData?.data || []));
+      const returnsData = await apiService.get('/stock-returns/executive/mine').catch(() => []);
       setMyReturns(Array.isArray(returnsData) ? returnsData : (returnsData?.data || []));
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to load data');
@@ -55,39 +40,8 @@ export default function ReturnsEmployeeScreen({ navigation }: any) {
     }
   };
 
-  const openModal = (lead: any) => {
-    setSelectedLead(lead);
-    setForm({ returnDate: '', remarks: '', lrNumber: '', finYear: '', schoolType: '', schoolCode: '' });
-    setShowModal(true);
-  };
-
-  const submitReturn = async () => {
-    if (!form.returnDate) {
-      Alert.alert('Validation', 'Please select Return Date');
-      return;
-    }
-    if (!selectedLead) return;
-
-    setSubmittingId(selectedLead._id);
-    try {
-      const created = await apiService.post('/stock-returns/executive', {
-        leadId: selectedLead._id,
-        returnDate: form.returnDate,
-        remarks: form.remarks,
-        lrNumber: form.lrNumber,
-        finYear: form.finYear,
-        schoolType: form.schoolType,
-        schoolCode: form.schoolCode,
-      });
-      Alert.alert('Success', `Return #${created.returnNumber} created`);
-      setShowModal(false);
-      loadData();
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to submit return');
-    } finally {
-      setSubmittingId(null);
-    }
-  };
+  const drafts = myReturns.filter((r) => r.status === 'Draft');
+  const submittedReturns = myReturns.filter((r) => r.status !== 'Draft');
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return '-';
@@ -96,6 +50,19 @@ export default function ReturnsEmployeeScreen({ navigation }: any) {
     } catch {
       return '-';
     }
+  };
+
+  const nextActionByStatus: Record<string, string> = {
+    Draft: 'Complete & Submit',
+    Submitted: 'Warehouse Verification',
+    Received: 'Under Review',
+    'Pending Manager Approval': 'Manager Decision',
+    Approved: 'Closed',
+    'Partially Approved': 'Closed',
+    Rejected: '—',
+    'Sent Back': 'Resubmit',
+    'Stock Updated': 'Closed',
+    Closed: '—',
   };
 
   if (loading) {
@@ -123,25 +90,37 @@ export default function ReturnsEmployeeScreen({ navigation }: any) {
       </LinearGradient>
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+        <TouchableOpacity
+          style={styles.addReturnButton}
+          onPress={() => navigation.navigate('StockReturnAdd')}
+        >
+          <Text style={styles.addReturnButtonText}>+ Add Return</Text>
+        </TouchableOpacity>
+
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>My Assigned Leads</Text>
-          {leads.length === 0 ? (
+          <Text style={styles.sectionTitle}>Saved drafts</Text>
+          {drafts.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No assigned leads</Text>
+              <Text style={styles.emptyText}>No saved drafts. Tap "Add Return" to create one.</Text>
             </View>
           ) : (
-            leads.map((lead) => (
+            drafts.map((ret) => (
               <TouchableOpacity
-                key={lead._id}
-                style={styles.leadCard}
-                onPress={() => openModal(lead)}
+                key={ret._id}
+                style={styles.returnCard}
+                onPress={() => navigation.navigate('StockReturnAdd', { returnId: ret._id })}
+                activeOpacity={0.8}
               >
-                <Text style={styles.leadName}>{lead.school_name}</Text>
-                <View style={styles.leadInfo}>
-                  <Text style={styles.leadInfoText}>Contact: {lead.contact_person || '-'}</Text>
-                  <Text style={styles.leadInfoText}>Location: {lead.location || '-'}</Text>
+                <View style={styles.returnHeader}>
+                  <Text style={styles.returnNumber}>{ret.returnId || `Return #${ret.returnNumber}`}</Text>
+                  <Text style={styles.returnDate}>{formatDate(ret.returnDate)}</Text>
                 </View>
-                <Text style={styles.submitButtonText}>Tap to Submit Return →</Text>
+                <View style={styles.returnStatusRow}>
+                  <Text style={styles.returnStatusLabel}>Status:</Text>
+                  <Text style={[styles.returnStatusValue, styles.statusDraft]}>{ret.status || 'Draft'}</Text>
+                </View>
+                {ret.customerName ? <Text style={styles.returnInfo}>Customer: {ret.customerName}</Text> : null}
+                <Text style={styles.returnMeta}>Updated: {formatDate(ret.updatedAt)} · Tap to edit</Text>
               </TouchableOpacity>
             ))
           )}
@@ -149,103 +128,36 @@ export default function ReturnsEmployeeScreen({ navigation }: any) {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>My Returns</Text>
-          {myReturns.length === 0 ? (
+          {submittedReturns.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No returns submitted yet</Text>
+              <Text style={styles.emptyText}>No submitted returns yet</Text>
             </View>
           ) : (
-            myReturns.map((ret) => (
-              <View key={ret._id} style={styles.returnCard}>
+            submittedReturns.map((ret) => (
+              <TouchableOpacity
+                key={ret._id}
+                style={styles.returnCard}
+                onPress={() => navigation.navigate('StockReturnAdd', { returnId: ret._id })}
+                activeOpacity={0.8}
+              >
                 <View style={styles.returnHeader}>
-                  <Text style={styles.returnNumber}>Return #{ret.returnNumber}</Text>
+                  <Text style={styles.returnNumber}>{ret.returnId || `Return #${ret.returnNumber}`}</Text>
                   <Text style={styles.returnDate}>{formatDate(ret.returnDate)}</Text>
                 </View>
+                <View style={styles.returnStatusRow}>
+                  <Text style={styles.returnStatusLabel}>Status:</Text>
+                  <Text style={[styles.returnStatusValue, ret.status === 'Draft' && styles.statusDraft]}>{ret.status || '—'}</Text>
+                </View>
+                <Text style={styles.returnNextAction}>Next: {nextActionByStatus[ret.status] || '—'}</Text>
+                {ret.customerName ? <Text style={styles.returnInfo}>Customer: {ret.customerName}</Text> : null}
                 {ret.remarks && <Text style={styles.returnRemarks}>{ret.remarks}</Text>}
                 {ret.lrNumber && <Text style={styles.returnInfo}>LR No: {ret.lrNumber}</Text>}
-              </View>
+                <Text style={styles.returnMeta}>Created: {formatDate(ret.createdAt)} · Updated: {formatDate(ret.updatedAt)}</Text>
+              </TouchableOpacity>
             ))
           )}
         </View>
       </ScrollView>
-
-      <Modal visible={showModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Submit Return</Text>
-              <TouchableOpacity onPress={() => setShowModal(false)}>
-                <Text style={styles.modalClose}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.modalBody}>
-              <Text style={styles.modalLabel}>School: {selectedLead?.school_name}</Text>
-              <Text style={styles.modalLabel}>Return Date *</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="YYYY-MM-DD"
-                value={form.returnDate}
-                onChangeText={(text) => setForm({ ...form, returnDate: text })}
-              />
-              <Text style={styles.modalLabel}>LR No (optional)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g. C062455"
-                value={form.lrNumber}
-                onChangeText={(text) => setForm({ ...form, lrNumber: text })}
-              />
-              <Text style={styles.modalLabel}>Fin Year (optional)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g. 2025-26"
-                value={form.finYear}
-                onChangeText={(text) => setForm({ ...form, finYear: text })}
-              />
-              <Text style={styles.modalLabel}>School Type (optional)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="New / Existing"
-                value={form.schoolType}
-                onChangeText={(text) => setForm({ ...form, schoolType: text })}
-              />
-              <Text style={styles.modalLabel}>School Code (optional)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g. VJVIJ5050"
-                value={form.schoolCode}
-                onChangeText={(text) => setForm({ ...form, schoolCode: text })}
-              />
-              <Text style={styles.modalLabel}>Remarks</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                placeholder="Reason/notes for return"
-                value={form.remarks}
-                onChangeText={(text) => setForm({ ...form, remarks: text })}
-                multiline
-                numberOfLines={4}
-              />
-            </ScrollView>
-            <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonCancel]}
-                onPress={() => setShowModal(false)}
-              >
-                <Text style={styles.modalButtonTextCancel}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonSubmit]}
-                onPress={submitReturn}
-                disabled={submittingId === selectedLead?._id || !form.returnDate}
-              >
-                {submittingId === selectedLead?._id ? (
-                  <ActivityIndicator color={colors.textLight} />
-                ) : (
-                  <Text style={styles.modalButtonTextSubmit}>Submit</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -268,32 +180,20 @@ const styles = StyleSheet.create({
   sectionTitle: { ...typography.heading.h3, color: colors.textPrimary, marginBottom: 16 },
   emptyContainer: { padding: 20, alignItems: 'center' },
   emptyText: { ...typography.body.medium, color: colors.textSecondary },
-  leadCard: { backgroundColor: colors.backgroundLight, borderRadius: 16, padding: 16, marginBottom: 12, shadowColor: colors.shadowDark, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
-  leadName: { ...typography.heading.h3, color: colors.textPrimary, marginBottom: 8 },
-  leadInfo: { marginBottom: 8 },
-  leadInfoText: { ...typography.body.small, color: colors.textSecondary, marginBottom: 4 },
-  submitButtonText: { ...typography.body.small, color: colors.primary, textAlign: 'right', fontWeight: '500' },
+  addReturnButton: { backgroundColor: colors.primary, borderRadius: 12, padding: 16, marginBottom: 20, alignItems: 'center' },
+  addReturnButtonText: { ...typography.body.medium, color: colors.textLight, fontWeight: '600' },
   returnCard: { backgroundColor: colors.backgroundLight, borderRadius: 16, padding: 16, marginBottom: 12, shadowColor: colors.shadowDark, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 },
   returnHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
   returnNumber: { ...typography.heading.h4, color: colors.textPrimary },
   returnDate: { ...typography.body.small, color: colors.textSecondary },
+  returnStatusRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+  returnStatusLabel: { ...typography.body.small, color: colors.textSecondary, marginRight: 6 },
+  returnStatusValue: { ...typography.body.small, color: colors.textPrimary, fontWeight: '600' },
+  statusDraft: { color: colors.warning },
+  returnNextAction: { ...typography.body.small, color: colors.info, marginBottom: 4 },
   returnRemarks: { ...typography.body.medium, color: colors.textPrimary, marginBottom: 4 },
-  returnInfo: { ...typography.body.small, color: colors.textSecondary },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: colors.backgroundLight, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '90%' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border },
-  modalTitle: { ...typography.heading.h2, color: colors.textPrimary },
-  modalClose: { fontSize: 24, color: colors.textSecondary },
-  modalBody: { padding: 20 },
-  modalLabel: { ...typography.body.medium, color: colors.textPrimary, marginBottom: 8, fontWeight: '600' },
-  input: { backgroundColor: colors.background, borderRadius: 12, padding: 12, ...typography.body.medium, color: colors.textPrimary, marginBottom: 16, borderWidth: 1, borderColor: colors.border },
-  textArea: { minHeight: 100, textAlignVertical: 'top' },
-  modalFooter: { flexDirection: 'row', padding: 20, borderTopWidth: 1, borderTopColor: colors.border, gap: 12 },
-  modalButton: { flex: 1, padding: 16, borderRadius: 12, alignItems: 'center' },
-  modalButtonCancel: { backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border },
-  modalButtonSubmit: { backgroundColor: colors.primary },
-  modalButtonTextCancel: { ...typography.body.medium, color: colors.textPrimary, fontWeight: '600' },
-  modalButtonTextSubmit: { ...typography.body.medium, color: colors.textLight, fontWeight: '600' },
+  returnInfo: { ...typography.body.small, color: colors.textSecondary, marginBottom: 2 },
+  returnMeta: { ...typography.body.small, color: colors.textTertiary, marginTop: 6 },
 });
 
 

@@ -16,7 +16,7 @@ const stockReturnSchema = new mongoose.Schema(
     executiveName: { type: String },
     customerName: { type: String },
     warehouse: { type: String },
-    returnType: { type: String, enum: ['Damaged', 'Expired', 'Excess', 'Wrong item', 'Replacement'] },
+    returnType: { type: String, enum: ['', 'Damaged', 'Expired', 'Excess', 'Wrong item', 'Replacement'] },
     
     // Products from executive return
     products: [{

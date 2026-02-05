@@ -1,4 +1,5 @@
 const Lead = require('../models/Lead');
+const DcOrder = require('../models/DcOrder');
 const ExcelJS = require('exceljs');
 const mongoose = require('mongoose');
 const { generateSchoolCode } = require('../utils/schoolCodeGenerator');
@@ -364,6 +365,69 @@ const exportLeads = async (req, res) => {
   }
 };
 
+// @desc    Convert lead to client (create DcOrder with status 'saved', no DC). Record moves to My Clients; Closed Sales only after Request DC.
+// @route   POST /api/leads/:id/convert-to-client
+// @access  Private
+const convertToClient = async (req, res) => {
+  try {
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) {
+      return res.status(404).json({ message: 'Lead not found' });
+    }
+
+    const userId = req.user._id;
+    const userIdObj = mongoose.Types.ObjectId.isValid(userId)
+      ? (userId instanceof mongoose.Types.ObjectId ? userId : new mongoose.Types.ObjectId(userId))
+      : userId;
+    const body = req.body || {};
+
+    const products = Array.isArray(body.products) && body.products.length > 0
+      ? body.products.map((p) => ({
+          product_name: p.product_name || p.product || 'Abacus',
+          quantity: Number(p.quantity) || 1,
+          unit_price: Number(p.unit_price) || 0,
+          term: p.term || 'Term 1',
+        }))
+      : (lead.products && lead.products.length > 0
+          ? lead.products.map((p) => ({
+              product_name: p.product_name || p.product || 'Abacus',
+              quantity: Number(p.quantity) || 1,
+              unit_price: Number(p.unit_price) || 0,
+            }))
+          : [{ product_name: 'Abacus', quantity: 1, unit_price: 0 }]);
+
+    const dcOrderPayload = {
+      school_name: body.school_name || lead.school_name,
+      contact_person: body.contact_person || lead.contact_person,
+      contact_mobile: body.contact_mobile || lead.contact_mobile,
+      email: body.email || lead.email,
+      address: body.address || lead.address,
+      location: body.location || lead.location,
+      zone: body.zone || lead.zone,
+      school_type: body.school_type || lead.school_type || 'New',
+      products,
+      status: 'saved',
+      assigned_to: userIdObj,
+      created_by: userIdObj,
+      estimated_delivery_date: body.estimated_delivery_date ? new Date(body.estimated_delivery_date) : undefined,
+      pod_proof_url: body.pod_proof_url || lead.pod_proof_url,
+    };
+
+    const dcOrder = await DcOrder.create(dcOrderPayload);
+
+    await Lead.findByIdAndUpdate(req.params.id, { status: 'Closed' });
+
+    const populated = await DcOrder.findById(dcOrder._id)
+      .populate('assigned_to', 'name email')
+      .populate('created_by', 'name email');
+
+    res.status(201).json(populated);
+  } catch (error) {
+    console.error('convertToClient error:', error);
+    res.status(500).json({ message: error.message || 'Failed to convert lead to client' });
+  }
+};
+
 module.exports = {
   getLeads,
   getLead,
@@ -371,5 +435,6 @@ module.exports = {
   updateLead,
   deleteLead,
   exportLeads,
+  convertToClient,
 };
 

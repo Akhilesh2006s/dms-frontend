@@ -21,6 +21,8 @@ export type RootStackParamList = {
   DCEdit: { id: string };
   DCManager: undefined;
   DCClient: undefined;
+  DCRequestSummary: { orderId: string; client?: any };
+  ClientEditPO: { orderId: string };
   DCEmp: undefined;
   DCAdmin: undefined;
   DCList: { type?: string };
@@ -37,6 +39,8 @@ export type RootStackParamList = {
   ExecutiveManagerNew: undefined;
   ExecutiveManagerDashboard: { managerId: string };
   ExecutiveManagerLeaves: { managerId: string };
+  POChangeRequests: undefined;
+  POChangeRequestDetail: { orderId: string };
   
   // Leave Management
   LeavesPending: undefined;

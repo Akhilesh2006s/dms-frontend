@@ -193,7 +193,8 @@ const raiseDC = async (req, res) => {
       productDetailsCount: req.body.productDetails?.length || 0
     });
     
-    const { dcOrderId, dcDate, dcRemarks, dcCategory, dcNotes, requestedQuantity, productDetails } = req.body;
+    const { dcOrderId, dcDate, dcRemarks, dcCategory, dcNotes, requestedQuantity } = req.body;
+    const productDetailsFromBody = req.body.productDetails && Array.isArray(req.body.productDetails) ? req.body.productDetails : null;
 
     if (!dcOrderId) {
       console.log('❌ DC Order ID is missing');
@@ -210,8 +211,8 @@ const raiseDC = async (req, res) => {
       const lead = await Lead.findById(dcOrderId);
       if (lead) {
         console.log('📋 Lead found (converting to client), creating DcOrder from lead:', lead.school_name);
-        const productsFromDetails = (productDetails && Array.isArray(productDetails))
-          ? productDetails.map(p => ({
+        const productsFromDetails = (productDetailsFromBody && Array.isArray(productDetailsFromBody))
+          ? productDetailsFromBody.map(p => ({
               product_name: p.product || p.product_name || 'Abacus',
               quantity: Number(p.quantity) || Number(p.strength) || 1,
               unit_price: Number(p.price) || 0,
@@ -239,150 +240,158 @@ const raiseDC = async (req, res) => {
       console.log('❌ DcOrder/Lead not found:', dcOrderId);
       return res.status(404).json({ message: 'Deal/Lead not found' });
     }
-    
-    console.log('✅ DcOrder found:', {
-      schoolName: dcOrder.school_name,
-      currentStatus: dcOrder.status,
-      assignedTo: dcOrder.assigned_to
-    });
 
-    // Check if DC already exists for this DcOrder (use dcOrder._id, not request dcOrderId which may be a Lead id)
-    let dc = await DC.findOne({ dcOrderId: dcOrder._id });
-    
-    if (dc) {
-      // If DC exists, update employeeId if provided (for lead conversion - employee converting lead should own the client)
-      if (req.body.employeeId || req.body.assignedTo) {
-        dc.employeeId = req.body.employeeId || req.body.assignedTo;
-      }
-      // Preserve the PO photo if it has one, or get from DcOrder
-      if (!dc.poPhotoUrl && dcOrder.pod_proof_url) {
-        dc.poPhotoUrl = dcOrder.pod_proof_url;
-        dc.poDocument = dcOrder.pod_proof_url;
-      }
-      // Also update if PO photo is provided directly in request (from lead conversion)
-      if (req.body.poPhotoUrl) {
-        dc.poPhotoUrl = req.body.poPhotoUrl;
-        dc.poDocument = req.body.poPhotoUrl;
-      }
-      // Update productDetails if provided (for lead conversion)
-      if (req.body.productDetails && Array.isArray(req.body.productDetails)) {
-        dc.productDetails = req.body.productDetails;
-      }
-      // Update status if provided (for Closed Sales - should be pending_dc)
-      if (req.body.status) {
-        dc.status = req.body.status;
-      }
+    // Resolve employeeId once
+    let employeeId = req.body.employeeId || req.body.assignedTo
+      || (dcOrder.assigned_to ? (typeof dcOrder.assigned_to === 'object' ? dcOrder.assigned_to._id : dcOrder.assigned_to) : null)
+      || req.user._id;
+    if (!employeeId) {
+      return res.status(400).json({ message: 'Deal must be assigned to an employee before raising DC.' });
     }
-    
-    if (!dc) {
-      // Create DC if it doesn't exist
-      let productName = 'Abacus';
-      let quantity = 1;
-      
-      if (dcOrder.products && Array.isArray(dcOrder.products) && dcOrder.products.length > 0) {
-        productName = dcOrder.products[0].product_name || 'Abacus';
-        quantity = dcOrder.products.reduce((sum, p) => sum + (p.quantity || 1), 0);
-      }
 
-      // If assigned_to is not set, try to get it from the request body (for assigning during Raise DC)
-      // Priority: 1) req.body.employeeId (explicitly provided), 2) dcOrder.assigned_to, 3) req.user._id (current user)
-      let employeeId = null;
-      if (req.body.employeeId || req.body.assignedTo) {
-        // Explicitly provided employeeId takes priority (for lead conversion)
-        employeeId = req.body.employeeId || req.body.assignedTo;
-      } else if (dcOrder.assigned_to) {
-        employeeId = typeof dcOrder.assigned_to === 'object' ? dcOrder.assigned_to._id : dcOrder.assigned_to;
-      } else {
-        // Fallback to current user (the person creating the DC)
-        employeeId = req.user._id;
-      }
+    // --- Term split: do it in backend from full productDetails ---
+    const terms = (productDetailsFromBody || []).map(p => (p.term || 'Term 1').trim());
+    const hasTerm1 = terms.includes('Term 1');
+    const hasTerm2 = terms.includes('Term 2');
+    const hasBothTerm = terms.includes('Both');
+    const term1Products = (productDetailsFromBody || []).filter(p => {
+      const t = (p.term || 'Term 1').trim();
+      return t === 'Term 1' || t === 'Both';
+    });
+    const term2Products = (productDetailsFromBody || []).filter(p => (p.term || 'Term 1').trim() === 'Term 2');
+    const needsSplit = term1Products.length > 0 && term2Products.length > 0;
 
-      if (!employeeId) {
-        return res.status(400).json({ 
-          message: 'Deal must be assigned to an employee before raising DC. Please assign an employee first or specify one in the request.' 
-        });
-      }
-
-      console.log('🆕 Creating new DC:', {
+    const buildDcPayload = (details, status, qty) => {
+      const productName = (details && details[0] && (details[0].product || details[0].productName)) || (dcOrder.products && dcOrder.products[0] && dcOrder.products[0].product_name) || 'Abacus';
+      const payload = {
         dcOrderId: dcOrder._id,
-        employeeId: employeeId,
-        status: req.body.status || 'created',
-        customerName: dcOrder.school_name
-      });
-      
-      dc = await DC.create({
-        dcOrderId: dcOrder._id,
-        employeeId: employeeId,
+        employeeId,
         customerName: dcOrder.school_name,
         customerEmail: dcOrder.email || undefined,
         customerAddress: dcOrder.address || dcOrder.location || 'N/A',
         customerPhone: dcOrder.contact_mobile || dcOrder.contact_person || 'N/A',
         product: productName,
-        requestedQuantity: requestedQuantity || quantity,
+        requestedQuantity: qty,
         deliverableQuantity: 0,
-        status: req.body.status || 'created', // Use status from request body (should be 'created' now)
+        status,
         createdBy: req.user._id,
-        productDetails: productDetails || undefined, // Save productDetails if provided (from lead conversion)
-      });
-      
-      console.log('✅ DC created successfully:', {
-        dcId: dc._id,
-        status: dc.status,
-        employeeId: dc.employeeId,
-        customerName: dc.customerName
-      });
+        productDetails: details,
+        ...(req.body.dcDate && { dcDate: new Date(req.body.dcDate) }),
+        ...(req.body.dcRemarks && { dcRemarks: req.body.dcRemarks }),
+        ...(req.body.dcCategory && { dcCategory: req.body.dcCategory }),
+        ...(req.body.dcNotes && { dcNotes: req.body.dcNotes }),
+      };
+      if (req.body.poPhotoUrl) {
+        payload.poPhotoUrl = req.body.poPhotoUrl;
+        payload.poDocument = req.body.poPhotoUrl;
+      } else if (dcOrder.pod_proof_url) {
+        payload.poPhotoUrl = dcOrder.pod_proof_url;
+        payload.poDocument = dcOrder.pod_proof_url;
+      }
+      return payload;
+    };
 
-      // Update the DcOrder with the assigned employee if it wasn't set before
+    if (needsSplit) {
+      // Split in backend: Term 1 + Both → pending_dc, Term 2 → scheduled_for_later
+      const term1Qty = term1Products.reduce((s, p) => s + (Number(p.quantity) || Number(p.strength) || 0), 0) || 1;
+      const term2Qty = term2Products.reduce((s, p) => s + (Number(p.quantity) || Number(p.strength) || 0), 0) || 1;
+      const existingDcs = await DC.find({ dcOrderId: dcOrder._id }).sort({ status: 1, createdAt: 1 });
+      const dcPending = existingDcs.find(d => d.status !== 'scheduled_for_later');
+      const dcTerm2 = existingDcs.find(d => d.status === 'scheduled_for_later');
+
+      // Term 1 DC (pending_dc)
+      if (dcPending) {
+        dcPending.productDetails = term1Products;
+        dcPending.requestedQuantity = term1Qty;
+        dcPending.status = 'pending_dc';
+        if (req.body.dcDate) dcPending.deliveryDate = new Date(req.body.dcDate);
+        if (req.body.dcRemarks) dcPending.deliveryNotes = req.body.dcRemarks;
+        if (req.body.dcNotes) dcPending.deliveryNotes = req.body.dcNotes ? (dcPending.deliveryNotes ? dcPending.deliveryNotes + '\n' + req.body.dcNotes : req.body.dcNotes) : dcPending.deliveryNotes;
+        if (req.body.poPhotoUrl) { dcPending.poPhotoUrl = req.body.poPhotoUrl; dcPending.poDocument = req.body.poPhotoUrl; }
+        if (!dcPending.poPhotoUrl && dcOrder.pod_proof_url) { dcPending.poPhotoUrl = dcOrder.pod_proof_url; dcPending.poDocument = dcOrder.pod_proof_url; }
+        await dcPending.save();
+      } else {
+        const payload = buildDcPayload(term1Products, 'pending_dc', term1Qty);
+        await DC.create(payload);
+      }
+
+      // Term 2 DC (scheduled_for_later)
+      if (dcTerm2) {
+        dcTerm2.productDetails = term2Products;
+        dcTerm2.requestedQuantity = term2Qty;
+        dcTerm2.status = 'scheduled_for_later';
+        if (req.body.dcDate) dcTerm2.deliveryDate = new Date(req.body.dcDate);
+        if (req.body.poPhotoUrl) { dcTerm2.poPhotoUrl = req.body.poPhotoUrl; dcTerm2.poDocument = req.body.poPhotoUrl; }
+        await dcTerm2.save();
+      } else {
+        const payload = buildDcPayload(term2Products, 'scheduled_for_later', term2Qty);
+        await DC.create(payload);
+      }
+
+      const term1Dc = await DC.findOne({ dcOrderId: dcOrder._id, status: 'pending_dc' }).sort({ createdAt: -1 });
+      const toReturn = term1Dc || (await DC.findOne({ dcOrderId: dcOrder._id }).sort({ createdAt: -1 }));
       if (!dcOrder.assigned_to && employeeId) {
         await DcOrder.findByIdAndUpdate(dcOrder._id, { assigned_to: employeeId });
       }
-      
-      // Preserve PO photo from DcOrder if it exists (from employee's PO submission)
-      if (dcOrder.pod_proof_url) {
-        dc.poPhotoUrl = dcOrder.pod_proof_url;
-        dc.poDocument = dcOrder.pod_proof_url; // Legacy field
-      }
-      
-      // Also check if PO photo is provided directly in request (from lead conversion)
-      if (req.body.poPhotoUrl) {
-        dc.poPhotoUrl = req.body.poPhotoUrl;
-        dc.poDocument = req.body.poPhotoUrl;
-      }
+      const populatedDC = await DC.findById(toReturn._id)
+        .populate('dcOrderId', 'school_name contact_person contact_mobile email address location zone products')
+        .populate('saleId', 'customerName product quantity status poDocument')
+        .populate('employeeId', 'name email')
+        .populate('createdBy', 'name email');
+      return res.status(200).json(populatedDC);
     }
 
-    // Update DC with provided details
-    if (dcDate) dc.deliveryDate = new Date(dcDate);
-    if (dcRemarks) dc.deliveryNotes = dcRemarks;
-    if (dcNotes) {
-      dc.deliveryNotes = dc.deliveryNotes ? `${dc.deliveryNotes}\n${dcNotes}` : dcNotes;
+    // Single DC (no split)
+    const requestedStatus = (hasTerm2 && !hasTerm1 && !hasBothTerm) ? 'scheduled_for_later' : (req.body.status || 'pending_dc');
+    let dc = await DC.findOne({ dcOrderId: dcOrder._id }).sort({ status: 1, createdAt: 1 });
+    const isTerm2Only = requestedStatus === 'scheduled_for_later' && dc && dc.status !== 'scheduled_for_later';
+    if (dc && !isTerm2Only) {
+      if (req.body.employeeId || req.body.assignedTo) dc.employeeId = req.body.employeeId || req.body.assignedTo;
+      if (!dc.poPhotoUrl && dcOrder.pod_proof_url) { dc.poPhotoUrl = dcOrder.pod_proof_url; dc.poDocument = dcOrder.pod_proof_url; }
+      if (req.body.poPhotoUrl) { dc.poPhotoUrl = req.body.poPhotoUrl; dc.poDocument = req.body.poPhotoUrl; }
+      if (productDetailsFromBody && Array.isArray(productDetailsFromBody)) dc.productDetails = productDetailsFromBody;
+      dc.status = requestedStatus;
+      if (req.body.requestedQuantity !== undefined) dc.requestedQuantity = req.body.requestedQuantity;
     }
-    // Update productDetails if provided (for lead conversion or updates)
-    if (productDetails && Array.isArray(productDetails)) {
-      dc.productDetails = productDetails;
-      // Recalculate requestedQuantity from productDetails if not explicitly provided
-      if (!requestedQuantity && productDetails.length > 0) {
-        const totalQty = productDetails.reduce((sum, p) => {
-          return sum + (Number(p.quantity) || Number(p.strength) || 0);
-        }, 0);
-        if (totalQty > 0) {
-          dc.requestedQuantity = totalQty;
-        }
-      }
-    }
-    // Explicitly provided requestedQuantity takes priority
-    if (requestedQuantity) dc.requestedQuantity = requestedQuantity;
-    
-    // Update status if provided (for Closed Sales - should be pending_dc)
-    if (req.body.status) {
-      dc.status = req.body.status;
-    }
-    
-    // If PO photo is provided and DC is new, set it
-    if (req.body.poPhotoUrl && !dc.poPhotoUrl) {
-      dc.poPhotoUrl = req.body.poPhotoUrl;
-      dc.poDocument = req.body.poPhotoUrl;
+    if (isTerm2Only) dc = null;
+
+    if (!dc) {
+      const quantity = requestedQuantity != null ? requestedQuantity : (productDetailsFromBody && productDetailsFromBody.length > 0
+        ? productDetailsFromBody.reduce((s, p) => s + (Number(p.quantity) || Number(p.strength) || 0), 0) || 1
+        : (dcOrder.products && dcOrder.products.reduce((s, p) => s + (p.quantity || 1), 0)) || 1);
+      const productName = (productDetailsFromBody && productDetailsFromBody[0] && (productDetailsFromBody[0].product || productDetailsFromBody[0].productName)) || (dcOrder.products && dcOrder.products[0] && dcOrder.products[0].product_name) || 'Abacus';
+      dc = await DC.create({
+        dcOrderId: dcOrder._id,
+        employeeId,
+        customerName: dcOrder.school_name,
+        customerEmail: dcOrder.email || undefined,
+        customerAddress: dcOrder.address || dcOrder.location || 'N/A',
+        customerPhone: dcOrder.contact_mobile || dcOrder.contact_person || 'N/A',
+        product: productName,
+        requestedQuantity: quantity,
+        deliverableQuantity: 0,
+        status: requestedStatus,
+        createdBy: req.user._id,
+        productDetails: productDetailsFromBody || undefined,
+      });
+      if (!dcOrder.assigned_to && employeeId) await DcOrder.findByIdAndUpdate(dcOrder._id, { assigned_to: employeeId });
+      if (dcOrder.pod_proof_url) { dc.poPhotoUrl = dcOrder.pod_proof_url; dc.poDocument = dcOrder.pod_proof_url; }
+      if (req.body.poPhotoUrl) { dc.poPhotoUrl = req.body.poPhotoUrl; dc.poDocument = req.body.poPhotoUrl; }
     }
 
+    if (req.body.dcDate) dc.deliveryDate = new Date(req.body.dcDate);
+    if (req.body.dcRemarks) dc.deliveryNotes = req.body.dcRemarks;
+    if (req.body.dcNotes) dc.deliveryNotes = dc.deliveryNotes ? `${dc.deliveryNotes}\n${req.body.dcNotes}` : req.body.dcNotes;
+    if (productDetailsFromBody && Array.isArray(productDetailsFromBody)) {
+      dc.productDetails = productDetailsFromBody;
+      if (req.body.requestedQuantity == null && productDetailsFromBody.length > 0) {
+        const totalQty = productDetailsFromBody.reduce((sum, p) => sum + (Number(p.quantity) || Number(p.strength) || 0), 0);
+        if (totalQty > 0) dc.requestedQuantity = totalQty;
+      }
+    }
+    if (req.body.requestedQuantity !== undefined) dc.requestedQuantity = req.body.requestedQuantity;
+    dc.status = requestedStatus;
+    if (req.body.poPhotoUrl && !dc.poPhotoUrl) { dc.poPhotoUrl = req.body.poPhotoUrl; dc.poDocument = req.body.poPhotoUrl; }
     await dc.save();
 
     const populatedDC = await DC.findById(dc._id)
@@ -1207,10 +1216,13 @@ const getMyDCs = async (req, res) => {
     }
 
     const employeeId = req.user._id;
+    const employeeIdObj = (mongoose.Types.ObjectId.isValid(employeeId))
+      ? (employeeId instanceof mongoose.Types.ObjectId ? employeeId : new mongoose.Types.ObjectId(employeeId))
+      : employeeId;
     const { status, limit = 50 } = req.query;
 
     // Get DCs assigned to this employee
-    const filter = { employeeId };
+    const filter = { employeeId: employeeIdObj };
     if (status) filter.status = status;
 
     // Use lean() for faster queries and only populate what's needed
@@ -1286,9 +1298,9 @@ const getMyDCs = async (req, res) => {
     // Also get DcOrders with 'saved' status assigned to this employee that don't have a DC yet
     // These are converted leads that should appear in "My Clients"
     const DcOrder = require('../models/DcOrder');
-    // Try minimal query first for speed
+    // Use employeeIdObj so string/ObjectId from JWT matches DB
     const savedDcOrdersMinimalPromise = DcOrder.find({
-      assigned_to: employeeId,
+      assigned_to: employeeIdObj,
       status: 'saved'
     })
       .select('_id school_name status createdAt updatedAt')
@@ -1308,10 +1320,10 @@ const getMyDCs = async (req, res) => {
       try {
         const savedDcOrdersFullPromise = DcOrder.find({
           _id: { $in: savedDcOrders.map(o => o._id) },
-          assigned_to: employeeId,
+          assigned_to: employeeIdObj,
           status: 'saved'
         })
-          .select('_id school_name school_code contact_person contact_mobile email address location zone products dc_code status school_type assigned_to created_by createdAt updatedAt pod_proof_url')
+          .select('_id school_name school_code contact_person contact_mobile email address location zone products dc_code status school_type assigned_to created_by createdAt updatedAt pod_proof_url poChangeRequest')
           .maxTimeMS(5000) // 5 seconds for full
           .lean();
 
@@ -1334,7 +1346,7 @@ const getMyDCs = async (req, res) => {
       try {
         const populatePromise = DcOrder.find({
           _id: { $in: savedDcOrders.map(o => o._id) },
-          assigned_to: employeeId,
+          assigned_to: employeeIdObj,
           status: 'saved'
         })
           .populate('assigned_to', 'name email')
@@ -1396,6 +1408,7 @@ const getMyDCs = async (req, res) => {
           status: order.status,
           school_type: order.school_type, // Include school_type for category determination
           createdAt: order.createdAt, // Include createdAt for client turned date
+          poChangeRequest: order.poChangeRequest || null, // For "Request DC" lock when pending
         },
         employeeId: order.assigned_to ? (typeof order.assigned_to === 'object' && order.assigned_to._id ? order.assigned_to._id : (typeof order.assigned_to === 'string' ? order.assigned_to : employeeId)) : employeeId,
         customerName: order.school_name,

@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 // import { getDocumentAsync, DocumentPickerAsset } from 'expo-document-picker'; // Requires development build
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
-import { apiService } from '../../services/api';
+import { apiService, getApiUrl } from '../../services/api';
 import LogoutButton from '../../components/LogoutButton';
 
 export default function SettingsUploadScreen({ navigation }: any) {
@@ -50,6 +50,11 @@ export default function SettingsUploadScreen({ navigation }: any) {
         </View>
       </LinearGradient>
       <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.connectionBox}>
+          <Text style={styles.connectionLabel}>API (this device)</Text>
+          <Text style={styles.connectionUrl} selectable>{getApiUrl()}</Text>
+          <Text style={styles.connectionHint}>If the phone can’t connect, set EXPO_PUBLIC_API_URL in .env to your laptop IP (see API_SETUP.md).</Text>
+        </View>
         <TouchableOpacity style={styles.fileButton} onPress={pickFile}>
           <Text style={styles.fileButtonText}>{file ? file.name : 'Select File'}</Text>
         </TouchableOpacity>
@@ -78,6 +83,10 @@ const styles = StyleSheet.create({
   headerContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   backButton: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
   backIcon: { fontSize: 24, color: colors.textLight, fontWeight: 'bold' },
+  connectionBox: { backgroundColor: colors.backgroundLight, borderRadius: 12, padding: 14, marginBottom: 20, borderWidth: 1, borderColor: colors.border },
+  connectionLabel: { ...typography.label.small, color: colors.textSecondary, marginBottom: 6 },
+  connectionUrl: { ...typography.body.medium, color: colors.primary, marginBottom: 8 },
+  connectionHint: { ...typography.body.small, color: colors.textSecondary },
   headerTitle: { ...typography.heading.h1, color: colors.textLight, flex: 1, textAlign: 'center' },
   placeholder: { width: 40 },
   content: { padding: 20, gap: 16 },

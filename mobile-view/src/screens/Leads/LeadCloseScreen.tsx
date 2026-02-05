@@ -23,6 +23,8 @@ import { apiService } from '../../services/api';
 import LogoutButton from '../../components/LogoutButton';
 import { useAuth } from '../../context/AuthContext';
 
+const TERM_OPTIONS = ['Term 1', 'Term 2', 'Both'];
+
 type ProductDetail = {
   id: string;
   product: string;
@@ -37,6 +39,7 @@ type ProductDetail = {
   level: string;
   specs: string;
   subject?: string;
+  term?: string;
   isParentRow?: boolean;
   sameRateForAllClasses?: boolean;
   selectedSubjects?: string[];
@@ -59,6 +62,7 @@ export default function LeadCloseScreen({ navigation, route }: any) {
   const [showClassPicker, setShowClassPicker] = useState(false);
   const [pickingFor, setPickingFor] = useState<{id: string, field: 'fromClass' | 'toClass'} | null>(null);
   const [showDeliveryDatePicker, setShowDeliveryDatePicker] = useState(false);
+  const [loadedAsDcOrder, setLoadedAsDcOrder] = useState(false);
 
   const [form, setForm] = useState({
     school_name: '',
@@ -149,9 +153,11 @@ export default function LeadCloseScreen({ navigation, route }: any) {
   const loadLead = async () => {
     try {
       setLoading(true);
+      setLoadedAsDcOrder(false);
       let data: any;
       try {
         data = await apiService.get(`/dc-orders/${id}`);
+        if (data) setLoadedAsDcOrder(true);
       } catch (err: any) {
         data = await apiService.get(`/leads/${id}`);
       }
@@ -240,6 +246,7 @@ export default function LeadCloseScreen({ navigation, route }: any) {
       total: 0,
       level: getDefaultLevel(product),
       specs: 'Regular',
+      term: 'Term 1',
       isParentRow: true,
       sameRateForAllClasses: false,
       selectedSubjects: [],
@@ -289,6 +296,7 @@ export default function LeadCloseScreen({ navigation, route }: any) {
             level: parentRow.level,
             specs: spec,
             subject: subjectDisplay,
+            term: parentRow.term || 'Term 1',
             isParentRow: false,
             sameRateForAllClasses: false,
           });
@@ -458,77 +466,87 @@ export default function LeadCloseScreen({ navigation, route }: any) {
     
     try {
       const assignedEmployeeId = user._id;
-      const isDcOrder = lead && lead.dc_code !== undefined;
+      // Use loadedAsDcOrder so we never call convert-to-client with a DcOrder id (which would 404). Lead → convert-to-client; DcOrder → PUT dc-orders.
+      const isDcOrder = loadedAsDcOrder;
       
-      const updatePayload: any = {
+      // Per spec: Close (Won) → record moves to My Clients only. Closed Sales happens only after Request DC.
+      if (isDcOrder) {
+        let podProofUrl = poPhotoUrl;
+        if (poPhotoUrl && (poPhotoUrl.startsWith('file://') || !poPhotoUrl.startsWith('http'))) {
+          try {
+            const formData = new FormData();
+            formData.append('poPhoto', { uri: poPhotoUrl, type: 'application/pdf', name: 'po.pdf' } as any);
+            const uploadRes = await apiService.upload('/dc/upload-po', formData);
+            podProofUrl = uploadRes.poPhotoUrl || uploadRes.url || poPhotoUrl;
+          } catch (uploadErr: any) {
+            Alert.alert('Error', uploadErr?.message || 'Failed to upload PO.');
+            setSubmitting(false);
+            return;
+          }
+        }
+        const updatePayload: any = {
+          school_name: form.school_name || lead?.school_name,
+          contact_person: form.contact_person || lead?.contact_person,
+          contact_mobile: form.contact_mobile || lead?.contact_mobile,
+          email: form.email || lead?.email,
+          contact_person2: form.contact_person2,
+          contact_mobile2: form.contact_mobile2,
+          estimated_delivery_date: new Date(form.delivery_date).toISOString(),
+          assigned_to: assignedEmployeeId,
+          products: actualProductDetails.map(p => ({
+            product_name: p.product,
+            quantity: p.strength,
+            unit_price: p.price,
+          })),
+          status: 'saved',
+        };
+        if (podProofUrl) updatePayload.pod_proof_url = podProofUrl;
+        await apiService.put(`/dc-orders/${id}`, updatePayload);
+        Alert.alert('Success', 'Lead converted to client. You can request DC from My Clients when ready.', [
+          { text: 'OK', onPress: () => navigation.navigate('DCClient') },
+        ]);
+        return;
+      }
+      
+      // Lead: convert to client (DcOrder with status 'saved') — no DC raised yet
+      let podProofUrl = poPhotoUrl;
+      if (poPhotoUrl && (poPhotoUrl.startsWith('file://') || !poPhotoUrl.startsWith('http'))) {
+        try {
+          const formData = new FormData();
+          formData.append('poPhoto', {
+            uri: poPhotoUrl,
+            type: 'application/pdf',
+            name: 'po.pdf',
+          } as any);
+          const uploadRes = await apiService.upload('/dc/upload-po', formData);
+          podProofUrl = uploadRes.poPhotoUrl || uploadRes.url || poPhotoUrl;
+        } catch (uploadErr: any) {
+          Alert.alert('Error', uploadErr?.message || 'Failed to upload PO. Please try again.');
+          setSubmitting(false);
+          return;
+        }
+      }
+      
+      const productsPayload = actualProductDetails.map(p => ({
+        product_name: p.product,
+        quantity: Number(p.strength) || 1,
+        unit_price: Number(p.price) || 0,
+      }));
+      await apiService.post(`/leads/${id}/convert-to-client`, {
         school_name: form.school_name || lead?.school_name,
         contact_person: form.contact_person || lead?.contact_person,
         contact_mobile: form.contact_mobile || lead?.contact_mobile,
         email: form.email || lead?.email,
         contact_person2: form.contact_person2,
         contact_mobile2: form.contact_mobile2,
-        decision_maker: form.contact_person2,
-        estimated_delivery_date: new Date(form.delivery_date).toISOString(),
-        assigned_to: assignedEmployeeId,
-        products: actualProductDetails.map(p => ({
-          product_name: p.product,
-          quantity: p.strength,
-          unit_price: p.price,
-        })),
-      };
+        zone: lead?.zone,
+        school_type: lead?.school_type,
+        estimated_delivery_date: form.delivery_date ? new Date(form.delivery_date).toISOString() : undefined,
+        products: productsPayload,
+        pod_proof_url: podProofUrl,
+      });
       
-      if (isDcOrder) {
-        updatePayload.status = 'completed';
-        await apiService.put(`/dc-orders/${id}`, updatePayload);
-      } else {
-        updatePayload.status = 'Closed';
-        await apiService.put(`/leads/${id}`, updatePayload);
-      }
-      
-      const dcProductDetails = actualProductDetails.map(p => ({
-        product: p.product,
-        class: p.class || '1',
-        category: p.category || 'New Students',
-        quantity: Number(p.quantity) || 0,
-        strength: Number(p.strength) || 0,
-        price: Number(p.price) || 0,
-        total: Number(p.total) || (Number(p.strength) || 0) * (Number(p.price) || 0),
-        level: p.level || getDefaultLevel(p.product),
-        specs: p.specs || 'Regular',
-        subject: p.subject || undefined,
-      }));
-      
-      const totalQuantity = dcProductDetails.reduce((sum, p) => sum + (p.strength || 0), 0);
-      
-      const dcPayload: any = {
-        dcOrderId: id,
-        dcDate: form.delivery_date || new Date().toISOString(),
-        dcRemarks: `Lead converted to client - ${form.school_name || lead.school_name}`,
-        dcCategory: lead.school_type === 'Existing' ? 'Existing School' : 'New School',
-        requestedQuantity: totalQuantity,
-        employeeId: assignedEmployeeId,
-        productDetails: dcProductDetails,
-        status: 'created',
-      };
-      
-      if (poPhotoUrl) {
-        dcPayload.poPhotoUrl = poPhotoUrl;
-        dcPayload.poDocument = poPhotoUrl;
-      }
-      
-      const dc = await apiService.post('/dc/raise', dcPayload);
-      
-      if (poPhotoUrl && dc._id) {
-        try {
-          await apiService.post(`/dc/${dc._id}/submit-po`, { 
-            poPhotoUrl: poPhotoUrl,
-          });
-        } catch (poErr) {
-          console.error('Failed to submit PO:', poErr);
-        }
-      }
-      
-      Alert.alert('Success', 'Lead converted to client! DC created successfully.', [
+      Alert.alert('Success', 'Lead converted to client. You can request DC from My Clients when ready.', [
         { text: 'OK', onPress: () => navigation.navigate('DCClient') },
       ]);
     } catch (err: any) {
@@ -854,17 +872,19 @@ export default function LeadCloseScreen({ navigation, route }: any) {
                         <Text style={[styles.tableHeaderText, styles.colPrice]}>Unit Price *</Text>
                         <Text style={[styles.tableHeaderText, styles.colTotal]}>Total</Text>
                         <Text style={[styles.tableHeaderText, styles.colLevel]}>Level</Text>
+                        <Text style={[styles.tableHeaderText, styles.colTerm]}>Term</Text>
                         <Text style={[styles.tableHeaderText, styles.colAction]}>Action</Text>
                       </View>
                       {actualProductDetails.map((pd) => (
                         <View key={pd.id} style={styles.tableRow}>
                           <Text style={[styles.tableCell, styles.colProduct]} numberOfLines={1}>{pd.product}</Text>
                           <Text style={[styles.tableCell, styles.colClass]}>{pd.class}</Text>
-                          <View style={[styles.tableCell, styles.colCategory]}>
+                          <View style={[styles.tableCell, styles.tdPickerWrap, styles.colCategory]}>
                             <Picker
                               selectedValue={pd.category}
                               onValueChange={(v) => updateProductDetail(pd.id, 'category', v)}
                               style={styles.tablePicker}
+                              color="#111827"
                             >
                               {availableCategories.map(c => (
                                 <Picker.Item key={c} label={c} value={c} />
@@ -888,14 +908,27 @@ export default function LeadCloseScreen({ navigation, route }: any) {
                             placeholder="0"
                           />
                           <Text style={[styles.tableCell, styles.colTotal]}>{pd.total ?? (Number(pd.strength) || 0) * (Number(pd.price) || 0)}</Text>
-                          <View style={[styles.tableCell, styles.colLevel]}>
+                          <View style={[styles.tableCell, styles.tdPickerWrap, styles.colLevel]}>
                             <Picker
                               selectedValue={pd.level}
                               onValueChange={(v) => updateProductDetail(pd.id, 'level', v)}
                               style={styles.tablePicker}
+                              color="#111827"
                             >
                               {getProductLevels(pd.product).map(l => (
                                 <Picker.Item key={l} label={l} value={l} />
+                              ))}
+                            </Picker>
+                          </View>
+                          <View style={[styles.tableCell, styles.tdPickerWrap, styles.colTerm]}>
+                            <Picker
+                              selectedValue={pd.term || 'Term 1'}
+                              onValueChange={(v) => updateProductDetail(pd.id, 'term', v)}
+                              style={styles.tablePicker}
+                              color="#111827"
+                            >
+                              {TERM_OPTIONS.map(t => (
+                                <Picker.Item key={t} label={t} value={t} />
                               ))}
                             </Picker>
                           </View>
@@ -1182,9 +1215,11 @@ const styles = StyleSheet.create({
   colPrice: { width: 80, paddingHorizontal: 4 },
   colTotal: { width: 80, paddingHorizontal: 4 },
   colLevel: { width: 80, paddingHorizontal: 4 },
+  colTerm: { width: 88, paddingHorizontal: 4 },
   colAction: { width: 60, paddingHorizontal: 4 },
-  tableInput: { backgroundColor: colors.backgroundLight, borderWidth: 1, borderColor: colors.border, borderRadius: 4, padding: 6, textAlign: 'center', fontSize: 12, height: 32 },
-  tablePicker: { height: 32, width: '100%' },
+  tableInput: { backgroundColor: colors.backgroundLight, borderWidth: 1, borderColor: colors.border, borderRadius: 4, padding: 6, textAlign: 'center', fontSize: 12, height: 32, color: colors.textPrimary },
+  tablePicker: { height: 32, width: '100%', color: '#111827', backgroundColor: colors.backgroundLight, fontSize: 14 },
+  tdPickerWrap: { backgroundColor: colors.backgroundLight },
   tableFooter: { flexDirection: 'column', padding: 12, backgroundColor: colors.background, borderTopWidth: 2, borderTopColor: colors.border },
   tableFooterRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   tableFooterLabel: { ...typography.body.medium, color: colors.textPrimary, fontWeight: '600' },
