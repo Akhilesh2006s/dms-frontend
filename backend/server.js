@@ -24,6 +24,7 @@ const stockReturnRoutes = require('./routes/stockReturnRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
 const locationRoutes = require('./routes/locationRoutes');
 const productRoutes = require('./routes/productRoutes');
+const deliverableRoutes = require('./routes/deliverableRoutes');
 const executiveManagerRoutes = require('./routes/executiveManagerRoutes');
 const sampleRequestRoutes = require('./routes/sampleRequestRoutes');
 const aiRoutes = require('./routes/aiRoutes');
@@ -151,6 +152,7 @@ app.use('/api/stock-returns', stockReturnRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/location', locationRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/deliverables', deliverableRoutes);
 // Explicit route so PO change list is never 404 (mobile: GET /api/executive-managers/po-change-requests)
 const { authMiddleware } = require('./middleware/authMiddleware');
 const { listPoChangeRequests } = require('./controllers/dcOrderController');

@@ -234,6 +234,7 @@ const NAV: NavItem[] = [
     children: [
       { label: 'All Products', href: '/dashboard/products', icon: Database },
       { label: 'Add New Product', href: '/dashboard/products/new', icon: PlusCircle },
+      { label: 'Deliverables', href: '/dashboard/products/deliverables', icon: Eye, adminOnly: true },
     ],
   },
   {
@@ -573,6 +574,17 @@ export function Sidebar() {
             // Exclude "DC listed" for non-Manager/Coordinator
             if (child.label === 'DC listed') return false
             // Only show adminOnly items for Admin
+            if (child.adminOnly && !isAdmin) return false
+            return true
+          })
+        }
+      }
+      // Filter Products menu items: only show adminOnly (Deliverables) for Admin/Super Admin
+      if (item.label === 'Products' && item.children) {
+        const isAdmin = user?.role === 'Admin' || user?.role === 'Super Admin'
+        return {
+          ...item,
+          children: item.children.filter(child => {
             if (child.adminOnly && !isAdmin) return false
             return true
           })
