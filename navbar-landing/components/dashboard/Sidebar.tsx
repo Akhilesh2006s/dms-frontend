@@ -235,6 +235,7 @@ const NAV: NavItem[] = [
       { label: 'All Products', href: '/dashboard/products', icon: Database },
       { label: 'Add New Product', href: '/dashboard/products/new', icon: PlusCircle },
       { label: 'Deliverables', href: '/dashboard/products/deliverables', icon: Eye, adminOnly: true },
+      { label: 'Vendor', href: '/dashboard/products/vendors', icon: Building2, adminOnly: true },
     ],
   },
   {
@@ -286,6 +287,7 @@ export function Sidebar() {
   const isTrainer = user?.role === 'Trainer'
   const isWarehouseExecutive = user?.role === 'Warehouse Executive'
   const isWarehouseManager = user?.role === 'Warehouse Manager'
+  const isVendor = user?.role === 'Vendor'
 
   // Add employee leave menu if employee, replace admin Leave Management
   const employeeLeavesMenu: NavItem = {
@@ -550,6 +552,13 @@ export function Sidebar() {
         icon: RefreshCw,
         href: '/dashboard/returns/warehouse-manager',
       },
+      { label: 'Sign out', icon: LogOut, href: '/auth/login' },
+    ]
+  } else if (isVendor) {
+    // For Vendor role: Dashboard + Stocks (assigned products only)
+    finalNav = [
+      { label: 'My Dashboard', icon: LayoutDashboard, href: '/dashboard' },
+      { label: 'Stocks', icon: Boxes, href: '/dashboard/stocks' },
       { label: 'Sign out', icon: LogOut, href: '/auth/login' },
     ]
   } else {
