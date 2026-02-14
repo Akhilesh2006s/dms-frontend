@@ -155,11 +155,7 @@ export default function CreateExpensePage() {
           headers["Authorization"] = `Bearer ${token}`
         }
 
-        const apiBaseUrl =
-          process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ||
-          "https://crm-backend-production-fc85.up.railway.app"
-
-        const res = await fetch(`${apiBaseUrl}/api/expenses/create`, {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:5000"}/api/expenses/create`, {
           method: 'POST',
           headers,
           body: formData,

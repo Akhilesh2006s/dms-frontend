@@ -7,6 +7,7 @@ const productSchema = new mongoose.Schema(
     unit_price: { type: Number, default: 0, min: 0 },
     expiry_date: { type: Date },
     term: { type: String, enum: ['Term 1', 'Term 2', 'Both'], default: 'Term 1' },
+    deliverables: { type: [String], default: [] }, // Transaction-level: deliverables selected when closing lead
   },
   { _id: false }
 );
@@ -82,6 +83,9 @@ const dcOrderSchema = new mongoose.Schema(
       updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
       updatedAt: { type: Date, default: Date.now },
     }],
+    // When executive requests DC (moves to Closed Sales)
+    requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    requestedAt: { type: Date },
     // DC request data (stored when employee requests DC)
     dcRequestData: {
       type: {
@@ -92,6 +96,27 @@ const dcOrderSchema = new mongoose.Schema(
         requestedQuantity: { type: Number },
         productDetails: { type: Array },
         employeeId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      },
+      default: null,
+    },
+    // PO PDF change request (Executive → assigned Executive Manager only)
+    poChangeRequest: {
+      type: {
+        status: {
+          type: String,
+          enum: ['PENDING_MANAGER_APPROVAL', 'APPROVED', 'REJECTED'],
+          default: 'PENDING_MANAGER_APPROVAL',
+        },
+        oldPdfUrl: { type: String },
+        newPdfUrl: { type: String },
+        requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        requestedAt: { type: Date },
+        remarks: { type: String }, // Executive's reason for update
+        assignedExecutiveManagerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Only this manager sees/approves
+        approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        approvedAt: { type: Date },
+        rejectionReason: { type: String }, // legacy / when rejected
+        managerRemarks: { type: String }, // Mandatory remarks from Manager (approve or reject) - visible to Executive
       },
       default: null,
     },

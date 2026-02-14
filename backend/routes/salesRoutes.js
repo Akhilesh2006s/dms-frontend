@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   getSales,
   getSale,
+  getSalesCustomers,
   createSale,
   updateSale,
   submitPO,
@@ -12,6 +13,7 @@ const { authMiddleware } = require('../middleware/authMiddleware');
 
 router.get('/', authMiddleware, getSales);
 router.get('/closed', authMiddleware, getClosedSales);
+router.get('/customers', authMiddleware, getSalesCustomers);
 router.get('/:id', authMiddleware, getSale);
 router.post('/create', authMiddleware, createSale);
 router.put('/:id', authMiddleware, updateSale);

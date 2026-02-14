@@ -151,12 +151,72 @@ export default function TermWiseDCPage() {
   const load = async () => {
     setLoading(true)
     try {
-      // Fetch DCs with status 'scheduled_for_later' for current employee
-      const data = await apiRequest<DC[]>(`/dc/employee/my?status=scheduled_for_later`)
+      // Fetch ALL DCs with status 'scheduled_for_later' (Term 2 DCs)
+      // These should be visible to all users, not just the employee who created them
+      console.log('🔍 Fetching Term-Wise DCs...')
+      const data = await apiRequest<DC[]>(`/dc?status=scheduled_for_later`)
       const dataArray = Array.isArray(data) ? data : []
-      setItems(dataArray)
+      console.log(`✅ Loaded ${dataArray.length} DCs with status 'scheduled_for_later'`)
+      
+      // Filter to only show Term 2 DCs (all products are Term 2)
+      const term2DCs = dataArray.filter(dc => {
+        // Check productDetails first
+        if (dc.productDetails && Array.isArray(dc.productDetails) && dc.productDetails.length > 0) {
+          const allTerm2 = dc.productDetails.every((p: any) => (p.term || 'Term 1') === 'Term 2')
+          const hasTerm1 = dc.productDetails.some((p: any) => {
+            const term = p.term || 'Term 1'
+            return term === 'Term 1' || term === 'Both'
+          })
+          // If all products are Term 2 and no Term 1, it's a Term 2 DC
+          if (allTerm2 && !hasTerm1) {
+            return true
+          }
+        }
+        
+        // Check dcOrderId.products as fallback
+        if (dc.dcOrderId && typeof dc.dcOrderId === 'object' && dc.dcOrderId.products) {
+          const products = dc.dcOrderId.products
+          if (Array.isArray(products) && products.length > 0) {
+            const allTerm2 = products.every((p: any) => (p.term || 'Term 1') === 'Term 2')
+            const hasTerm1 = products.some((p: any) => {
+              const term = p.term || 'Term 1'
+              return term === 'Term 1' || term === 'Both'
+            })
+            if (allTerm2 && !hasTerm1) {
+              return true
+            }
+          }
+        }
+        
+        // If status is scheduled_for_later, include it (fallback for DCs created before term field was set)
+        return dc.status === 'scheduled_for_later'
+      })
+      
+      console.log(`📊 Filtered to ${term2DCs.length} Term 2 DCs out of ${dataArray.length} total`)
+      
+      // Debug: Log DCs and their productDetails
+      if (term2DCs.length > 0) {
+        console.log('📦 Term 2 DCs found:', term2DCs.map(dc => ({
+          id: dc._id,
+          customerName: dc.customerName,
+          status: dc.status,
+          hasProductDetails: !!dc.productDetails,
+          productDetailsCount: dc.productDetails?.length || 0,
+          productDetails: dc.productDetails,
+          dcOrderProducts: dc.dcOrderId && typeof dc.dcOrderId === 'object' ? dc.dcOrderId.products : null
+        })))
+      } else {
+        console.warn('⚠️ No Term 2 DCs found with status "scheduled_for_later"')
+      }
+      
+      setItems(term2DCs)
     } catch (e: any) {
-      console.error('Failed to load DCs:', e)
+      console.error('❌ Failed to load DCs:', e)
+      console.error('Error details:', {
+        message: e?.message,
+        status: e?.status,
+        details: e?.details
+      })
       toast.error(`Error loading DCs: ${e?.message || 'Unknown error'}`)
       setItems([])
     } finally {
@@ -684,28 +744,90 @@ export default function TermWiseDCPage() {
   const groupedByTerm = useMemo(() => {
     const term2DCs: DC[] = []
     
-    items.forEach(dc => {
-      // Check productDetails first
+    console.log(`🔍 Filtering ${items.length} DCs for Term 2 products...`)
+    
+    items.forEach((dc, index) => {
+      let hasTerm2 = false
+      let termSource = 'none'
+      
+      // Check productDetails first (most reliable)
       if (dc.productDetails && Array.isArray(dc.productDetails) && dc.productDetails.length > 0) {
-        const terms = dc.productDetails.map((p: any) => p.term || 'Term 1')
+        const terms = dc.productDetails.map((p: any) => {
+          // Check multiple possible field names for term
+          return (p.term || p.term_name || 'Term 1').toString().trim()
+        })
         const uniqueTerms = Array.from(new Set(terms))
         
-        // Only include if it has Term 2 products
-        if (uniqueTerms.includes('Term 2')) {
-          term2DCs.push(dc)
+        // Check for Term 2 (case-insensitive, handle variations)
+        hasTerm2 = uniqueTerms.some(term => 
+          term.toLowerCase().includes('term 2') || 
+          term.toLowerCase().includes('term2') ||
+          term === '2' ||
+          term.toLowerCase() === 'term 2'
+        )
+        termSource = 'productDetails'
+        
+        if (hasTerm2) {
+          console.log(`✅ DC ${index + 1} has Term 2 in productDetails:`, {
+            dcId: dc._id,
+            customerName: dc.customerName,
+            terms: uniqueTerms,
+            productDetails: dc.productDetails
+          })
         }
       } else if (dc.dcOrderId && typeof dc.dcOrderId === 'object' && dc.dcOrderId.products) {
-        // Check DcOrder products
-        const terms = dc.dcOrderId.products.map((p: any) => p.term || 'Term 1')
+        // Check DcOrder products (fallback)
+        const terms = dc.dcOrderId.products.map((p: any) => {
+          return (p.term || p.term_name || 'Term 1').toString().trim()
+        })
         const uniqueTerms = Array.from(new Set(terms))
         
-        // Only include if it has Term 2 products
-        if (uniqueTerms.includes('Term 2')) {
-          term2DCs.push(dc)
+        // Check for Term 2 (case-insensitive, handle variations)
+        hasTerm2 = uniqueTerms.some(term => 
+          term.toLowerCase().includes('term 2') || 
+          term.toLowerCase().includes('term2') ||
+          term === '2' ||
+          term.toLowerCase() === 'term 2'
+        )
+        termSource = 'dcOrderProducts'
+        
+        if (hasTerm2) {
+          console.log(`✅ DC ${index + 1} has Term 2 in dcOrder products:`, {
+            dcId: dc._id,
+            customerName: dc.customerName,
+            terms: uniqueTerms
+          })
         }
       }
-      // Don't include DCs with no term information or only Term 1
+      
+      // If status is 'scheduled_for_later', it's likely a Term 2 DC even if term field is missing
+      // This handles cases where DCs were created before term field was properly set
+      if (!hasTerm2 && dc.status === 'scheduled_for_later') {
+        console.log(`⚠️ DC ${index + 1} has status 'scheduled_for_later' but no Term 2 in products. Including anyway.`, {
+          dcId: dc._id,
+          customerName: dc.customerName,
+          productDetails: dc.productDetails,
+          dcOrderProducts: dc.dcOrderId && typeof dc.dcOrderId === 'object' ? dc.dcOrderId.products : null
+        })
+        hasTerm2 = true
+        termSource = 'status_fallback'
+      }
+      
+      if (hasTerm2) {
+        term2DCs.push(dc)
+      } else {
+        console.log(`❌ DC ${index + 1} does NOT have Term 2:`, {
+          dcId: dc._id,
+          customerName: dc.customerName,
+          status: dc.status,
+          termSource,
+          productDetails: dc.productDetails,
+          dcOrderProducts: dc.dcOrderId && typeof dc.dcOrderId === 'object' ? dc.dcOrderId.products : null
+        })
+      }
     })
+    
+    console.log(`📊 Filtered results: ${term2DCs.length} Term 2 DCs out of ${items.length} total`)
     
     return { term1: [], term2: term2DCs }
   }, [items])

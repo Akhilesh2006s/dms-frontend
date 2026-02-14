@@ -6,6 +6,7 @@ const productSchema = new mongoose.Schema(
     quantity: { type: Number, default: 1, min: 0 },
     unit_price: { type: Number, default: 0, min: 0 },
     expiry_date: { type: Date },
+    deliverables: { type: [String], default: [] }, // Transaction-level: deliverables selected when closing lead
   },
   { _id: false }
 );

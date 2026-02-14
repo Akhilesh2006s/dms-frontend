@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
+import { useFocusEffect } from '@react-navigation/native';
 import { apiService } from '../../services/api';
 import LogoutButton from '../../components/LogoutButton';
 
@@ -22,15 +23,19 @@ export default function DCTermWiseScreen({ navigation }: any) {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
-    loadDCs();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadDCs();
+    }, [])
+  );
 
   const loadDCs = async () => {
     try {
       setLoading(true);
       const data = await apiService.get('/dc?status=scheduled_for_later');
-      setDcs(Array.isArray(data) ? data : []);
+      const arr = Array.isArray(data) ? data : (data?.data ?? []);
+      const termWiseOnly = (arr as any[]).filter((d: any) => d.status === 'scheduled_for_later');
+      setDcs(termWiseOnly);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to load term-wise DCs');
       setDcs([]);
@@ -95,20 +100,28 @@ export default function DCTermWiseScreen({ navigation }: any) {
           </View>
         ) : (
           filtered.map((dc) => (
-            <TouchableOpacity
-              key={dc._id}
-              style={styles.card}
-              onPress={() => navigation.navigate('WarehouseDCAtWarehouseDetail', { id: dc._id })}
-              activeOpacity={0.8}
-            >
+            <View key={dc._id} style={styles.card}>
               <View style={styles.cardContent}>
                 <Text style={styles.cardTitle}>{getSchoolName(dc)}</Text>
                 <Text style={styles.cardSubtitle}>
                   DC: {dc.dc_code || dc._id?.slice(-6)} • {dc.dcDate ? new Date(dc.dcDate).toLocaleDateString('en-IN') : '-'}
                 </Text>
               </View>
-              <Text style={styles.arrow}>›</Text>
-            </TouchableOpacity>
+              <View style={styles.cardActions}>
+                <TouchableOpacity
+                  style={styles.editPoButton}
+                  onPress={() => navigation.navigate('DCPendingOpen', { dcId: dc._id, fromTermWise: true })}
+                >
+                  <Text style={styles.editPoButtonText}>Edit PO</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.requestDcButton}
+                  onPress={() => navigation.navigate('DCTermWiseRequestDC', { dcId: dc._id })}
+                >
+                  <Text style={styles.requestDcButtonText}>Request DC</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           ))
         )}
       </ScrollView>
@@ -140,8 +153,6 @@ const styles = StyleSheet.create({
   emptyIcon: { fontSize: 48, marginBottom: 16 },
   emptyText: { ...typography.body.medium, color: colors.textSecondary },
   card: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: colors.backgroundLight,
     borderRadius: 16,
     padding: 16,
@@ -149,8 +160,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
-  cardContent: { flex: 1 },
+  cardContent: { marginBottom: 12 },
   cardTitle: { ...typography.heading.h3, color: colors.textPrimary, marginBottom: 4 },
   cardSubtitle: { ...typography.body.small, color: colors.textSecondary },
-  arrow: { fontSize: 20, color: colors.primary, fontWeight: 'bold' },
+  cardActions: { flexDirection: 'row', gap: 10 },
+  editPoButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+  },
+  editPoButtonText: { ...typography.label.small, color: colors.textLight, fontWeight: '600' },
+  requestDcButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: colors.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 40,
+  },
+  requestDcButtonText: { ...typography.label.small, color: colors.textLight, fontWeight: '600' },
+  buttonDisabled: { opacity: 0.7 },
 });

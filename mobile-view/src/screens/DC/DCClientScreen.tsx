@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,13 +12,13 @@ import {
   Modal,
   Image,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, gradients } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 import { apiService } from '../../services/api';
 import LogoutButton from '../../components/LogoutButton';
 import { useAuth } from '../../context/AuthContext';
-import * as ImagePicker from 'expo-image-picker';
 
 export default function DCClientScreen({ navigation }: any) {
   const { user } = useAuth();
@@ -29,23 +29,21 @@ export default function DCClientScreen({ navigation }: any) {
   const [showModal, setShowModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
-    loadDCs();
-  }, []);
+  // Load on mount and whenever screen comes into focus (e.g. after closing a lead so new client appears)
+  useFocusEffect(
+    useCallback(() => {
+      loadDCs();
+    }, [])
+  );
 
   const loadDCs = async () => {
     try {
       setLoading(true);
       const data = await apiService.get('/dc/employee/my');
       const dataArray = Array.isArray(data) ? data : [];
-      const filtered = dataArray.filter((dc: any) => {
-        const hasDcOrderId = dc.dcOrderId && (typeof dc.dcOrderId === 'object' || typeof dc.dcOrderId === 'string');
-        const hasProducts = dc.productDetails && Array.isArray(dc.productDetails) && dc.productDetails.length > 0;
-        return hasDcOrderId || (hasProducts && (dc.status === 'created' || dc.status === 'sent_to_manager' || dc.status === 'po_submitted'));
-      });
-      setDcs(filtered);
+      setDcs(dataArray);
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to load DCs');
+      Alert.alert('Error', error.message || 'Failed to load clients');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -60,6 +58,32 @@ export default function DCClientScreen({ navigation }: any) {
   const openDCModal = (dc: any) => {
     setSelectedDC(dc);
     setShowModal(true);
+  };
+
+  const getOrderId = (dc: any) => {
+    if (dc._isConvertedLead && dc._id) return dc._id;
+    const o = dc.dcOrderId;
+    if (!o) return null;
+    return typeof o === 'object' && o._id ? o._id : o;
+  };
+
+  const canRequestDC = (dc: any) => {
+    const orderStatus = dc.dcOrderId?.status;
+    if (orderStatus === 'dc_requested' || orderStatus === 'dc_accepted' || orderStatus === 'dc_approved' || orderStatus === 'dc_sent_to_senior') return false;
+    const poChange = dc.dcOrderId?.poChangeRequest;
+    if (poChange && poChange.status === 'PENDING_MANAGER_APPROVAL') return false;
+    return true;
+  };
+
+  const isPoChangePending = (dc: any) => {
+    const poChange = dc.dcOrderId?.poChangeRequest;
+    return !!(poChange && poChange.status === 'PENDING_MANAGER_APPROVAL');
+  };
+
+  // NOT in DC Flow = status is 'saved' (DC not requested). IN DC Flow = dc_requested, closed_sales, pending_dc, etc. → PO change not allowed.
+  const isInDcFlow = (dc: any) => {
+    const orderStatus = dc.dcOrderId?.status;
+    return orderStatus != null && orderStatus !== 'saved';
   };
 
   const formatDate = (dateString?: string) => {
@@ -93,8 +117,8 @@ export default function DCClientScreen({ navigation }: any) {
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle}>Client DC</Text>
-            <Text style={styles.headerSubtitle}>Manage client DCs</Text>
+            <Text style={styles.headerTitle}>My Clients</Text>
+            <Text style={styles.headerSubtitle}>Converted clients & DC</Text>
           </View>
           <LogoutButton />
         </View>
@@ -116,43 +140,67 @@ export default function DCClientScreen({ navigation }: any) {
       >
         {filteredDCs.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>📋</Text>
-            <Text style={styles.emptyTitle}>No Client DCs</Text>
-            <Text style={styles.emptySubtitle}>No client DCs found</Text>
+            <Text style={styles.emptyIcon}>👥</Text>
+            <Text style={styles.emptyTitle}>No Clients</Text>
+            <Text style={styles.emptySubtitle}>Closed leads will appear here. Request DC when ready.</Text>
           </View>
         ) : (
-          filteredDCs.map((dc) => (
-            <TouchableOpacity
-              key={dc._id}
-              style={styles.card}
-              onPress={() => openDCModal(dc)}
-              activeOpacity={0.8}
-            >
-              <View style={styles.cardHeader}>
-                <Text style={styles.customerName} numberOfLines={1}>
-                  {dc.customerName || dc.dcOrderId?.school_name || 'Unknown Customer'}
-                </Text>
-                <View style={styles.statusBadge}>
-                  <Text style={styles.statusText}>{dc.status || 'Created'}</Text>
-                </View>
-              </View>
-              <View style={styles.cardBody}>
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Product:</Text>
-                  <Text style={styles.infoValue}>{dc.product || dc.saleId?.product || 'N/A'}</Text>
-                </View>
-                {dc.createdAt && (
-                  <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>Created:</Text>
-                    <Text style={styles.infoValue}>{formatDate(dc.createdAt)}</Text>
+          filteredDCs.map((dc) => {
+            const orderId = getOrderId(dc);
+            const orderStatus = dc.dcOrderId?.status;
+            const statusLabel = orderStatus === 'dc_requested' || orderStatus === 'dc_accepted' ? 'Requested' : orderStatus === 'saved' || dc.status === 'created' ? 'Not requested' : (dc.status || 'Created');
+            const lastDcDate = dc.updatedAt || dc.deliveryDate || dc.createdAt || dc.dcOrderId?.updatedAt;
+            return (
+              <View key={dc._id} style={styles.card}>
+                <TouchableOpacity activeOpacity={0.9} onPress={() => openDCModal(dc)}>
+                  <View style={styles.cardHeader}>
+                    <Text style={styles.customerName} numberOfLines={1}>
+                      {dc.customerName || dc.dcOrderId?.school_name || 'Unknown Customer'}
+                    </Text>
+                    <View style={styles.statusBadge}>
+                      <Text style={styles.statusText}>{statusLabel}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.cardBody}>
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Last DC:</Text>
+                      <Text style={styles.infoValue}>{formatDate(lastDcDate)}</Text>
+                    </View>
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Product:</Text>
+                      <Text style={styles.infoValue}>{dc.product || dc.dcOrderId?.products?.[0]?.product_name || 'N/A'}</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+                {isInDcFlow(dc) ? (
+                  <View style={styles.cardDcFlowMessage}>
+                    <Text style={styles.cardDcFlowMessageText}>
+                      PO can only be changed before requesting DC. This client is already in the DC process.
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.cardActions}>
+                    <TouchableOpacity
+                      style={[styles.cardButton, styles.cardButtonEdit]}
+                      onPress={() => orderId && navigation.navigate('ClientEditPO', { orderId })}
+                      disabled={!orderId}
+                    >
+                      <Text style={styles.cardButtonTextEdit}>Edit PO</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.cardButton, styles.cardButtonRequest, !canRequestDC(dc) && styles.cardButtonDisabled]}
+                      onPress={() => orderId && canRequestDC(dc) && navigation.navigate('DCRequestSummary', { orderId, client: dc })}
+                      disabled={!orderId || !canRequestDC(dc)}
+                    >
+                      <Text style={styles.cardButtonTextRequest}>
+                        {isPoChangePending(dc) ? 'Waiting for Manager Approval' : 'Request DC'}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 )}
               </View>
-              <View style={styles.cardFooter}>
-                <Text style={styles.viewDetailsText}>Tap to View Details →</Text>
-              </View>
-            </TouchableOpacity>
-          ))
+            );
+          })
         )}
       </ScrollView>
 
@@ -229,6 +277,15 @@ const styles = StyleSheet.create({
   infoValue: { ...typography.body.medium, color: colors.textPrimary, flex: 1 },
   cardFooter: { paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border },
   viewDetailsText: { ...typography.body.small, color: colors.primary, textAlign: 'right', fontWeight: '500' },
+  cardDcFlowMessage: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border, paddingVertical: 8 },
+  cardDcFlowMessageText: { ...typography.body.small, color: colors.textSecondary, fontStyle: 'italic' },
+  cardActions: { flexDirection: 'row', marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border, gap: 12 },
+  cardButton: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  cardButtonEdit: { backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border },
+  cardButtonRequest: { backgroundColor: colors.primary },
+  cardButtonDisabled: { backgroundColor: colors.textSecondary + '40', opacity: 0.8 },
+  cardButtonTextEdit: { ...typography.body.small, color: colors.textPrimary, fontWeight: '600' },
+  cardButtonTextRequest: { ...typography.body.small, color: colors.textLight, fontWeight: '600' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: colors.backgroundLight, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '90%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border },

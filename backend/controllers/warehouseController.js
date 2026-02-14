@@ -1,6 +1,18 @@
 const Warehouse = require('../models/Warehouse');
 const StockMovement = require('../models/StockMovement');
 
+// @desc    Get distinct warehouse locations (for return form dropdown)
+// @route   GET /api/warehouse/locations
+// @access  Private
+const getWarehouseLocations = async (req, res) => {
+  try {
+    const locations = await Warehouse.distinct('location', { location: { $exists: true, $ne: '' } });
+    res.json(locations.filter(Boolean).sort());
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // @desc    Get all warehouse items
 // @route   GET /api/warehouse
 // @access  Private
@@ -149,6 +161,7 @@ const updateWarehouseItem = async (req, res) => {
 
 module.exports = {
   getWarehouse,
+  getWarehouseLocations,
   getWarehouseItem,
   createWarehouseItem,
   updateWarehouseItem,

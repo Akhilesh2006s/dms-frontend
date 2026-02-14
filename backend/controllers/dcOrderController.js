@@ -138,7 +138,9 @@ const getOne = async (req, res) => {
       .populate('assigned_to', 'name email')
       .populate('updateHistory.updatedBy', 'name email')
       .populate('pendingEdit.requestedBy', 'name email')
-      .populate('pendingEdit.approvedBy', 'name email');
+      .populate('pendingEdit.approvedBy', 'name email')
+      .populate('poChangeRequest.requestedBy', 'name email')
+      .populate('poChangeRequest.approvedBy', 'name email');
     if (!item) return res.status(404).json({ message: 'DC not found' });
     res.json(item);
   } catch (e) {
@@ -357,6 +359,14 @@ const update = async (req, res) => {
       updateData.priority = req.body.priority;
     }
     
+    // assigned_to: allow when closing lead → client so My Clients shows the record for current user
+    if (req.body.assigned_to !== undefined && req.body.assigned_to !== null && req.body.assigned_to !== '') {
+      const mongoose = require('mongoose');
+      updateData.assigned_to = mongoose.Types.ObjectId.isValid(req.body.assigned_to)
+        ? (req.body.assigned_to instanceof mongoose.Types.ObjectId ? req.body.assigned_to : new mongoose.Types.ObjectId(req.body.assigned_to))
+        : req.body.assigned_to;
+    }
+
     // Update other fields if provided
     const fieldsToUpdate = [
       'status', 'zone', 'location', 'contact_person', 'contact_mobile', 'school_name',
@@ -383,6 +393,12 @@ const update = async (req, res) => {
         }
       }
     });
+
+    // When Executive requests DC (status → dc_requested), store requestedBy and requestedAt
+    if (req.body.status === 'dc_requested') {
+      updateData.requestedBy = req.user._id;
+      updateData.requestedAt = new Date();
+    }
     
     // Build the MongoDB update query
     const mongoUpdate = {};
@@ -838,6 +854,136 @@ const approveEdit = async (req, res) => {
   }
 };
 
-module.exports = { list, getOne, getHistory, create, update, submit, markInTransit, complete, hold, submitEdit, approveEdit };
+// @desc    Executive: request PO PDF change (sent only to assigned Executive Manager).
+// @route   POST /api/dc-orders/:id/request-po-change
+// @access  Private (Executive - assigned to this DcOrder)
+const requestPoChange = async (req, res) => {
+  try {
+    const User = require('../models/User');
+    const item = await DcOrder.findById(req.params.id).populate('assigned_to', 'name email executiveManagerId');
+    if (!item) return res.status(404).json({ message: 'Order not found' });
+    const userId = req.user._id;
+    const assignedId = item.assigned_to && (typeof item.assigned_to === 'object' ? item.assigned_to._id : item.assigned_to);
+    if (assignedId && assignedId.toString() !== userId.toString()) {
+      return res.status(403).json({ message: 'You can only request PO change for orders assigned to you' });
+    }
+    // PO change only when DC has not been requested (status = saved). Once Request DC is done, status becomes dc_requested → client is in DC flow → PO change not allowed.
+    if (item.status !== 'saved') {
+      return res.status(400).json({ message: 'PO change can only be requested before Request DC. This client has already had DC requested and is in the DC flow.' });
+    }
+    const executiveUser = await User.findById(userId).select('executiveManagerId').lean();
+    const assignedExecutiveManagerId = (executiveUser && executiveUser.executiveManagerId) || null;
+    if (!assignedExecutiveManagerId) {
+      return res.status(400).json({ message: 'You must have an assigned Executive Manager to submit a PO change request. Please contact admin.' });
+    }
+    const { pod_proof_url: newPdfUrl, remarks } = req.body || {};
+    if (!newPdfUrl || typeof newPdfUrl !== 'string' || !newPdfUrl.trim()) {
+      return res.status(400).json({ message: 'New PO PDF URL is required (upload PDF first, then pass pod_proof_url)' });
+    }
+    const oldPdfUrl = item.pod_proof_url || null;
+    item.poChangeRequest = {
+      status: 'PENDING_MANAGER_APPROVAL',
+      oldPdfUrl,
+      newPdfUrl: newPdfUrl.trim(),
+      requestedBy: userId,
+      requestedAt: new Date(),
+      remarks: remarks ? String(remarks).trim() : '',
+      assignedExecutiveManagerId,
+    };
+    await item.save();
+    const populated = await DcOrder.findById(item._id)
+      .populate('created_by', 'name email')
+      .populate('assigned_to', 'name email')
+      .populate('poChangeRequest.requestedBy', 'name email')
+      .populate('poChangeRequest.assignedExecutiveManagerId', 'name email');
+    res.json(populated);
+  } catch (e) {
+    console.error('requestPoChange error:', e);
+    res.status(500).json({ message: e.message || 'Failed to submit PO change request' });
+  }
+};
+
+// @desc    Executive Manager: approve or reject PO PDF change request (only assigned manager).
+// @route   PUT /api/dc-orders/:id/approve-po-change
+// @access  Private (Executive Manager - must be assigned to the requesting Executive)
+const approvePoChange = async (req, res) => {
+  try {
+    const userRole = req.user?.role || '';
+    if (String(userRole) !== 'Executive Manager') {
+      return res.status(403).json({ message: 'Only Executive Manager can approve or reject PO change requests' });
+    }
+    const managerId = req.user._id;
+    const item = await DcOrder.findById(req.params.id)
+      .populate('assigned_to', 'name email')
+      .populate('poChangeRequest.requestedBy', 'name email');
+    if (!item) return res.status(404).json({ message: 'Order not found' });
+    if (!item.poChangeRequest || item.poChangeRequest.status !== 'PENDING_MANAGER_APPROVAL') {
+      return res.status(400).json({ message: 'No pending PO change request for this order' });
+    }
+    const assignedManagerId = item.poChangeRequest.assignedExecutiveManagerId
+      ? (typeof item.poChangeRequest.assignedExecutiveManagerId === 'object'
+          ? item.poChangeRequest.assignedExecutiveManagerId._id
+          : item.poChangeRequest.assignedExecutiveManagerId)
+      : null;
+    if (!assignedManagerId || assignedManagerId.toString() !== managerId.toString()) {
+      return res.status(403).json({ message: 'Only the Executive Manager assigned to this Executive can approve or reject this request' });
+    }
+    const { approved, managerRemarks } = req.body || {};
+    const remarksTrimmed = managerRemarks != null ? String(managerRemarks).trim() : '';
+    if (!remarksTrimmed) {
+      return res.status(400).json({ message: 'Remarks are mandatory for both approval and rejection' });
+    }
+    item.poChangeRequest.managerRemarks = remarksTrimmed;
+    item.poChangeRequest.approvedBy = req.user._id;
+    item.poChangeRequest.approvedAt = new Date();
+    if (approved === true) {
+      item.pod_proof_url = item.poChangeRequest.newPdfUrl;
+      item.poChangeRequest.status = 'APPROVED';
+      item.poChangeRequest.rejectionReason = undefined;
+    } else {
+      item.poChangeRequest.status = 'REJECTED';
+      item.poChangeRequest.rejectionReason = remarksTrimmed;
+    }
+    await item.save();
+    const populated = await DcOrder.findById(item._id)
+      .populate('created_by', 'name email')
+      .populate('assigned_to', 'name email')
+      .populate('poChangeRequest.requestedBy', 'name email')
+      .populate('poChangeRequest.approvedBy', 'name email');
+    res.json(populated);
+  } catch (e) {
+    console.error('approvePoChange error:', e);
+    res.status(500).json({ message: e.message || 'Failed to process PO change' });
+  }
+};
+
+// @desc    Executive Manager: list DcOrders with pending PO change requests assigned to this manager only
+// @route   GET /api/dc-orders/po-change-requests/list
+// @access  Private (Executive Manager - sees only requests from Executives assigned to them)
+const listPoChangeRequests = async (req, res) => {
+  try {
+    const userRole = req.user?.role || '';
+    if (String(userRole) !== 'Executive Manager') {
+      return res.status(403).json({ message: 'Only Executive Manager can view PO change requests' });
+    }
+    const managerId = req.user._id;
+    const items = await DcOrder.find({
+      'poChangeRequest.status': 'PENDING_MANAGER_APPROVAL',
+      'poChangeRequest.assignedExecutiveManagerId': managerId,
+    })
+      .populate('created_by', 'name email')
+      .populate('assigned_to', 'name email')
+      .populate('poChangeRequest.requestedBy', 'name email')
+      .populate('poChangeRequest.assignedExecutiveManagerId', 'name email')
+      .sort({ 'poChangeRequest.requestedAt': -1 })
+      .lean();
+    res.json(items);
+  } catch (e) {
+    console.error('listPoChangeRequests error:', e);
+    res.status(500).json({ message: e.message });
+  }
+};
+
+module.exports = { list, getOne, getHistory, create, update, submit, markInTransit, complete, hold, submitEdit, approveEdit, requestPoChange, approvePoChange, listPoChangeRequests };
 
 

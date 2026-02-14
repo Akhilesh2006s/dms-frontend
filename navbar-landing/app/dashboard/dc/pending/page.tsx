@@ -151,8 +151,28 @@ export default function PendingDCPage() {
       const data = await apiRequest<DC[]>(`/dc?status=pending_dc`)
       // Ensure data is an array before setting
       const dataArray = Array.isArray(data) ? data : []
-      // Filter out DCs that have been submitted to warehouse (status: sent_to_manager)
-      const filteredDCs = dataArray.filter(dc => dc.status !== 'sent_to_manager')
+      // Filter out:
+      // 1. DCs that have been submitted to warehouse (status: sent_to_manager)
+      // 2. Term 2 DCs (all products are Term 2) - they should be in Term-Wise DC, not Pending DC
+      const filteredDCs = dataArray.filter(dc => {
+        if (dc.status === 'sent_to_manager') return false
+        
+        // Check if this is a Term 2 DC (all products are Term 2)
+        if (dc.productDetails && Array.isArray(dc.productDetails) && dc.productDetails.length > 0) {
+          const allTerm2 = dc.productDetails.every((p: any) => (p.term || 'Term 1') === 'Term 2')
+          const hasTerm1 = dc.productDetails.some((p: any) => {
+            const term = p.term || 'Term 1'
+            return term === 'Term 1' || term === 'Both'
+          })
+          // If all products are Term 2 and no Term 1, this should be in Term-Wise DC
+          if (allTerm2 && !hasTerm1) {
+            console.log(`⚠️ Filtering out Term 2 DC ${dc._id} from Pending DC - should be in Term-Wise DC`)
+            return false
+          }
+        }
+        
+        return true
+      })
       setItems(filteredDCs)
     } catch (e: any) {
       console.error('Failed to load DCs:', e)
@@ -216,11 +236,28 @@ export default function PendingDCPage() {
       setSmeRemarks(mergedDC.smeRemarks || '')
       
       // Populate product rows - prioritize DC.productDetails, then DcOrder.products
-      if (mergedDC.productDetails && Array.isArray(mergedDC.productDetails) && mergedDC.productDetails.length > 0) {
+      // Filter out empty or invalid productDetails entries
+      const validProductDetails = mergedDC.productDetails && Array.isArray(mergedDC.productDetails) 
+        ? mergedDC.productDetails.filter((p: any) => p && (p.product || p.productName) && (p.quantity > 0 || p.strength > 0))
+        : []
+      
+      console.log('📦 Loading products for Pending DC:', {
+        dcId: mergedDC._id,
+        hasProductDetails: !!mergedDC.productDetails,
+        productDetailsLength: mergedDC.productDetails?.length || 0,
+        validProductDetailsLength: validProductDetails.length,
+        hasDcOrderData: !!dcOrderData,
+        dcOrderProductsLength: dcOrderData?.products?.length || 0,
+        fullDC: fullDC,
+        mergedDC: mergedDC
+      })
+      
+      if (validProductDetails.length > 0) {
         // Use existing productDetails from DC
-        setProductRows(mergedDC.productDetails.map((p, idx) => {
+        console.log('✅ Using DC.productDetails:', validProductDetails)
+        setProductRows(validProductDetails.map((p: any, idx: number) => {
           // Normalize product value to match dropdown options (case-insensitive matching)
-          const rawProduct = p.product ? String(p.product).trim() : ''
+          const rawProduct = (p.product || p.productName || '').trim()
           // Find matching product (case-insensitive)
           const matchedProduct = availableProducts.find(ap => 
             ap.toLowerCase() === rawProduct.toLowerCase() || 
@@ -233,20 +270,40 @@ export default function PendingDCPage() {
             product: matchedProduct, // Use matched product for dropdown
           class: p.class || '1',
           category: p.category || 'New Students',
-            productName: p.productName || matchedProduct, // Use productName or matched product
-          quantity: p.quantity || 0,
-          strength: p.strength || 0,
+            productName: p.productName || p.product || matchedProduct, // Use productName or product or matched product
+          quantity: Number(p.quantity) || Number(p.strength) || 0,
+          strength: Number(p.strength) || Number(p.quantity) || 0,
           level: p.level || getDefaultLevel(matchedProduct),
           specs: p.specs || 'Regular',
           subject: p.subject || undefined,
-          price: p.price || 0,
-          total: p.total || 0,
+          price: Number(p.price) || 0,
+          total: Number(p.total) || 0,
           term: p.term || 'Term 1',
           }
         }))
       } else if (dcOrderData?.products && Array.isArray(dcOrderData.products) && dcOrderData.products.length > 0) {
         // Import from DcOrder.products (like closed sales page)
-        setProductRows(dcOrderData.products.map((p: any, idx: number) => {
+        // Filter to only Term 1 products (since this is Pending DC, which should only have Term 1)
+        const term1DcOrderProducts = dcOrderData.products.filter((p: any) => {
+          const term = p.term || 'Term 1'
+          return term === 'Term 1' || term === 'Both'
+        })
+        
+        // If no Term 1 products found, use all products (fallback)
+        const productsToUse = term1DcOrderProducts.length > 0 ? term1DcOrderProducts : dcOrderData.products
+        
+        console.log('✅ Using DcOrder.products as fallback:', {
+          allProducts: dcOrderData.products.length,
+          term1Products: term1DcOrderProducts.length,
+          using: productsToUse.length,
+          products: productsToUse
+        })
+        
+        if (productsToUse.length === 0) {
+          console.warn('⚠️ No products found in DcOrder.products')
+          setProductRows([])
+        } else {
+          setProductRows(productsToUse.map((p: any, idx: number) => {
           const rawProduct = p.product_name || p.product || 'ABACUS'
           // Find matching product (case-insensitive)
           const matchedProduct = availableProducts.find(ap => 
@@ -261,19 +318,23 @@ export default function PendingDCPage() {
           class: p.class || '1',
           category: p.category || (mergedDC.school_type === 'Existing' ? 'Existing Students' : 'New Students'),
             productName: matchedProduct, // Use matched product
-          quantity: p.quantity || 0,
-          strength: p.strength || 0,
+          quantity: Number(p.quantity) || 0,
+          strength: Number(p.strength) || Number(p.quantity) || 0,
           level: p.level || getDefaultLevel(matchedProduct),
           specs: p.specs || 'Regular',
           subject: p.subject || undefined,
-          price: p.price || 0,
-          total: p.total || 0,
+          price: Number(p.unit_price) || Number(p.price) || 0,
+          total: Number(p.total) || (Number(p.unit_price) || 0) * (Number(p.quantity) || 0),
           term: p.term || 'Term 1',
           }
         }))
+        }
       } else {
-        // Fallback: create from product string
-        const rawProduct = mergedDC.product || 'ABACUS'
+        // Fallback: create from product string or check if DC has product field
+        console.log('⚠️ No productDetails or DcOrder products found, using fallback')
+        const rawProduct = mergedDC.product || (dcOrderData?.products && Array.isArray(dcOrderData.products) && dcOrderData.products.length > 0
+          ? dcOrderData.products[0].product_name || dcOrderData.products[0].product
+          : 'ABACUS')
         // Find matching product (case-insensitive)
         const matchedProduct = availableProducts.find(ap => 
           ap.toLowerCase() === String(rawProduct).toLowerCase() || 
@@ -281,14 +342,20 @@ export default function PendingDCPage() {
           ap.toLowerCase().includes(String(rawProduct).toLowerCase())
         ) || 'ABACUS'
         
+        // Try to get quantity from requestedQuantity or DcOrder
+        const fallbackQuantity = mergedDC.requestedQuantity || 
+          (dcOrderData?.products && Array.isArray(dcOrderData.products) && dcOrderData.products.length > 0
+            ? dcOrderData.products.reduce((sum: number, p: any) => sum + (Number(p.quantity) || 0), 0)
+            : 0) || 0
+        
         setProductRows([{
           id: '1',
           product: matchedProduct, // Use matched product for dropdown
           class: '1',
           category: 'New Students',
           productName: matchedProduct, // Use matched product
-          quantity: mergedDC.requestedQuantity || 0,
-          strength: 0,
+          quantity: fallbackQuantity,
+          strength: fallbackQuantity,
           level: getDefaultLevel(matchedProduct),
           specs: 'Regular',
           subject: undefined,
@@ -297,6 +364,8 @@ export default function PendingDCPage() {
           term: 'Term 1',
         }])
       }
+      
+      console.log('📦 Final productRows set:', productRows.length, 'products')
     } catch (e: any) {
       console.error('Failed to load DC details:', e)
       alert(`Error loading DC: ${e?.message || 'Unknown error'}`)
@@ -308,6 +377,27 @@ export default function PendingDCPage() {
     
     setSaving(true)
     try {
+      // Check if this is a Term 2 DC (all products are Term 2)
+      const allProductsAreTerm2 = productRows.length > 0 && 
+        productRows.every(row => (row.term || 'Term 1') === 'Term 2')
+      const hasTerm1 = productRows.some(row => {
+        const term = row.term || 'Term 1'
+        return term === 'Term 1' || term === 'Both'
+      })
+      
+      // Determine status: if all products are Term 2 and no Term 1, keep as scheduled_for_later
+      // Otherwise, use pending_dc (or keep existing status if it's already pending_dc)
+      let statusToUse = selectedDC.status || 'pending_dc'
+      if (allProductsAreTerm2 && !hasTerm1) {
+        // This is a Term 2 DC - should stay in Term-Wise DC
+        statusToUse = 'scheduled_for_later'
+        console.log('📦 Detected Term 2 DC - maintaining scheduled_for_later status')
+      } else if (hasTerm1 || productRows.some(row => (row.term || 'Term 1') === 'Both')) {
+        // This has Term 1 or Both - should be in Pending DC
+        statusToUse = 'pending_dc'
+        console.log('📦 Detected Term 1 or Both - using pending_dc status')
+      }
+      
       await apiRequest(`/dc/${selectedDC._id}`, {
         method: 'PUT',
         body: JSON.stringify({
@@ -318,6 +408,7 @@ export default function PendingDCPage() {
           dcCategory,
           dcNotes,
           smeRemarks,
+          status: statusToUse, // Preserve Term 2 status
           productDetails: productRows.map(row => ({
             product: row.product,
             class: row.class,
@@ -332,7 +423,11 @@ export default function PendingDCPage() {
           })),
         }),
       })
-      alert('DC saved successfully!')
+      
+      const statusMessage = statusToUse === 'scheduled_for_later' 
+        ? 'DC saved successfully! It will remain in Term-Wise DC.'
+        : 'DC saved successfully!'
+      alert(statusMessage)
       load()
       setSelectedDC(null)
     } catch (e: any) {
@@ -351,8 +446,31 @@ export default function PendingDCPage() {
       return
     }
     
+    // Check if this is a Term 2 DC (all products are Term 2)
+    const allProductsAreTerm2 = productRows.length > 0 && 
+      productRows.every(row => (row.term || 'Term 1') === 'Term 2')
+    const hasTerm1 = productRows.some(row => {
+      const term = row.term || 'Term 1'
+      return term === 'Term 1' || term === 'Both'
+    })
+    
+    // If it's a Term 2 DC, prevent submission and redirect user
+    if (allProductsAreTerm2 && !hasTerm1) {
+      alert('Term 2 DCs should be managed from the Term-Wise DC page. This DC will remain in Term-Wise DC. Please use the Term-Wise DC page to submit Term 2 DCs.')
+      return
+    }
+    
     setSubmitting(true)
     try {
+      // Determine status: if all products are Term 2, keep as scheduled_for_later
+      // Otherwise, use pending_dc
+      let statusToUse = selectedDC.status || 'pending_dc'
+      if (allProductsAreTerm2 && !hasTerm1) {
+        statusToUse = 'scheduled_for_later'
+      } else if (hasTerm1 || productRows.some(row => (row.term || 'Term 1') === 'Both')) {
+        statusToUse = 'pending_dc'
+      }
+      
       // First save the changes
       await apiRequest(`/dc/${selectedDC._id}`, {
         method: 'PUT',
@@ -364,6 +482,7 @@ export default function PendingDCPage() {
           dcCategory,
           dcNotes,
           smeRemarks,
+          status: statusToUse, // Preserve Term 2 status
           productDetails: productRows.map(row => ({
             product: row.product,
             class: row.class,

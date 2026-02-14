@@ -76,13 +76,15 @@ export default function CloseLeadPage() {
     selectedSubjects?: string[] // Selected subjects for parent row (multi-select)
     selectedSpecs?: string[] // Selected specs for parent row (multi-select)
     selectedCategories?: string[] // Selected categories for parent row (multi-select)
+    selectedDeliverables?: string[] // Selected deliverables for parent row (multi-select)
   }>>([])
   const [poPhoto, setPoPhoto] = useState<File | null>(null)
   const [poPhotoUrl, setPoPhotoUrl] = useState<string>('')
   const [uploadingPO, setUploadingPO] = useState(false)
   
-  const { productNames: availableProducts, getProductLevels, getDefaultLevel, getProductSpecs, getProductSubjects, hasProductSubjects, getProductCategories, hasProductCategories } = useProducts()
-  const availableClasses = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']
+  const { productNames: availableProducts, getProductLevels, getDefaultLevel, getProductSpecs, getProductSubjects, hasProductSubjects, getProductCategories, hasProductCategories, getProductId } = useProducts()
+  const [deliverablesByProduct, setDeliverablesByProduct] = useState<Record<string, string[]>>({})
+  const availableClasses = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']
   const defaultCategories = ['New Students', 'Existing Students', 'Both']
   const availableDCCategories = ['Term 1', 'Term 2', 'Term 3', 'Full Year']
 
@@ -254,6 +256,7 @@ export default function CloseLeadPage() {
               sameRateForAllClasses: false,
               selectedSubjects: [],
               selectedSpecs: getProductSpecs(product),
+              selectedDeliverables: productData?.deliverables || [],
               selectedCategories: hasProductCategories(product) 
                 ? getProductCategories(product) 
                 : undefined,
@@ -345,6 +348,23 @@ export default function CloseLeadPage() {
       })
   }
 
+  // Fetch deliverables for parent-row products when Product Configuration is shown
+  const parentProductNames = productDetails.filter(pd => pd.isParentRow).map(pd => pd.product)
+  useEffect(() => {
+    parentProductNames.forEach(async (productName) => {
+      const productId = getProductId(productName)
+      if (!productId) return
+      try {
+        const items = await apiRequest<Array<{ deliverableName: string }>>(`/deliverables/by-product/${productId}`)
+        const names = Array.isArray(items) ? items.map(d => d.deliverableName) : []
+        setDeliverablesByProduct(prev => ({ ...prev, [productName]: names }))
+      } catch {
+        setDeliverablesByProduct(prev => ({ ...prev, [productName]: [] }))
+      }
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parentProductNames.join(',')])
+
   // Show all available products from database
   const filteredProducts = availableProducts
 
@@ -354,14 +374,14 @@ export default function CloseLeadPage() {
     setSelectedProducts([...selectedProducts, product])
     }
     
-    // Create only ONE initial row (parent row) with From/To fields
+    // Create only ONE initial row (parent row) with From/To fields - no pre-selections
     const parentId = Date.now().toString() + Math.random().toString()
     const newRow = {
       id: parentId,
       product: product,
-      class: '1', // Default, will be replaced when range is set
-      fromClass: '1',
-      toClass: '10',
+      class: '0', // Default, will be replaced when range is set
+      fromClass: '0',
+      toClass: '0',
         category: hasProductCategories(product)
           ? (getProductCategories(product)[0] || '')
           : (lead?.school_type === 'Existing' ? 'Existing Students' : 'New Students'),
@@ -373,19 +393,17 @@ export default function CloseLeadPage() {
       specs: 'Regular', // Default, will be replaced when rows are generated
       isParentRow: true, // Mark as parent row
       sameRateForAllClasses: false, // Default: not enabled
-      selectedSubjects: [], // Selected subjects (multi-select)
-      selectedSpecs: getProductSpecs(product), // Selected specs (multi-select)
+      selectedSubjects: [], // Nothing pre-selected - user must select
+      selectedSpecs: [], // Nothing pre-selected - user must select
+      selectedDeliverables: [], // Nothing pre-selected - user must select
       selectedCategories: hasProductCategories(product) 
-        ? getProductCategories(product) 
+        ? [] 
         : undefined,
     }
     
     setProductDetails([...productDetails, newRow])
     
-    // Auto-generate rows immediately after adding
-    setTimeout(() => {
-      generateRowsFromRange(parentId, '1', '10')
-    }, 0)
+    // Do NOT auto-generate rows - user must set class range (From/To) and select specs/subjects first
   }
   
   // Function to generate rows when From/To class range changes
@@ -395,8 +413,16 @@ export default function CloseLeadPage() {
       const parentRow = currentDetails.find(p => p.id === parentId)
       if (!parentRow || !parentRow.isParentRow) return currentDetails
       
-      const from = parseInt(fromClass) || 1
-      const to = parseInt(toClass) || 10
+      const from = parseInt(fromClass, 10) || 0
+      const to = parseInt(toClass, 10) || 0
+      
+      // When From=0 and To=0, or From>To: invalid range - don't generate child rows
+      if ((from === 0 && to === 0) || from > to) {
+        const otherParentRows = currentDetails.filter(p => p.isParentRow && p.id !== parentId)
+        const otherChildRows = currentDetails.filter(p => !p.isParentRow && !p.id.startsWith(parentId + '_'))
+        const updatedParent = { ...parentRow, fromClass, toClass }
+        return [...otherParentRows, updatedParent, ...otherChildRows]
+      }
       const selectedSpecs = parentRow.selectedSpecs || []
       const specsToUse = selectedSpecs.length > 0 ? selectedSpecs : ['Regular']
       const selectedSubjects = parentRow.selectedSubjects || []
@@ -492,10 +518,19 @@ export default function CloseLeadPage() {
         }
       }
       
+      // When From changes: if To < From, auto-set To = From
+      if (rowToUpdate.isParentRow && field === 'fromClass') {
+        const newFrom = parseInt(String(value), 10)
+        const currentTo = parseInt(String(updated.toClass || '0'), 10)
+        if (!isNaN(newFrom) && !isNaN(currentTo) && currentTo < newFrom) {
+          updated.toClass = String(newFrom)
+        }
+      }
+      
       // If From/To class or selectedSubjects or selectedSpecs or selectedCategories changes on a parent row, regenerate all child rows
       if (rowToUpdate.isParentRow && (field === 'fromClass' || field === 'toClass' || field === 'selectedSubjects' || field === 'selectedSpecs' || field === 'selectedCategories')) {
         setTimeout(() => {
-          generateRowsFromRange(id, updated.fromClass || '1', updated.toClass || '10')
+          generateRowsFromRange(id, updated.fromClass || '0', updated.toClass || '0')
         }, 0)
       }
       
@@ -587,6 +622,29 @@ export default function CloseLeadPage() {
       return
     }
     
+    // Validate class range for all parent rows - must have valid From/To (not 0,0 and From <= To)
+    const parentRows = productDetails.filter(pd => pd.isParentRow)
+    const invalidClassRange = parentRows.some(p => {
+      const from = parseInt(p.fromClass ?? '0', 10)
+      const to = parseInt(p.toClass ?? '0', 10)
+      return from === 0 || to === 0 || from > to
+    })
+    if (invalidClassRange) {
+      toast.error('Please select valid class range.')
+      return
+    }
+    
+    // Validate deliverables: if product has deliverables, at least 1 must be selected
+    const productsWithDeliverables = parentRows.filter(p => (deliverablesByProduct[p.product] || []).length > 0)
+    const invalidDeliverables = productsWithDeliverables.some(p => {
+      const selected = p.selectedDeliverables || []
+      return selected.length === 0
+    })
+    if (invalidDeliverables) {
+      toast.error('Please select at least one deliverable for products that have deliverables configured.')
+      return
+    }
+    
     // Validate product details (excluding parent rows)
     // Check for product, strength (quantity), and price (unit price)
     const invalidProducts = actualProductDetails.filter(p => 
@@ -641,11 +699,16 @@ export default function CloseLeadPage() {
         decision_maker: form.contact_person2 || undefined, // Also set decision_maker field
         estimated_delivery_date: form.delivery_date ? new Date(form.delivery_date).toISOString() : undefined,
         assigned_to: assignedEmployeeId,
-        products: actualProductDetails.map(p => ({
-          product_name: p.product,
-          quantity: p.strength, // Use strength as quantity
-          unit_price: p.price,
-        })),
+        products: actualProductDetails.map(p => {
+          const parentRow = productDetails.find(parent => parent.isParentRow && p.id.startsWith(parent.id + '_'))
+          const deliverables = parentRow?.selectedDeliverables || []
+          return {
+            product_name: p.product,
+            quantity: p.strength, // Use strength as quantity
+            unit_price: p.price,
+            deliverables,
+          }
+        }),
       }
       
       // Update the lead/dc-order with appropriate status
@@ -729,25 +792,30 @@ export default function CloseLeadPage() {
       }
       
       // Prepare product details for DC (exclude parent rows)
-      const dcProductDetails = actualProductDetails.map(p => ({
-        product: p.product,
-        class: p.class || '1', // Use actual class value
-        category: p.category || (() => {
-          // Use product-specific categories if available, otherwise use school-type based category
-          if (hasProductCategories(p.product)) {
-            const productCats = getProductCategories(p.product)
-            return productCats[0] || (lead?.school_type === 'Existing' ? 'Existing Students' : 'New Students')
-          }
-          return lead?.school_type === 'Existing' ? 'Existing Students' : 'New Students'
-        })(),
-        quantity: Number(p.quantity) || 0, // Keep for backend compatibility
-        strength: Number(p.strength) || 0,
-        price: Number(p.price) || 0,
-        total: Number(p.total) || (Number(p.strength) || 0) * (Number(p.price) || 0),
-        level: p.level || getDefaultLevel(p.product),
-        specs: p.specs || 'Regular', // Include specs
-        subject: p.subject || undefined, // Include subject if present
-      }))
+      const dcProductDetails = actualProductDetails.map(p => {
+        const parentRow = productDetails.find(parent => parent.isParentRow && p.id.startsWith(parent.id + '_'))
+        const deliverables = parentRow?.selectedDeliverables || []
+        return {
+          product: p.product,
+          class: p.class || '1', // Use actual class value
+          category: p.category || (() => {
+            // Use product-specific categories if available, otherwise use school-type based category
+            if (hasProductCategories(p.product)) {
+              const productCats = getProductCategories(p.product)
+              return productCats[0] || (lead?.school_type === 'Existing' ? 'Existing Students' : 'New Students')
+            }
+            return lead?.school_type === 'Existing' ? 'Existing Students' : 'New Students'
+          })(),
+          quantity: Number(p.quantity) || 0, // Keep for backend compatibility
+          strength: Number(p.strength) || 0,
+          price: Number(p.price) || 0,
+          total: Number(p.total) || (Number(p.strength) || 0) * (Number(p.price) || 0),
+          level: p.level || getDefaultLevel(p.product),
+          specs: p.specs || 'Regular', // Include specs
+          subject: p.subject || undefined, // Include subject if present
+          deliverables,
+        }
+      })
       
       const totalQuantity = dcProductDetails.reduce((sum, p) => sum + (p.strength || 0), 0)
       
@@ -1132,7 +1200,7 @@ export default function CloseLeadPage() {
                             <div className="flex items-center gap-2">
                               <Label className="text-xs">From:</Label>
                               <Select 
-                                value={pd.fromClass || '1'} 
+                                value={pd.fromClass ?? '0'} 
                                 onValueChange={(v) => updateProductDetail(pd.id, 'fromClass', v)}
                               >
                                 <SelectTrigger className="w-20 h-8">
@@ -1148,7 +1216,7 @@ export default function CloseLeadPage() {
                             <div className="flex items-center gap-2">
                               <Label className="text-xs">To:</Label>
                               <Select 
-                                value={pd.toClass || '10'} 
+                                value={pd.toClass ?? '0'} 
                                 onValueChange={(v) => updateProductDetail(pd.id, 'toClass', v)}
                               >
                                 <SelectTrigger className="w-20 h-8">
@@ -1176,11 +1244,16 @@ export default function CloseLeadPage() {
                               variant="ghost"
                               size="sm"
                               onClick={() => {
-                                // Remove parent and all its child rows
+                                // Remove parent and all its child rows; clear deliverables cache for this product
                                 setProductDetails(productDetails.filter(p => 
                                   p.id !== pd.id && !p.id.startsWith(pd.id + '_')
                                 ))
                                 setSelectedProducts(selectedProducts.filter(p => p !== pd.product))
+                                setDeliverablesByProduct(prev => {
+                                  const next = { ...prev }
+                                  delete next[pd.product]
+                                  return next
+                                })
                               }}
                               className="text-red-600 hover:text-red-700"
                             >
@@ -1211,7 +1284,7 @@ export default function CloseLeadPage() {
                                           setTimeout(() => {
                                             const updatedParent = updated.find(p => p.id === pd.id)
                                             if (updatedParent) {
-                                              generateRowsFromRange(pd.id, updatedParent.fromClass || '1', updatedParent.toClass || '10')
+                                              generateRowsFromRange(pd.id, updatedParent.fromClass ?? '0', updatedParent.toClass ?? '0')
                                             }
                                           }, 0)
                                           return updated
@@ -1229,6 +1302,40 @@ export default function CloseLeadPage() {
                               </div>
                             </div>
                           )}
+                          
+                          {/* Select Deliverables (below Specs, above Subjects) */}
+                          {(() => {
+                            const productDeliverables = deliverablesByProduct[pd.product] || []
+                            const selectedDeliverables = pd.selectedDeliverables || []
+                            if (productDeliverables.length === 0) return null
+                            return (
+                              <div className="mt-2 pt-2 border-t">
+                                <Label className="text-xs font-semibold mb-2 block">Select Deliverables:</Label>
+                                <div className="flex flex-wrap gap-2">
+                                  {productDeliverables.map((deliverable) => (
+                                    <div key={deliverable} className="flex items-center space-x-1">
+                                      <Checkbox
+                                        id={`deliverable-${pd.id}-${deliverable}`}
+                                        checked={selectedDeliverables.includes(deliverable)}
+                                        onCheckedChange={(checked) => {
+                                          const newDeliverables = checked
+                                            ? [...selectedDeliverables, deliverable]
+                                            : selectedDeliverables.filter(d => d !== deliverable)
+                                          updateProductDetail(pd.id, 'selectedDeliverables', newDeliverables)
+                                        }}
+                                      />
+                                      <Label 
+                                        htmlFor={`deliverable-${pd.id}-${deliverable}`} 
+                                        className="text-xs cursor-pointer"
+                                      >
+                                        {deliverable}
+                                      </Label>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )
+                          })()}
                           
                           {/* Product Categories Multi-Select (only if product has product categories configured) */}
                           {hasProductCategories(pd.product) && (() => {
@@ -1261,7 +1368,7 @@ export default function CloseLeadPage() {
                                             setTimeout(() => {
                                               const updatedParent = updated.find(p => p.id === pd.id)
                                               if (updatedParent) {
-                                                generateRowsFromRange(pd.id, updatedParent.fromClass || '1', updatedParent.toClass || '10')
+                                                generateRowsFromRange(pd.id, updatedParent.fromClass ?? '0', updatedParent.toClass ?? '0')
                                               }
                                             }, 0)
                                             return updated
@@ -1304,7 +1411,7 @@ export default function CloseLeadPage() {
                                           setTimeout(() => {
                                             const updatedParent = updated.find(p => p.id === pd.id)
                                             if (updatedParent) {
-                                              generateRowsFromRange(pd.id, updatedParent.fromClass || '1', updatedParent.toClass || '10')
+                                              generateRowsFromRange(pd.id, updatedParent.fromClass ?? '0', updatedParent.toClass ?? '0')
                                             }
                                           }, 0)
                                           return updated

@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Pencil, Package, Plus, Upload, X, Search, CreditCard, FileText, PlusCircle } from 'lucide-react'
+import { Pencil, Package, Plus, Upload, X, Search, CreditCard, FileText, PlusCircle, Filter, Calendar, RefreshCw } from 'lucide-react'
 import { getCurrentUser } from '@/lib/auth'
 import { toast } from 'sonner'
 import { useProducts } from '@/hooks/useProducts'
@@ -53,6 +53,14 @@ export default function ClientDCPage() {
   const [loading, setLoading] = useState(true)
   const [selectedDC, setSelectedDC] = useState<DC | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  
+  // Filter states
+  const [selectedYear, setSelectedYear] = useState<string>('all')
+  const [selectedStatus, setSelectedStatus] = useState<string>('all')
+  const [selectedProduct, setSelectedProduct] = useState<string>('all')
+  const [dateFrom, setDateFrom] = useState<string>('')
+  const [dateTo, setDateTo] = useState<string>('')
+  const [showFilters, setShowFilters] = useState(false)
   const [viewingPoUrl, setViewingPoUrl] = useState<string | null>(null)
   const [viewingPoOpen, setViewingPoOpen] = useState(false)
   
@@ -1096,7 +1104,7 @@ export default function ClientDCPage() {
         const term1Payload: any = {
           productDetails: term1Products,
           requestedQuantity: term1Quantity,
-          status: 'pending_dc', // Will be updated to dc_requested via DcOrder
+          status: 'pending_dc', // Goes to Pending DC for Senior Coordinator
         }
         if (dcPoPhotoUrl) {
           term1Payload.poPhotoUrl = dcPoPhotoUrl
@@ -1132,7 +1140,7 @@ export default function ClientDCPage() {
           employeeId: employeeId,
           productDetails: term2Products,
           requestedQuantity: term2Quantity,
-          status: 'scheduled_for_later', // Goes to Term-Wise DC
+          status: 'scheduled_for_later', // Goes to Term-Wise DC in Executive Dashboard
         }
         if (dcPoPhotoUrl) {
           term2Payload.poPhotoUrl = dcPoPhotoUrl
@@ -1623,7 +1631,7 @@ export default function ClientDCPage() {
       
       // Show appropriate success message based on routing
       if (hasBothTerms) {
-        toast.success(`DC split successfully! Term 1 DC will appear in Closed Sales, Term 2 DC will appear in Term-Wise DC.`)
+        toast.success(`DC split successfully! Term 1 DC will appear in Pending DC (Senior Coordinator), Term 2 DC will appear in Term-Wise DC (Executive Dashboard).`)
       } else if (hasTerm1 || hasBothTerm) {
       toast.success('Client Request submitted successfully! It will appear in Closed Sales for Admin/Coordinator to review and raise DC.')
       } else if (hasTerm2 && !hasTerm1 && !hasBothTerm) {
@@ -1944,12 +1952,52 @@ export default function ClientDCPage() {
   }
 
   // Filter and sort items based on search query
+  // Get unique products and years from items
+  const uniqueProducts = useMemo(() => {
+    const products = new Set<string>()
+    items.forEach(item => {
+      const product = item.product || item.saleId?.product || 
+        (item.dcOrderId?.products && Array.isArray(item.dcOrderId.products) 
+          ? item.dcOrderId.products.map((p: any) => p.product_name || p.product).join(', ')
+          : '')
+      if (product && product !== '-') {
+        products.add(product)
+      }
+    })
+    return Array.from(products).sort()
+  }, [items])
+
+  // Get available years from items
+  const availableYears = useMemo(() => {
+    const years = new Set<number>()
+    const currentYear = new Date().getFullYear()
+    years.add(currentYear)
+    
+    items.forEach(item => {
+      const date = item.createdAt || (typeof item.dcOrderId === 'object' && item.dcOrderId?.createdAt 
+        ? item.dcOrderId.createdAt 
+        : null)
+      if (date) {
+        const year = new Date(date).getFullYear()
+        years.add(year)
+      }
+    })
+    
+    // Add last 5 years for convenience
+    for (let i = 1; i <= 5; i++) {
+      years.add(currentYear - i)
+    }
+    
+    return Array.from(years).sort((a, b) => b - a) // Descending order
+  }, [items])
+
   const filteredItems = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase()
     let filtered = items
     
+    // Search query filter
+    const query = searchQuery.trim().toLowerCase()
     if (query) {
-      filtered = items.filter((d) => {
+      filtered = filtered.filter((d) => {
         const customerName = (d.customerName || d.saleId?.customerName || d.dcOrderId?.school_name || '').toLowerCase()
         const phone = (d.customerPhone || d.dcOrderId?.contact_mobile || '').toLowerCase()
         const product = (d.product || d.saleId?.product || (d.dcOrderId?.products && Array.isArray(d.dcOrderId.products) ? d.dcOrderId.products.map((p: any) => p.product_name || p.product).join(', ') : '')).toLowerCase()
@@ -1959,6 +2007,57 @@ export default function ClientDCPage() {
                phone.includes(query) || 
                product.includes(query) || 
                status.includes(query)
+      })
+    }
+    
+    // Status filter
+    if (selectedStatus !== 'all') {
+      filtered = filtered.filter(d => (d.status || 'created') === selectedStatus)
+    }
+    
+    // Product filter
+    if (selectedProduct !== 'all') {
+      filtered = filtered.filter(d => {
+        const product = d.product || d.saleId?.product || 
+          (d.dcOrderId?.products && Array.isArray(d.dcOrderId.products) 
+            ? d.dcOrderId.products.map((p: any) => p.product_name || p.product).join(', ')
+            : '')
+        return product === selectedProduct
+      })
+    }
+    
+    // Year filter
+    if (selectedYear !== 'all') {
+      const year = parseInt(selectedYear)
+      filtered = filtered.filter(d => {
+        const date = d.createdAt || (typeof d.dcOrderId === 'object' && d.dcOrderId?.createdAt 
+          ? d.dcOrderId.createdAt 
+          : null)
+        if (!date) return false
+        return new Date(date).getFullYear() === year
+      })
+    }
+    
+    // Date range filter
+    if (dateFrom) {
+      filtered = filtered.filter(d => {
+        const date = d.createdAt || (typeof d.dcOrderId === 'object' && d.dcOrderId?.createdAt 
+          ? d.dcOrderId.createdAt 
+          : null)
+        if (!date) return false
+        return new Date(date) >= new Date(dateFrom)
+      })
+    }
+    
+    if (dateTo) {
+      filtered = filtered.filter(d => {
+        const date = d.createdAt || (typeof d.dcOrderId === 'object' && d.dcOrderId?.createdAt 
+          ? d.dcOrderId.createdAt 
+          : null)
+        if (!date) return false
+        const toDate = new Date(dateTo)
+        toDate.setHours(23, 59, 59, 999) // Include entire end date
+        return new Date(date) <= toDate
       })
     }
     
@@ -1976,71 +2075,301 @@ export default function ClientDCPage() {
       // Most recent first (descending order)
       return dateB - dateA
     })
-  }, [items, searchQuery])
+  }, [items, searchQuery, selectedStatus, selectedProduct, selectedYear, dateFrom, dateTo])
+  
+  // Count active filters
+  const activeFiltersCount = useMemo(() => {
+    let count = 0
+    if (selectedStatus !== 'all') count++
+    if (selectedProduct !== 'all') count++
+    if (selectedYear !== 'all') count++
+    if (dateFrom) count++
+    if (dateTo) count++
+    return count
+  }, [selectedStatus, selectedProduct, selectedYear, dateFrom, dateTo])
+  
+  // Clear all filters
+  const clearFilters = () => {
+    setSelectedStatus('all')
+    setSelectedProduct('all')
+    setSelectedYear('all')
+    setDateFrom('')
+    setDateTo('')
+    setSearchQuery('')
+  }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-semibold text-neutral-900">Client Request</h1>
-          <p className="text-sm text-neutral-600 mt-1">Manage products, PO photos, and request details for your clients</p>
+    <div className="space-y-6 bg-gradient-to-br from-neutral-50 via-white to-neutral-50 min-h-screen w-full" style={{ overflowX: 'visible' }}>
+      {/* Premium Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="space-y-1">
+          <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-900 bg-clip-text text-transparent">
+            Client Request
+          </h1>
+          <p className="text-sm text-neutral-600 font-medium">
+            Manage products, PO photos, and request details for your clients
+          </p>
         </div>
-        <Button variant="outline" onClick={load}>Refresh</Button>
+        <Button 
+          variant="outline" 
+          onClick={load}
+          className="shadow-md hover:shadow-lg transition-shadow border-neutral-200 bg-white"
+        >
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Refresh
+        </Button>
       </div>
 
-      <Card className="p-4">
-        {/* Search Section */}
-        <div className="flex items-center gap-2 mb-4">
-          <div className="flex-1 flex items-center gap-2">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-neutral-400" />
-              <Input
-                placeholder="Search by client name, phone, product, or status..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 pr-10"
-              />
-              {searchQuery && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 w-7"
-                  onClick={() => setSearchQuery('')}
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              )}
+      {/* Premium Filter Card */}
+      <Card className="p-6 shadow-lg border-neutral-200 bg-white/80 backdrop-blur-sm w-full" style={{ maxWidth: '100%', overflow: 'visible' }}>
+        {/* Search and Filter Toggle */}
+        <div className="flex items-center gap-4 mb-4 flex-wrap">
+          <div className="relative flex-1 min-w-[300px]">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-neutral-400" />
+            <Input
+              placeholder="Search by client name, phone, product, or status..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-11 pr-10 h-11 border-neutral-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+            />
+            {searchQuery && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 transform -translate-y-1/2 h-8 w-8 hover:bg-neutral-100"
+                onClick={() => setSearchQuery('')}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => setShowFilters(!showFilters)}
+            className={`h-11 px-4 border-neutral-200 ${showFilters ? 'bg-blue-50 border-blue-300' : 'bg-white'}`}
+          >
+            <Filter className="w-4 h-4 mr-2" />
+            Filters
+            {activeFiltersCount > 0 && (
+              <span className="ml-2 px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
+                {activeFiltersCount}
+              </span>
+            )}
+          </Button>
+          {activeFiltersCount > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearFilters}
+              className="text-neutral-600 hover:text-neutral-900"
+            >
+              Clear All
+            </Button>
+          )}
+        </div>
+
+        {/* Advanced Filters Panel */}
+        {showFilters && (
+          <div className="mt-4 pt-4 border-t border-neutral-200 space-y-4 animate-in slide-in-from-top-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              {/* Year Filter */}
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-neutral-700 flex items-center gap-2">
+                  <Calendar className="w-4 h-4" />
+                  Year
+                </Label>
+                <Select value={selectedYear} onValueChange={setSelectedYear}>
+                  <SelectTrigger className="h-10 border-neutral-200 bg-white">
+                    <SelectValue placeholder="All Years" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Years</SelectItem>
+                    {availableYears.map(year => (
+                      <SelectItem key={year} value={year.toString()}>
+                        {year}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Status Filter */}
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-neutral-700">Status</Label>
+                <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                  <SelectTrigger className="h-10 border-neutral-200 bg-white">
+                    <SelectValue placeholder="All Statuses" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="created">Created</SelectItem>
+                    <SelectItem value="po_submitted">PO Submitted</SelectItem>
+                    <SelectItem value="sent_to_manager">Sent to Manager</SelectItem>
+                    <SelectItem value="pending_dc">Pending DC</SelectItem>
+                    <SelectItem value="warehouse_processing">Warehouse Processing</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="hold">Hold</SelectItem>
+                    <SelectItem value="scheduled_for_later">Scheduled for Later</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Product Filter */}
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-neutral-700">Product</Label>
+                <Select value={selectedProduct} onValueChange={setSelectedProduct}>
+                  <SelectTrigger className="h-10 border-neutral-200 bg-white">
+                    <SelectValue placeholder="All Products" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Products</SelectItem>
+                    {uniqueProducts.map(product => (
+                      <SelectItem key={product} value={product}>
+                        {product}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Date From */}
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-neutral-700">From Date</Label>
+                <Input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="h-10 border-neutral-200 bg-white"
+                />
+              </div>
+
+              {/* Date To */}
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold text-neutral-700">To Date</Label>
+                <Input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="h-10 border-neutral-200 bg-white"
+                />
+              </div>
             </div>
+          </div>
+        )}
+
+        {/* Active Filters Chips */}
+        {activeFiltersCount > 0 && (
+          <div className="mt-4 pt-4 border-t border-neutral-200 flex flex-wrap gap-2">
+            {selectedStatus !== 'all' && (
+              <div className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-full text-sm font-medium flex items-center gap-2">
+                Status: {selectedStatus}
+                <button onClick={() => setSelectedStatus('all')} className="hover:text-blue-900">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+            {selectedProduct !== 'all' && (
+              <div className="px-3 py-1.5 bg-green-100 text-green-700 rounded-full text-sm font-medium flex items-center gap-2">
+                Product: {selectedProduct}
+                <button onClick={() => setSelectedProduct('all')} className="hover:text-green-900">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+            {selectedYear !== 'all' && (
+              <div className="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-full text-sm font-medium flex items-center gap-2">
+                Year: {selectedYear}
+                <button onClick={() => setSelectedYear('all')} className="hover:text-purple-900">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+            {dateFrom && (
+              <div className="px-3 py-1.5 bg-orange-100 text-orange-700 rounded-full text-sm font-medium flex items-center gap-2">
+                From: {new Date(dateFrom).toLocaleDateString()}
+                <button onClick={() => setDateFrom('')} className="hover:text-orange-900">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+            {dateTo && (
+              <div className="px-3 py-1.5 bg-orange-100 text-orange-700 rounded-full text-sm font-medium flex items-center gap-2">
+                To: {new Date(dateTo).toLocaleDateString()}
+                <button onClick={() => setDateTo('')} className="hover:text-orange-900">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Results Summary */}
+        <div className="mb-4 flex items-center justify-between text-sm">
+          <div className="text-neutral-600">
+            Showing <span className="font-semibold text-neutral-900">{filteredItems.length}</span> of{' '}
+            <span className="font-semibold text-neutral-900">{items.length}</span> clients
           </div>
         </div>
 
-        {loading && <div className="p-4 text-center">Loading…</div>}
+        {loading && (
+          <div className="p-12 text-center">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <p className="mt-4 text-neutral-600">Loading clients...</p>
+          </div>
+        )}
         {!loading && items.length === 0 && (
-          <div className="p-4 text-center">
-            <p className="text-neutral-600">No clients found with products added.</p>
+          <div className="p-12 text-center bg-neutral-50 rounded-lg border border-neutral-200">
+            <Package className="w-12 h-12 mx-auto text-neutral-300 mb-4" />
+            <p className="text-neutral-700 font-medium">No clients found</p>
             <p className="text-sm text-neutral-500 mt-2">
               Closed leads and clients with products added and submitted will appear here.
             </p>
-            <p className="text-sm text-neutral-500 mt-1">
-              Closed leads appear here automatically. You can add products and manage client details directly from this page.
-            </p>
           </div>
         )}
-        {!loading && items.length > 0 && (
-          <div className="overflow-x-auto">
-            <Table>
+        {!loading && items.length > 0 && filteredItems.length === 0 && (
+          <div className="p-12 text-center bg-neutral-50 rounded-lg border border-neutral-200">
+            <Search className="w-12 h-12 mx-auto text-neutral-300 mb-4" />
+            <p className="text-neutral-700 font-medium">No clients match your filters</p>
+            <p className="text-sm text-neutral-500 mt-2">
+              Try adjusting your search or filter criteria
+            </p>
+            {activeFiltersCount > 0 && (
+              <Button variant="outline" size="sm" onClick={clearFilters} className="mt-4">
+                Clear Filters
+              </Button>
+            )}
+          </div>
+        )}
+        {!loading && filteredItems.length > 0 && (
+          <Card className="p-0 overflow-hidden shadow-2xl border-2 border-neutral-200/60 bg-white/95 backdrop-blur-sm">
+            {/* Table Container Box */}
+            <div className="relative group bg-white rounded-lg">
+              {/* Decorative top border */}
+              <div className="h-1 bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-blue-500/20"></div>
+              
+              <div 
+                className="overflow-x-auto w-full bg-white" 
+                style={{ 
+                  maxWidth: '100%',
+                  WebkitOverflowScrolling: 'touch',
+                  scrollbarWidth: 'thin',
+                  overflowX: 'auto',
+                  overflowY: 'visible'
+                }}
+              >
+                <Table className="min-w-[1200px] w-full">
               <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[50px]">S.No</TableHead>
-                  <TableHead>School Code</TableHead>
-                  <TableHead>Client Name</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>Product</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Created Date</TableHead>
-                  <TableHead>Client Turned Date</TableHead>
-                  <TableHead>PO</TableHead>
-                  <TableHead className="text-center">Action</TableHead>
+                <TableRow className="bg-gradient-to-r from-neutral-50 via-neutral-50 to-neutral-100 border-b-2 border-neutral-200/80 sticky top-0 z-20">
+                  <TableHead className="w-[50px] font-bold text-neutral-700 py-4">S.No</TableHead>
+                  <TableHead className="font-bold text-neutral-700 py-4">School Code</TableHead>
+                  <TableHead className="font-bold text-neutral-700 py-4">Client Name</TableHead>
+                  <TableHead className="font-bold text-neutral-700 py-4">Phone</TableHead>
+                  <TableHead className="font-bold text-neutral-700 py-4">Product</TableHead>
+                  <TableHead className="font-bold text-neutral-700 py-4">Status</TableHead>
+                  <TableHead className="font-bold text-neutral-700 py-4">Created Date</TableHead>
+                  <TableHead className="font-bold text-neutral-700 py-4">Client Turned Date</TableHead>
+                  <TableHead className="font-bold text-neutral-700 py-4">PO</TableHead>
+                  <TableHead className="text-center font-bold text-neutral-700 py-4">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -2067,32 +2396,32 @@ export default function ClientDCPage() {
                       : '-'
                     
                     return (
-                      <TableRow key={d._id} className="hover:bg-neutral-50">
-                        <TableCell>{idx + 1}</TableCell>
-                        <TableCell className="font-medium text-blue-700">{schoolCode}</TableCell>
-                        <TableCell className="font-medium">{customerName}</TableCell>
-                        <TableCell>{phone}</TableCell>
-                        <TableCell className="max-w-[200px] truncate" title={product}>{product}</TableCell>
+                      <TableRow key={d._id} className="hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-neutral-50 transition-all duration-200 border-b border-neutral-100/80 hover:shadow-sm">
+                        <TableCell className="font-medium text-neutral-600">{idx + 1}</TableCell>
+                        <TableCell className="font-semibold text-blue-600">{schoolCode}</TableCell>
+                        <TableCell className="font-semibold text-neutral-900">{customerName}</TableCell>
+                        <TableCell className="text-neutral-700">{phone}</TableCell>
+                        <TableCell className="max-w-[200px] truncate text-neutral-700" title={product}>{product}</TableCell>
                         <TableCell>
-                          <span className={`px-2 py-1 rounded text-xs whitespace-nowrap ${
-                            status === 'created' ? 'bg-blue-100 text-blue-700' :
-                            status === 'po_submitted' ? 'bg-yellow-100 text-yellow-700' :
-                            status === 'sent_to_manager' ? 'bg-purple-100 text-purple-700' :
-                            status === 'warehouse_processing' ? 'bg-orange-100 text-orange-700' :
-                            status === 'completed' ? 'bg-green-100 text-green-700' :
-                            'bg-gray-100 text-gray-700'
+                          <span className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap shadow-sm ${
+                            status === 'created' ? 'bg-blue-100 text-blue-700 border border-blue-200' :
+                            status === 'po_submitted' ? 'bg-yellow-100 text-yellow-700 border border-yellow-200' :
+                            status === 'sent_to_manager' ? 'bg-purple-100 text-purple-700 border border-purple-200' :
+                            status === 'warehouse_processing' ? 'bg-orange-100 text-orange-700 border border-orange-200' :
+                            status === 'completed' ? 'bg-green-100 text-green-700 border border-green-200' :
+                            'bg-gray-100 text-gray-700 border border-gray-200'
                           }`}>
-                            {status}
+                            {status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                           </span>
                         </TableCell>
-                        <TableCell>{createdDate}</TableCell>
-                        <TableCell>{turnedDate}</TableCell>
+                        <TableCell className="text-neutral-600">{createdDate}</TableCell>
+                        <TableCell className="text-neutral-600 font-medium">{turnedDate}</TableCell>
                         <TableCell>
                           {d.poPhotoUrl ? (
                             <Button
                               variant="link"
                               size="sm"
-                              className="text-blue-600 hover:text-blue-800 p-0 h-auto"
+                              className="text-blue-600 hover:text-blue-800 p-0 h-auto font-medium"
                               onClick={() => {
                                 setViewingPoUrl(d.poPhotoUrl || null)
                                 setViewingPoOpen(true)
@@ -2112,6 +2441,7 @@ export default function ClientDCPage() {
                                 size="sm" 
                                 variant="outline"
                                 onClick={() => openEditPODialog(d)}
+                                className="border-neutral-200 hover:bg-neutral-50 shadow-sm"
                               >
                                 <Pencil className="w-4 h-4 mr-2" />
                                 Edit PO
@@ -2123,6 +2453,7 @@ export default function ClientDCPage() {
                                   size="sm" 
                                   variant="outline"
                                   onClick={() => openEditPODialog(d)}
+                                  className="border-neutral-200 hover:bg-neutral-50 shadow-sm"
                                 >
                                   <Pencil className="w-4 h-4 mr-2" />
                                   Edit PO
@@ -2133,6 +2464,7 @@ export default function ClientDCPage() {
                             <Button 
                               size="sm" 
                               onClick={() => openClientDCDialog(d)}
+                              className="bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg"
                             >
                               <Package className="w-4 h-4 mr-2" />
                               Request DC
@@ -2145,6 +2477,7 @@ export default function ClientDCPage() {
                                 size="sm" 
                                 variant="outline"
                                 onClick={() => openInvoiceView(d)}
+                                className="border-neutral-200 hover:bg-neutral-50 shadow-sm"
                               >
                                 <CreditCard className="w-4 h-4 mr-2" />
                                 View Invoice
@@ -2158,7 +2491,16 @@ export default function ClientDCPage() {
                 )}
               </TableBody>
             </Table>
-          </div>
+              </div>
+              {/* Enhanced Scroll indicator hint */}
+              <div className="absolute right-0 top-1 bottom-1 w-12 bg-gradient-to-l from-white via-white/90 to-transparent pointer-events-none flex items-center justify-end pr-3 opacity-0 group-hover:opacity-100 transition-opacity z-10 rounded-r-lg">
+                <div className="flex flex-col items-center gap-1">
+                  <div className="text-xs text-neutral-500 font-bold animate-pulse">→</div>
+                  <div className="text-[10px] text-neutral-400">Scroll</div>
+                </div>
+              </div>
+            </div>
+          </Card>
         )}
       </Card>
 
@@ -2597,9 +2939,13 @@ export default function ClientDCPage() {
                 )
 
                 // Check if all products have the same term
-                const terms = dcProductRows.map(row => row.term || 'Term 1')
+                // "Both" is treated as Term 1 for display purposes
+                const terms = dcProductRows.map(row => {
+                  const term = row.term || 'Term 1'
+                  return term === 'Both' ? 'Term 1' : term
+                })
                 const uniqueTerms = Array.from(new Set(terms))
-                const hasDifferentTerms = uniqueTerms.length > 1
+                const hasDifferentTerms = uniqueTerms.length > 1 || uniqueTerms.includes('Term 2')
 
                 // If all products have the same term, show single table
                 if (!hasDifferentTerms) {
@@ -2637,7 +2983,11 @@ export default function ClientDCPage() {
                 }
 
                 // If products have different terms, show separate tables
-                const term1Products = dcProductRows.filter(row => (row.term || 'Term 1') === 'Term 1')
+                // "Both" term products should appear in Term 1 table (they behave like Term 1)
+                const term1Products = dcProductRows.filter(row => {
+                  const term = row.term || 'Term 1'
+                  return term === 'Term 1' || term === 'Both'
+                })
                 const term2Products = dcProductRows.filter(row => (row.term || 'Term 1') === 'Term 2')
 
                 return (

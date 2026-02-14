@@ -7,6 +7,7 @@ const {
   updateLead,
   deleteLead,
   exportLeads,
+  convertToClient,
 } = require('../controllers/leadController');
 const { authMiddleware } = require('../middleware/authMiddleware');
 
@@ -16,6 +17,7 @@ router.get('/:id', authMiddleware, getLead);
 router.post('/', authMiddleware, createLead); // For mobile app compatibility
 router.post('/create', authMiddleware, createLead);
 router.put('/:id', authMiddleware, updateLead);
+router.post('/:id/convert-to-client', authMiddleware, convertToClient);
 router.delete('/:id', authMiddleware, deleteLead);
 
 module.exports = router;

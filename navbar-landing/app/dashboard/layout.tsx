@@ -10,11 +10,12 @@ import { SidebarProvider, useSidebar } from "@/contexts/SidebarContext"
 function MainContent({ children }: { children: React.ReactNode }) {
   return (
     <main 
-      className="flex-1 p-6 md:p-8 pt-24 md:pt-24 ml-16 md:ml-0" 
+      className="flex-1 p-6 md:p-8 pt-24 md:pt-24 ml-16 md:ml-0 overflow-x-auto" 
       id="main-content"
+      style={{ minWidth: 0 }}
     >
       <RequireAuth>
-        <div className="w-full">
+        <div className="w-full min-w-0">
           {children}
         </div>
       </RequireAuth>

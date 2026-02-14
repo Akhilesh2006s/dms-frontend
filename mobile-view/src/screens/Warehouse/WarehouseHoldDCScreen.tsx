@@ -104,16 +104,38 @@ export default function WarehouseHoldDCScreen({ navigation }: any) {
     setMovingId(row._id);
     try {
       if (row.isDcOrder) {
-        await apiService.post(`/warehouse/dc/${row._id}/hold`, {});
+        await apiService.post(`/warehouse/dc-order/${row._id}/move-to-warehouse`, {});
+        setRows((prev) => prev.filter((r) => r._id !== row._id));
+        Alert.alert(
+          'Moved to DC @ Warehouse',
+          'The order will appear in the DC @ Warehouse list.',
+          [
+            { text: 'Stay' },
+            {
+              text: 'Open DC @ Warehouse',
+              onPress: () => navigation.navigate('WarehouseDCAtWarehouse'),
+            },
+          ]
+        );
       } else {
         // DC model: set status to sent_to_manager so it appears in DC @ Warehouse list
         await apiService.put(`/dc/${row._id}`, {
           status: 'sent_to_manager',
           holdReason: '',
         });
+        setRows((prev) => prev.filter((r) => r._id !== row._id));
+        Alert.alert(
+          'Moved to DC @ Warehouse',
+          'The DC will appear in the DC @ Warehouse list.',
+          [
+            { text: 'Stay' },
+            {
+              text: 'Open DC @ Warehouse',
+              onPress: () => navigation.navigate('WarehouseDCAtWarehouse'),
+            },
+          ]
+        );
       }
-      setRows((prev) => prev.filter((r) => r._id !== row._id));
-      Alert.alert('Success', 'DC moved to warehouse. It will appear in DC @ Warehouse list.');
     } catch (error: any) {
       Alert.alert('Error', error?.message || 'Failed to move DC to warehouse');
     } finally {

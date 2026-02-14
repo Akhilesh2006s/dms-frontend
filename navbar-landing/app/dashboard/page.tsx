@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { getCurrentUser } from '@/lib/auth'
+import VendorDashboard from '@/components/dashboard/VendorDashboard'
 
 const sections = [
   { href: '/dashboard/leads', label: 'Leads' },
@@ -387,6 +388,19 @@ export default function DashboardPage() {
     if (currentUser?.role === 'Executive') {
       fetchExecutiveAnalytics()
     }
+  }
+
+  // Vendor gets dedicated dashboard with product/DC/stock insights
+  if (currentUser?.role === 'Vendor') {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="text-2xl font-semibold text-neutral-900">Vendor Dashboard</h1>
+          <p className="text-sm text-neutral-600 mt-1">Insights for your assigned products</p>
+        </div>
+        <VendorDashboard />
+      </div>
+    )
   }
 
   return (

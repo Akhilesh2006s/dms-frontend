@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { apiRequest } from '@/lib/api'
 import { getCurrentUser } from '@/lib/auth'
 import { Card } from '@/components/ui/card'
@@ -100,6 +100,15 @@ export default function ClosedSalesPage() {
   // Map to store existing DCs for each deal: dealId -> DC
   const [dealDCs, setDealDCs] = useState<Record<string, DC>>({})
   const [existingDC, setExistingDC] = useState<DC | null>(null)
+  
+  // Search and filter state
+  const [searchSchoolName, setSearchSchoolName] = useState('')
+  const [searchMobile, setSearchMobile] = useState('')
+  const [searchFromDate, setSearchFromDate] = useState('')
+  const [searchToDate, setSearchToDate] = useState('')
+  const [searchZone, setSearchZone] = useState('')
+  const [searchExecutive, setSearchExecutive] = useState('')
+  const [searchTown, setSearchTown] = useState('')
   
   // Get current user to check role
   const currentUser = getCurrentUser()
@@ -546,9 +555,17 @@ export default function ClosedSalesPage() {
       }
       
       console.log(`Removed ${sortedData.length - uniqueData.length} duplicate entries`)
-      setItems(uniqueData)
-      console.log('Normalized deals:', sortedData)
-      console.log('First deal assigned_to:', sortedData[0]?.assigned_to)
+      
+      // Final sort by creation date (most recent first) to ensure proper ordering
+      const finalSorted = uniqueData.sort((a: any, b: any) => {
+        const dateA = new Date(a.createdAt || a.created_at || 0).getTime()
+        const dateB = new Date(b.createdAt || b.created_at || 0).getTime()
+        return dateB - dateA // Most recent first
+      })
+      
+      setItems(finalSorted)
+      console.log('Normalized deals:', finalSorted)
+      console.log('First deal assigned_to:', finalSorted[0]?.assigned_to)
     } catch (e: any) {
       console.error('Failed to load closed deals:', e)
       const errorMessage = e?.message || 'Unknown error'
@@ -1372,6 +1389,90 @@ export default function ClosedSalesPage() {
     }).join(', ')
   }
 
+  // Get unique zones and executives for dropdowns
+  const uniqueZones = useMemo(() => {
+    const zones = new Set<string>()
+    items.forEach(item => {
+      if (item.zone) zones.add(item.zone)
+    })
+    return Array.from(zones).sort()
+  }, [items])
+
+  const uniqueExecutives = useMemo(() => {
+    const execs = new Set<string>()
+    items.forEach(item => {
+      if (item.assigned_to?.name) execs.add(item.assigned_to.name)
+    })
+    return Array.from(execs).sort()
+  }, [items])
+
+  // Filter items based on search criteria
+  const filteredItems = useMemo(() => {
+    let filtered = [...items]
+
+    // Filter by school name
+    if (searchSchoolName.trim()) {
+      const searchLower = searchSchoolName.toLowerCase().trim()
+      filtered = filtered.filter(item => 
+        item.school_name?.toLowerCase().includes(searchLower)
+      )
+    }
+
+    // Filter by mobile
+    if (searchMobile.trim()) {
+      const searchLower = searchMobile.trim()
+      filtered = filtered.filter(item => 
+        item.contact_mobile?.includes(searchLower)
+      )
+    }
+
+    // Filter by date range
+    if (searchFromDate) {
+      const fromDate = new Date(searchFromDate)
+      fromDate.setHours(0, 0, 0, 0)
+      filtered = filtered.filter(item => {
+        const itemDate = new Date(item.createdAt || item.created_at || 0)
+        itemDate.setHours(0, 0, 0, 0)
+        return itemDate >= fromDate
+      })
+    }
+
+    if (searchToDate) {
+      const toDate = new Date(searchToDate)
+      toDate.setHours(23, 59, 59, 999)
+      filtered = filtered.filter(item => {
+        const itemDate = new Date(item.createdAt || item.created_at || 0)
+        return itemDate <= toDate
+      })
+    }
+
+    // Filter by zone
+    if (searchZone) {
+      filtered = filtered.filter(item => item.zone === searchZone)
+    }
+
+    // Filter by executive
+    if (searchExecutive) {
+      filtered = filtered.filter(item => item.assigned_to?.name === searchExecutive)
+    }
+
+    // Filter by town
+    if (searchTown.trim()) {
+      const searchLower = searchTown.toLowerCase().trim()
+      filtered = filtered.filter(item => {
+        const location = item.location || item.address || ''
+        return location.toLowerCase().includes(searchLower)
+      })
+    }
+
+    // Sort by most recent date first
+    return filtered.sort((a, b) => {
+      const dateA = new Date(a.createdAt || a.created_at || 0).getTime()
+      const dateB = new Date(b.createdAt || b.created_at || 0).getTime()
+      return dateB - dateA // Most recent first
+    })
+  }, [items, searchSchoolName, searchMobile, searchFromDate, searchToDate, searchZone, searchExecutive, searchTown])
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 mb-6">Closed Leads List</h1>
@@ -1379,21 +1480,77 @@ export default function ClosedSalesPage() {
       {/* Search/Filter Section */}
       <Card className="p-5 shadow-sm border-slate-200">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Input placeholder="By School Name" />
-          <Input placeholder="By Contact Mobile No" />
-          <Input type="date" placeholder="From Date" />
-          <Input type="date" placeholder="To Date" />
-          <Input placeholder="Select Zone" />
-          <Input placeholder="Select Executive" />
-          <Input placeholder="By Town" />
-          <Button className="bg-slate-700 hover:bg-slate-800 text-white shadow-sm">Search</Button>
+          <Input 
+            placeholder="By School Name" 
+            value={searchSchoolName}
+            onChange={(e) => setSearchSchoolName(e.target.value)}
+          />
+          <Input 
+            placeholder="By Contact Mobile No" 
+            value={searchMobile}
+            onChange={(e) => setSearchMobile(e.target.value)}
+          />
+          <Input 
+            type="date" 
+            placeholder="From Date"
+            value={searchFromDate}
+            onChange={(e) => setSearchFromDate(e.target.value)}
+          />
+          <Input 
+            type="date" 
+            placeholder="To Date"
+            value={searchToDate}
+            onChange={(e) => setSearchToDate(e.target.value)}
+          />
+          <Select value={searchZone || 'all'} onValueChange={(value) => setSearchZone(value === 'all' ? '' : value)}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select Zone" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Zones</SelectItem>
+              {uniqueZones.map(zone => (
+                <SelectItem key={zone} value={zone}>{zone}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={searchExecutive || 'all'} onValueChange={(value) => setSearchExecutive(value === 'all' ? '' : value)}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select Executive" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Executives</SelectItem>
+              {uniqueExecutives.map(exec => (
+                <SelectItem key={exec} value={exec}>{exec}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input 
+            placeholder="By Town" 
+            value={searchTown}
+            onChange={(e) => setSearchTown(e.target.value)}
+          />
+          <Button 
+            className="bg-slate-700 hover:bg-slate-800 text-white shadow-sm"
+            onClick={() => {
+              // Reset all filters
+              setSearchSchoolName('')
+              setSearchMobile('')
+              setSearchFromDate('')
+              setSearchToDate('')
+              setSearchZone('')
+              setSearchExecutive('')
+              setSearchTown('')
+            }}
+          >
+            Clear Filters
+          </Button>
         </div>
       </Card>
 
       <Card className="p-0 overflow-x-auto shadow-sm border-slate-200">
         {loading && <div className="p-6 text-slate-600">Loading...</div>}
-        {!loading && items.length === 0 && <div className="p-6 text-slate-500">No closed deals found.</div>}
-        {!loading && items.length > 0 && (
+        {!loading && filteredItems.length === 0 && <div className="p-6 text-slate-500">No closed deals found.</div>}
+        {!loading && filteredItems.length > 0 && (
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-100 border-b border-slate-200 text-slate-800">
@@ -1411,7 +1568,7 @@ export default function ClosedSalesPage() {
               </tr>
             </thead>
             <tbody>
-              {items.map((d) => (
+              {filteredItems.map((d) => (
                 <tr key={d._id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors">
                   <td className="py-3 px-4 text-slate-700">
                     {d.created_at ? new Date(d.created_at).toLocaleString() : 

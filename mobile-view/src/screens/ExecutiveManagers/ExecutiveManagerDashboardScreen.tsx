@@ -71,6 +71,10 @@ export default function ExecutiveManagerDashboardScreen({ navigation, route }: a
               <Text style={styles.actionCardTitle}>View Leaves</Text>
               <Text style={styles.actionCardSubtitle}>Manage manager leaves</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('POChangeRequests')}>
+              <Text style={styles.actionCardTitle}>PO Change Requests</Text>
+              <Text style={styles.actionCardSubtitle}>Approve or reject Executive PO PDF change requests</Text>
+            </TouchableOpacity>
           </>
         )}
       </ScrollView>

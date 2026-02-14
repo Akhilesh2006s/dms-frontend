@@ -33,6 +33,7 @@ export default function DCListScreen({ navigation, route }: any) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const type = route.params?.type || 'sales';
+  const isExecutiveMyDC = user?.role === 'Executive' && type === 'sales';
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -73,6 +74,26 @@ export default function DCListScreen({ navigation, route }: any) {
   };
 
   const renderDCItem = ({ item }: { item: DCItem }) => {
+    const code = item.dcOrderId?.dc_code || item._id?.slice(-8) || '—';
+    const dateStr = item.createdAt ? new Date(item.createdAt).toLocaleDateString() : '—';
+
+    if (isExecutiveMyDC) {
+      return (
+        <View style={styles.card}>
+          <Text style={styles.cardLabel}>Code</Text>
+          <Text style={styles.cardValue}>{code}</Text>
+          <Text style={styles.cardLabel}>Product</Text>
+          <Text style={styles.cardValue}>{item.product || '—'}</Text>
+          <Text style={styles.cardLabel}>Date</Text>
+          <Text style={styles.cardValue}>{dateStr}</Text>
+          <Text style={styles.cardLabel}>Status</Text>
+          <View style={[styles.statusBadge, getStatusStyle(item.status)]}>
+            <Text style={styles.statusText}>{item.status || '—'}</Text>
+          </View>
+        </View>
+      );
+    }
+
     const schoolName = item.dcOrderId?.school_name || item.customerName;
     const schoolCode = item.dcOrderId?.dc_code || '';
     const location = item.dcOrderId?.location || '';
@@ -91,9 +112,7 @@ export default function DCListScreen({ navigation, route }: any) {
         {schoolCode && <Text style={styles.schoolCode}>Code: {schoolCode}</Text>}
         {location && <Text style={styles.location}>📍 {location}</Text>}
         <Text style={styles.product}>Product: {item.product}</Text>
-        <Text style={styles.date}>
-          {new Date(item.createdAt).toLocaleDateString()}
-        </Text>
+        <Text style={styles.date}>{dateStr}</Text>
       </TouchableOpacity>
     );
   };
@@ -139,9 +158,11 @@ export default function DCListScreen({ navigation, route }: any) {
           {type === 'training' ? 'Training DCs' : 'Sales DCs'}
         </Text>
         <View style={styles.headerRight}>
-          <TouchableOpacity onPress={() => navigation.navigate('DCCapture')}>
-            <Text style={styles.addButton}>+ New</Text>
-          </TouchableOpacity>
+          {!isExecutiveMyDC && (
+            <TouchableOpacity onPress={() => navigation.navigate('DCCapture')}>
+              <Text style={styles.addButton}>+ New</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
             <Text style={styles.logoutText}>🚪</Text>
           </TouchableOpacity>
@@ -271,6 +292,16 @@ const styles = StyleSheet.create({
     ...typography.body.small,
     color: colors.textTertiary,
     marginTop: 8,
+  },
+  cardLabel: {
+    ...typography.body.small,
+    color: colors.textSecondary,
+    marginTop: 8,
+    marginBottom: 2,
+  },
+  cardValue: {
+    ...typography.body.medium,
+    color: colors.textPrimary,
   },
   empty: {
     padding: 60,

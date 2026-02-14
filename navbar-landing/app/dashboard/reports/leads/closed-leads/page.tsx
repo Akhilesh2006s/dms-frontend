@@ -279,9 +279,7 @@ export default function ReportsClosedLeadsPage() {
       if (schoolName) qs.append('schoolName', schoolName)
 
       const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null
-      const API_BASE_URL =
-        process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ||
-        "https://crm-backend-production-fc85.up.railway.app"
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:5000"
 
       const response = await fetch(`${API_BASE_URL}/api/leads/export?${qs.toString()}`, {
         method: 'GET',

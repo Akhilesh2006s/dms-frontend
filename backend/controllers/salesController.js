@@ -6,11 +6,12 @@ const DC = require('../models/DC');
 // @access  Private
 const getSales = async (req, res) => {
   try {
-    const { status, assignedTo, startDate, endDate } = req.query;
+    const { status, assignedTo, customerName, startDate, endDate } = req.query;
     const filter = {};
 
     if (status) filter.status = status;
     if (assignedTo) filter.assignedTo = assignedTo;
+    if (customerName) filter.customerName = { $regex: new RegExp(String(customerName).trim(), 'i') };
     if (startDate || endDate) {
       filter.saleDate = {};
       if (startDate) filter.saleDate.$gte = new Date(startDate);
@@ -196,9 +197,24 @@ const getClosedSales = async (req, res) => {
   }
 };
 
+// @desc    Get distinct customer names for current user's sales (for stock return form)
+// @route   GET /api/sales/customers
+// @access  Private
+const getSalesCustomers = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) return res.status(401).json({ message: 'Not authenticated' });
+    const customers = await Sale.distinct('customerName', { assignedTo: userId });
+    res.json(customers.filter(Boolean).sort());
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   getSales,
   getSale,
+  getSalesCustomers,
   createSale,
   updateSale,
   submitPO,

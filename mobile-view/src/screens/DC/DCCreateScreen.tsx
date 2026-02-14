@@ -204,7 +204,6 @@ export default function DCCreateScreen({ navigation, route }: any) {
 
     setSubmitting(true);
     try {
-      const requestedQuantity = productRows.reduce((s, r) => s + (Number(r.strength) || 0), 0) || 1;
       const productDetails = productRows.map((row) => ({
         product: row.product,
         class: row.class || '1',
@@ -219,25 +218,29 @@ export default function DCCreateScreen({ navigation, route }: any) {
         price: Number(row.unit_price) || 0,
       }));
 
-      const raisePayload: any = {
+      const terms = productDetails.map((p) => p.term || 'Term 1');
+      const hasTerm2 = terms.some((t) => t === 'Term 2');
+      const hasTerm1OrBoth = terms.some((t) => t === 'Term 1' || t === 'Both');
+      const hasBothTerms = hasTerm2 && hasTerm1OrBoth;
+
+      const requestedQuantity = productDetails.reduce((s, p) => s + (p.strength || 0), 0) || 1;
+      await apiService.post('/dc/raise', {
         dcOrderId: dealId,
         dcDate: dcDate || undefined,
         dcRemarks: dcRemarks || undefined,
         dcCategory: dcCategory || undefined,
         dcNotes: dcNotes || undefined,
-        requestedQuantity: requestedQuantity,
-        productDetails,
         employeeId: selectedEmployeeId,
-        status: 'pending_dc',
-      };
-
-      await apiService.post('/dc/raise', raisePayload);
+        productDetails,
+        requestedQuantity,
+        status: hasTerm2 && !hasTerm1OrBoth ? 'scheduled_for_later' : 'pending_dc',
+      });
 
       if (!isLead) {
         await apiService.put(`/dc-orders/${dealId}`, { status: 'dc_sent_to_senior' });
       }
 
-      setSuccessMessage('DC raised and sent to Senior Coordinator.');
+      setSuccessMessage(hasBothTerms ? 'DC split: Term 1 → Pending DC, Term 2 → Term-Wise DC.' : 'DC raised and sent to Senior Coordinator.');
       scrollRef.current?.scrollTo({ y: 0, animated: true });
       setTimeout(() => {
         navigation.goBack();
@@ -405,11 +408,13 @@ export default function DCCreateScreen({ navigation, route }: any) {
               </View>
               {productRows.map((row) => (
                 <View key={row.id} style={styles.tableRow}>
-                  <View style={[styles.td, styles.colProduct]}>
+                  <View style={[styles.td, styles.tdPickerWrap, styles.colProduct]}>
+                    <Text style={styles.pickerLabel} numberOfLines={1} pointerEvents="none">{row.product || 'Abacus'}</Text>
                     <Picker
                       selectedValue={row.product}
                       onValueChange={(v) => updateProductRow(row.id, 'product', v)}
-                      style={styles.tablePicker}
+                      style={styles.tablePickerOverlay}
+                      color="#111827"
                     >
                       {products.length ? products.map((p: any) => (
                         <Picker.Item key={p._id} label={p.productName || p.name || p.product || 'Abacus'} value={p.productName || p.name || p.product || 'Abacus'} />
@@ -418,15 +423,17 @@ export default function DCCreateScreen({ navigation, route }: any) {
                       )}
                     </Picker>
                   </View>
-                  <View style={[styles.td, styles.colClass]}>
-                    <Picker selectedValue={row.class} onValueChange={(v) => updateProductRow(row.id, 'class', v)} style={styles.tablePicker}>
+                  <View style={[styles.td, styles.tdPickerWrap, styles.colClass]}>
+                    <Text style={styles.pickerLabel} pointerEvents="none">{row.class || '1'}</Text>
+                    <Picker selectedValue={row.class} onValueChange={(v) => updateProductRow(row.id, 'class', v)} style={styles.tablePickerOverlay} color="#111827">
                       {CLASSES.map((c) => (
                         <Picker.Item key={c} label={c} value={c} />
                       ))}
                     </Picker>
                   </View>
-                  <View style={[styles.td, styles.colCategory]}>
-                    <Picker selectedValue={row.category} onValueChange={(v) => updateProductRow(row.id, 'category', v)} style={styles.tablePicker}>
+                  <View style={[styles.td, styles.tdPickerWrap, styles.colCategory]}>
+                    <Text style={styles.pickerLabel} numberOfLines={1} pointerEvents="none">{row.category || 'New Students'}</Text>
+                    <Picker selectedValue={row.category} onValueChange={(v) => updateProductRow(row.id, 'category', v)} style={styles.tablePickerOverlay} color="#111827">
                       {CATEGORIES.map((c) => (
                         <Picker.Item key={c} label={c} value={c} />
                       ))}
@@ -451,19 +458,22 @@ export default function DCCreateScreen({ navigation, route }: any) {
                     keyboardType="numeric"
                     placeholder="0"
                   />
-                  <View style={[styles.td, styles.colLevel]}>
+                  <View style={[styles.td, styles.tdPickerWrap, styles.colLevel]}>
+                    <Text style={styles.pickerLabel} pointerEvents="none">{row.level || 'L1'}</Text>
                     <Picker
                       selectedValue={row.level}
                       onValueChange={(v) => updateProductRow(row.id, 'level', v)}
-                      style={styles.tablePicker}
+                      style={styles.tablePickerOverlay}
+                      color="#111827"
                     >
                       {getProductLevels(row.product).map((l) => (
                         <Picker.Item key={l} label={l} value={l} />
                       ))}
                     </Picker>
                   </View>
-                  <View style={[styles.td, styles.colTerm]}>
-                    <Picker selectedValue={row.term} onValueChange={(v) => updateProductRow(row.id, 'term', v)} style={styles.tablePicker}>
+                  <View style={[styles.td, styles.tdPickerWrap, styles.colTerm]}>
+                    <Text style={styles.pickerLabel} pointerEvents="none">{row.term || 'Term 1'}</Text>
+                    <Picker selectedValue={row.term} onValueChange={(v) => updateProductRow(row.id, 'term', v)} style={styles.tablePickerOverlay} color="#111827">
                       {TERMS.map((t) => (
                         <Picker.Item key={t} label={t} value={t} />
                       ))}
@@ -582,8 +592,33 @@ const styles = StyleSheet.create({
   th: { ...typography.label.small, color: colors.textPrimary, fontWeight: '600' },
   tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border, padding: 8, alignItems: 'center', minHeight: 44 },
   td: { ...typography.body.small, color: colors.textPrimary, justifyContent: 'center', paddingHorizontal: 4 },
+  tdPickerWrap: { backgroundColor: colors.backgroundLight, position: 'relative' },
+  pickerLabel: {
+    fontSize: 12,
+    color: '#111827',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    zIndex: 0,
+  },
+  tablePickerOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    opacity: 0.01,
+    zIndex: 1,
+    height: 36,
+    minWidth: 70,
+  },
   tableInput: { backgroundColor: colors.backgroundLight, borderWidth: 1, borderColor: colors.border, borderRadius: 6, padding: 6, fontSize: 12, minHeight: 32, color: colors.textPrimary },
-  tablePicker: { height: 36, minWidth: 70 },
+  tablePicker: {
+    height: 36,
+    minWidth: 70,
+    color: '#111827',
+    backgroundColor: colors.backgroundLight,
+    fontSize: 14,
+  },
   colProduct: { width: 110 },
   colClass: { width: 52 },
   colCategory: { width: 100 },

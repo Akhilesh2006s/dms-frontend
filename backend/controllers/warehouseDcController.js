@@ -1,5 +1,6 @@
 const DcOrder = require('../models/DcOrder');
 const Lead = require('../models/Lead');
+const DC = require('../models/DC');
 
 // Helper to transform DcOrder/Lead to warehouse DC format
 function transformToWarehouseDC(doc) {
@@ -301,11 +302,113 @@ const getHoldDCList = async (req, res) => {
   }
 };
 
+// @desc    Move DcOrder from hold to DC @ Warehouse (release hold + ensure DC exists with sent_to_manager so it appears in DC @ Warehouse list)
+// @route   POST /api/warehouse/dc-order/:id/move-to-warehouse
+// @access  Private
+const moveDcOrderToWarehouse = async (req, res) => {
+  try {
+    const dcOrder = await DcOrder.findById(req.params.id)
+      .populate('assigned_to', 'name email')
+      .populate('created_by', 'name email');
+    if (!dcOrder) {
+      return res.status(404).json({ message: 'DcOrder not found' });
+    }
+    if (dcOrder.status !== 'hold') {
+      return res.status(400).json({ message: `DcOrder is not on hold. Current status: ${dcOrder.status}` });
+    }
+
+    // Release hold on DcOrder
+    dcOrder.status = 'pending';
+    dcOrder.hold = false;
+    await dcOrder.save();
+
+    // Find or create DC so it appears in DC @ Warehouse (GET /dc/pending-warehouse)
+    let dc = await DC.findOne({ dcOrderId: dcOrder._id });
+    const now = new Date();
+    const userId = req.user && req.user._id;
+
+    if (dc) {
+      dc.status = 'sent_to_manager';
+      dc.sentToManagerAt = dc.sentToManagerAt || now;
+      dc.managerRequestedAt = dc.managerRequestedAt || now;
+      if (userId) {
+        dc.managerId = userId;
+        dc.managerRequestedBy = userId;
+      }
+      dc.holdReason = undefined;
+      await dc.save({ validateBeforeSave: false });
+    } else {
+      const productName = (dcOrder.products && dcOrder.products[0] && dcOrder.products[0].product_name) ? dcOrder.products[0].product_name : 'Abacus';
+      const requestedQuantity = (dcOrder.products && Array.isArray(dcOrder.products))
+        ? dcOrder.products.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0) || 1
+        : 1;
+      const employeeId = dcOrder.assigned_to
+        ? (typeof dcOrder.assigned_to === 'object' ? dcOrder.assigned_to._id : dcOrder.assigned_to)
+        : (dcOrder.created_by ? (typeof dcOrder.created_by === 'object' ? dcOrder.created_by._id : dcOrder.created_by) : userId);
+      if (!employeeId) {
+        return res.status(400).json({ message: 'DcOrder must have assigned_to or created_by to create DC.' });
+      }
+      const productDetails = (dcOrder.products && Array.isArray(dcOrder.products))
+        ? dcOrder.products.map((p) => {
+          const q = Number(p.quantity) || 0;
+          const price = Number(p.unit_price) || 0;
+          return {
+            product: p.product_name || '',
+            class: (p.class || '1').toString(),
+            category: p.category || 'New Students',
+            productName: p.product_name || '',
+            quantity: q,
+            strength: q,
+            price,
+            total: price * q,
+            level: 'L2',
+            specs: 'Regular',
+            subject: undefined,
+            term: p.term || 'Term 1',
+          };
+        })
+        : undefined;
+
+      dc = await DC.create({
+        dcOrderId: dcOrder._id,
+        employeeId,
+        customerName: dcOrder.school_name || 'Unknown',
+        customerEmail: dcOrder.email || undefined,
+        customerAddress: dcOrder.address || dcOrder.location || 'N/A',
+        customerPhone: dcOrder.contact_mobile || dcOrder.contact_person || 'N/A',
+        product: productName,
+        requestedQuantity,
+        deliverableQuantity: 0,
+        status: 'sent_to_manager',
+        sentToManagerAt: now,
+        managerRequestedAt: now,
+        managerId: userId,
+        managerRequestedBy: userId,
+        createdBy: userId,
+        productDetails: productDetails || undefined,
+      });
+    }
+
+    const populatedDC = await DC.findById(dc._id)
+      .populate('saleId', 'customerName product quantity status poDocument')
+      .populate('dcOrderId', 'school_name contact_person contact_mobile zone location')
+      .populate('employeeId', 'name email')
+      .populate('managerId', 'name email')
+      .populate('managerRequestedBy', 'name email');
+
+    res.json(populatedDC);
+  } catch (error) {
+    console.error('Error moveDcOrderToWarehouse:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   getWarehouseDCList,
   getWarehouseDC,
   updateWarehouseDC,
   toggleHoldDC,
   getHoldDCList,
+  moveDcOrderToWarehouse,
 };
 

@@ -93,20 +93,42 @@ function HoverTooltip({ item, pathname, onClose }: { item: NavItem; pathname: st
         </div>
         <ul className="py-1">
           {item.children.map((c) => {
-            const isActive = pathname === c.href || (c.href !== '/dashboard' && pathname.startsWith(c.href))
+            // More precise active check: exact match only, or check if this is the longest matching route
+            let isActive = pathname === c.href
+            
+            // If not exact match, check if pathname starts with this href
+            // But only mark as active if no other child route is a better match (longer prefix)
+            if (!isActive && c.href !== '/dashboard' && pathname.startsWith(c.href + '/')) {
+              // Check if any other child has a longer matching prefix
+              const hasBetterMatch = item.children.some(otherChild => 
+                otherChild.href !== c.href && 
+                pathname.startsWith(otherChild.href + '/') &&
+                otherChild.href.length > c.href.length
+              )
+              // Only mark as active if no better match exists
+              isActive = !hasBetterMatch
+            }
             return (
               <li key={c.label}>
                 <Link 
                   href={c.href}
                   onClick={onClose}
-                  className={`flex items-center gap-2.5 text-sm px-3 py-2 font-normal transition-all duration-200 ${
+                  className={`flex items-center gap-2.5 text-sm px-3 py-2.5 font-medium transition-all duration-200 rounded-lg relative ${
                     isActive 
-                      ? 'bg-blue-50 text-blue-700 border-l-2 border-blue-500' 
+                      ? 'bg-blue-50 text-blue-700 shadow-md shadow-blue-100/50 border border-blue-200 rounded-lg' 
                       : 'text-neutral-700 hover:bg-neutral-50 hover:text-neutral-900'
                   }`}
                 >
-                  {c.icon && typeof c.icon === 'function' && <c.icon size={14} className="flex-shrink-0" />}
-                  <span>{c.label}</span>
+                  {isActive && (
+                    <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-blue-50 to-transparent pointer-events-none" />
+                  )}
+                  {c.icon && typeof c.icon === 'function' && (
+                    <c.icon size={14} className={`flex-shrink-0 relative z-10 ${isActive ? 'text-blue-700' : 'text-neutral-600'}`} />
+                  )}
+                  <span className="relative z-10">{c.label}</span>
+                  {isActive && (
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-blue-500 rounded-r-full" />
+                  )}
                 </Link>
               </li>
             )
@@ -234,6 +256,8 @@ const NAV: NavItem[] = [
     children: [
       { label: 'All Products', href: '/dashboard/products', icon: Database },
       { label: 'Add New Product', href: '/dashboard/products/new', icon: PlusCircle },
+      { label: 'Deliverables', href: '/dashboard/products/deliverables', icon: Eye, adminOnly: true },
+      { label: 'Vendor', href: '/dashboard/products/vendors', icon: Building2, adminOnly: true },
     ],
   },
   {
@@ -285,6 +309,7 @@ export function Sidebar() {
   const isTrainer = user?.role === 'Trainer'
   const isWarehouseExecutive = user?.role === 'Warehouse Executive'
   const isWarehouseManager = user?.role === 'Warehouse Manager'
+  const isVendor = user?.role === 'Vendor'
 
   // Add employee leave menu if employee, replace admin Leave Management
   const employeeLeavesMenu: NavItem = {
@@ -447,60 +472,10 @@ export function Sidebar() {
         return item
       })
   } else if (isSeniorCoordinator) {
-    // For Senior Coordinator role, use the same menu as Coordinator
-    // Only show: Dashboard, Clients, Users / Employees, Trainings & Services, Warehouse, Payments, Reports, Settings, Sign out
-    const allowedMenuItems = ['Dashboard', 'Clients', 'Users / Employees', 'Trainings & Services', 'Warehouse', 'Payments', 'Reports', 'Settings', 'Sign out']
+    // Senior Coordinator: only Dashboard, Clients (all pages), Warehouse (all pages), Settings, Sign out.
+    // Reports, Payments, Training & Services, Users/Employees are removed.
+    const allowedMenuItems = ['Dashboard', 'Clients', 'Warehouse', 'Settings', 'Sign out']
     finalNav = NAV.filter(item => allowedMenuItems.includes(item.label))
-      .map(item => {
-        // Filter Users / Employees menu items to only show "Active Employees" for Senior Coordinator
-        if (item.label === 'Users / Employees' && item.children) {
-          return {
-            ...item,
-            children: item.children.filter(child => 
-              child.label === 'Active Employees'
-            )
-          }
-        }
-        // Filter Trainings & Services menu items to exclude "Add Trainer" for Senior Coordinator
-        if (item.label === 'Trainings & Services' && item.children) {
-          return {
-            ...item,
-            children: item.children.filter(child => 
-              child.label !== 'Add Trainer'
-            )
-          }
-        }
-        // Filter Warehouse menu items to only show "DC @ Warehouse" and "Completed DC" for Senior Coordinator
-        if (item.label === 'Warehouse' && item.children) {
-          const allowedWarehouseItems = ['DC @ Warehouse', 'Completed DC']
-          return {
-            ...item,
-            children: item.children.filter(child => 
-              allowedWarehouseItems.includes(child.label)
-            )
-          }
-        }
-        // Filter Payments menu items to exclude "Add Payment" and "HOLD Payments" for Senior Coordinator
-        if (item.label === 'Payments' && item.children) {
-          return {
-            ...item,
-            children: item.children.filter(child => 
-              child.label !== 'Add Payment' && child.label !== 'HOLD Payments'
-            )
-          }
-        }
-        // Filter Reports menu items to only show: Leads, DC, Returns, All Expenses for Senior Coordinator
-        if (item.label === 'Reports' && item.children) {
-          const allowedReportItems = ['Leads', 'DC', 'Returns', 'All Expenses']
-          return {
-            ...item,
-            children: item.children.filter(child => 
-              allowedReportItems.includes(child.label)
-            )
-          }
-        }
-        return item
-      })
   } else if (isExecutiveManager) {
     // For Executive Manager role, show My Dashboard and Executive Manager menu
     // Get the manager's own ID from user data (we'll need to store it in auth)
@@ -601,6 +576,14 @@ export function Sidebar() {
       },
       { label: 'Sign out', icon: LogOut, href: '/auth/login' },
     ]
+  } else if (isVendor) {
+    // For Vendor role: Dashboard + Stocks + DCs (assigned products only)
+    finalNav = [
+      { label: 'My Dashboard', icon: LayoutDashboard, href: '/dashboard' },
+      { label: 'Stocks', icon: Boxes, href: '/dashboard/stocks' },
+      { label: 'My DCs', icon: Truck, href: '/dashboard/dcs' },
+      { label: 'Sign out', icon: LogOut, href: '/auth/login' },
+    ]
   } else {
     // For all other roles (Admin, Super Admin, etc.), show all menu items except "DC listed" (only for Manager and Coordinator) and "Term-Wise DC"
     finalNav = NAV.map(item => {
@@ -623,6 +606,17 @@ export function Sidebar() {
             // Exclude "DC listed" for non-Manager/Coordinator
             if (child.label === 'DC listed') return false
             // Only show adminOnly items for Admin
+            if (child.adminOnly && !isAdmin) return false
+            return true
+          })
+        }
+      }
+      // Filter Products menu items: only show adminOnly (Deliverables) for Admin/Super Admin
+      if (item.label === 'Products' && item.children) {
+        const isAdmin = user?.role === 'Admin' || user?.role === 'Super Admin'
+        return {
+          ...item,
+          children: item.children.filter(child => {
             if (child.adminOnly && !isAdmin) return false
             return true
           })
@@ -787,21 +781,45 @@ export function Sidebar() {
                   {/* Expanded submenu */}
                   {sidebarOpen && (
                     <div className={`overflow-hidden transition-all duration-300 ease-out ${open[item.label] ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
-                      <ul className="ml-6 mt-1 mb-2 space-y-0.5 border-l border-white/5 pl-3">
+                      <ul className="ml-6 mt-1 mb-2 space-y-1 border-l border-white/5 pl-3">
                         {item.children.map((c) => {
-                          const isActive = pathname === c.href || (c.href !== '/dashboard' && pathname.startsWith(c.href))
+                          // More precise active check: exact match only, or check if this is the longest matching route
+                          // This prevents "My Clients" (/dashboard/dc/client-dc) from being active when on "Term-Wise DC" (/dashboard/dc/client-dc/term-wise)
+                          let isActive = pathname === c.href
+                          
+                          // If not exact match, check if pathname starts with this href
+                          // But only mark as active if no other child route is a better match (longer prefix)
+                          if (!isActive && c.href !== '/dashboard' && pathname.startsWith(c.href + '/')) {
+                            // Check if any other child has a longer matching prefix
+                            const hasBetterMatch = item.children.some(otherChild => 
+                              otherChild.href !== c.href && 
+                              pathname.startsWith(otherChild.href + '/') &&
+                              otherChild.href.length > c.href.length
+                            )
+                            // Only mark as active if no better match exists
+                            isActive = !hasBetterMatch
+                          }
+                          
                           return (
                             <li key={c.label}>
                               <Link 
                                 href={c.href} 
-                                className={`flex items-center gap-2.5 text-[12.5px] px-2.5 py-2 rounded-md font-normal transition-all duration-200 ${
+                                className={`flex items-center gap-2.5 text-[12.5px] px-3 py-2.5 rounded-lg font-medium transition-all duration-200 relative ${
                                   isActive 
-                                    ? 'bg-white/10 text-white border-l-2 border-white/30' 
+                                    ? 'bg-white/15 text-white shadow-lg shadow-white/5 border border-white/20 rounded-lg' 
                                     : 'text-white/50 hover:bg-white/5 hover:text-white/80'
                                 }`}
                               >
-                                {c.icon && typeof c.icon === 'function' && <c.icon size={14} className="flex-shrink-0" />}
-                                <span>{c.label}</span>
+                                {isActive && (
+                                  <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-white/10 to-transparent pointer-events-none" />
+                                )}
+                                {c.icon && typeof c.icon === 'function' && (
+                                  <c.icon size={14} className={`flex-shrink-0 relative z-10 ${isActive ? 'text-white' : 'text-white/50'}`} />
+                                )}
+                                <span className="relative z-10">{c.label}</span>
+                                {isActive && (
+                                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-white/40 rounded-r-full" />
+                                )}
                               </Link>
                             </li>
                           )

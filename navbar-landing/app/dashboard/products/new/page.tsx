@@ -117,7 +117,7 @@ export default function NewProductPage() {
       return
     }
     if (form.hasSubjects && form.subjects.length === 0) {
-      setError('At least one subject is required when subjects are enabled')
+      setError('At least one special note is required when special notes are enabled')
       setSubmitting(false)
       return
     }
@@ -127,7 +127,7 @@ export default function NewProductPage() {
       return
     }
     if (form.hasCategory && form.categories.length === 0) {
-      setError('At least one product category is required when product categories are enabled')
+      setError('At least one series is required when series are enabled')
       setSubmitting(false)
       return
     }
@@ -198,18 +198,18 @@ export default function NewProductPage() {
           </div>
 
           <div>
-            <Label>Product Levels</Label>
-            <p className="text-xs text-neutral-500 mb-2">Add levels like L1, L2, L3, etc.</p>
+            <Label>Term</Label>
+            <p className="text-xs text-neutral-500 mb-2">Add terms like Term 1, Term 2</p>
             <div className="flex gap-2 mb-2">
               <Input
                 className="bg-white text-neutral-900"
-                placeholder="Enter level (e.g., L1, L2)"
+                placeholder="Enter term (e.g., Term 1, Term 2)"
                 value={form.newLevel}
                 onChange={(e) => setForm({ ...form, newLevel: e.target.value })}
                 onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addLevel())}
               />
               <Button type="button" onClick={addLevel} variant="outline">
-                Add Level
+                Add Term
               </Button>
             </div>
             {form.productLevels.length > 0 && (
@@ -239,24 +239,25 @@ export default function NewProductPage() {
               }
             />
             <Label htmlFor="hasSubjects" className="cursor-pointer font-medium">
-              Has Subjects
+              Special Notes
             </Label>
           </div>
 
           {form.hasSubjects && (
             <div>
-              <Label>Subjects *</Label>
-              <p className="text-xs text-neutral-500 mb-2">Add one or multiple subjects</p>
+              <Label>Special Notes *</Label>
+              <p className="text-xs text-neutral-500 mb-2">Add one or multiple special notes</p>
               <div className="flex gap-2 mb-2">
                 <Input
+                  type="text"
                   className="bg-white text-neutral-900"
-                  placeholder="Enter subject name"
+                  placeholder="Enter special note"
                   value={form.newSubject}
                   onChange={(e) => setForm({ ...form, newSubject: e.target.value })}
                   onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addSubject())}
                 />
                 <Button type="button" onClick={addSubject} variant="outline">
-                  Add Subject
+                  Add Special Note
                 </Button>
               </div>
               {form.subjects.length > 0 && (
@@ -287,7 +288,7 @@ export default function NewProductPage() {
               }
             />
             <Label htmlFor="hasSpecs" className="cursor-pointer font-medium">
-              Has Specs
+              Specs
             </Label>
           </div>
 
@@ -335,24 +336,24 @@ export default function NewProductPage() {
               }
             />
             <Label htmlFor="hasCategory" className="cursor-pointer font-medium">
-              Has Product Category
+              Series
             </Label>
           </div>
 
           {form.hasCategory && (
             <div>
-              <Label>Product Categories *</Label>
-              <p className="text-xs text-neutral-500 mb-2">Add one or multiple product categories</p>
+              <Label>Series *</Label>
+              <p className="text-xs text-neutral-500 mb-2">Add one or multiple series</p>
               <div className="flex gap-2 mb-2">
                 <Input
                   className="bg-white text-neutral-900"
-                  placeholder="Enter product category name"
+                  placeholder="Enter series name"
                   value={form.newCategory}
                   onChange={(e) => setForm({ ...form, newCategory: e.target.value })}
                   onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addCategory())}
                 />
                 <Button type="button" onClick={addCategory} variant="outline">
-                    Add Product Category
+                    Add Series
                 </Button>
               </div>
               {form.categories.length > 0 && (

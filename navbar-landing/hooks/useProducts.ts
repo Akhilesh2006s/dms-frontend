@@ -104,6 +104,11 @@ export function useProducts() {
       const product = products.find(p => p.productName === productName)
       return product?.hasCategory === true && product?.categories && Array.isArray(product.categories) && product.categories.length > 0
     },
+    // Get product _id by name (for API calls that need productId)
+    getProductId: (productName: string): string | undefined => {
+      const product = products.find(p => p.productName === productName)
+      return product?._id
+    },
   }
 }
 
