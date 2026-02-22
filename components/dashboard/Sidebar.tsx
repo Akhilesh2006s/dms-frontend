@@ -268,8 +268,6 @@ const NAV: NavItem[] = [
       { label: 'App Dashboard Data Upload', href: '/dashboard/settings/upload' },
       { label: 'SMS', href: '/dashboard/settings/sms' },
       { label: 'DB Backup', href: '/dashboard/settings/backup' },
-      { label: 'DMS API Integration', href: '/dashboard/settings/dms-api', adminOnly: true },
-      { label: 'API Keys', href: '/dashboard/settings/api-keys', adminOnly: true },
     ],
   },
   { label: 'Sign out', icon: LogOut, href: '/auth/login' },
