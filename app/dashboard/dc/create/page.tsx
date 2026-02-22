@@ -342,7 +342,7 @@ export default function CreateDealPage() {
       </Card>
       
       <ChatbotWidget 
-        apiUrl="https://crm-backend-production-fc85.up.railway.app/api/chat/message"
+        apiUrl="http://localhost:3000/api/chat/message"
         tenantId={tenantId}
         position="bottom-right"
       />
