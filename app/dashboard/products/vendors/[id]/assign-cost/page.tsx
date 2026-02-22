@@ -236,7 +236,7 @@ export default function AssignCostPage() {
     setAddFranchiseDialogOpen(true)
   }
 
-  const handleAddFranchise = () => {
+  const handleAddFranchise = async () => {
     if (!franchiseName.trim()) {
       toast.error('Please enter franchise name')
       return
