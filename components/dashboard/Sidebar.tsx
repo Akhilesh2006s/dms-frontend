@@ -257,7 +257,7 @@ const NAV: NavItem[] = [
       { label: 'All Products', href: '/dashboard/products', icon: Database },
       { label: 'Add New Product', href: '/dashboard/products/new', icon: PlusCircle },
       { label: 'Deliverables', href: '/dashboard/products/deliverables', icon: Eye, adminOnly: true },
-      { label: 'Vendor', href: '/dashboard/products/vendors', icon: Building2, adminOnly: true },
+      { label: 'Partner', href: '/dashboard/products/vendors', icon: Building2, adminOnly: true },
     ],
   },
   {
@@ -268,6 +268,8 @@ const NAV: NavItem[] = [
       { label: 'App Dashboard Data Upload', href: '/dashboard/settings/upload' },
       { label: 'SMS', href: '/dashboard/settings/sms' },
       { label: 'DB Backup', href: '/dashboard/settings/backup' },
+      { label: 'DMS API Integration', href: '/dashboard/settings/dms-api', adminOnly: true },
+      { label: 'API Keys', href: '/dashboard/settings/api-keys', adminOnly: true },
     ],
   },
   { label: 'Sign out', icon: LogOut, href: '/auth/login' },
@@ -309,7 +311,7 @@ export function Sidebar() {
   const isTrainer = user?.role === 'Trainer'
   const isWarehouseExecutive = user?.role === 'Warehouse Executive'
   const isWarehouseManager = user?.role === 'Warehouse Manager'
-  const isVendor = user?.role === 'Vendor'
+  const isPartner = user?.role === 'Partner'
 
   // Add employee leave menu if employee, replace admin Leave Management
   const employeeLeavesMenu: NavItem = {
@@ -576,8 +578,8 @@ export function Sidebar() {
       },
       { label: 'Sign out', icon: LogOut, href: '/auth/login' },
     ]
-  } else if (isVendor) {
-    // For Vendor role: Dashboard + Stocks + DCs (assigned products only)
+  } else if (isPartner) {
+    // For Partner role: Dashboard + Stocks + DCs (assigned products only)
     finalNav = [
       { label: 'My Dashboard', icon: LayoutDashboard, href: '/dashboard' },
       { label: 'Stocks', icon: Boxes, href: '/dashboard/stocks' },
