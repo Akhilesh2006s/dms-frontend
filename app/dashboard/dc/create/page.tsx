@@ -12,6 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useEffect } from 'react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useProducts } from '@/hooks/useProducts'
+import { getCurrentUser } from '@/lib/auth'
+import ChatbotWidget from '@/components/ChatbotWidget'
 
 type ProductSelection = {
   name: string
@@ -24,6 +26,8 @@ type ProductSelection = {
 export default function CreateDealPage() {
   const router = useRouter()
   const { productNames: availableProducts } = useProducts()
+  const currentUser = getCurrentUser()
+  const tenantId = currentUser?._id || ''
   
   const [form, setForm] = useState({
     school_type: '',
@@ -336,6 +340,12 @@ export default function CreateDealPage() {
           </div>
         </form>
       </Card>
+      
+      <ChatbotWidget 
+        apiUrl="https://crm-backend-production-fc85.up.railway.app/api/chat/message"
+        tenantId={tenantId}
+        position="bottom-right"
+      />
     </div>
   )
 }
