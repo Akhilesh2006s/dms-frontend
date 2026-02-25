@@ -161,6 +161,8 @@ const NAV: NavItem[] = [
       { label: 'Active Employees', href: '/dashboard/employees/active' },
       { label: 'Inactive Employees', href: '/dashboard/employees/inactive' },
       { label: 'Pending Leaves', href: '/dashboard/employees/leaves', icon: CalendarCheck2 },
+      { label: 'Zones', href: '/dashboard/employees/zones', icon: Database },
+      { label: 'Clusters', href: '/dashboard/employees/clusters', icon: Database },
     ],
   },
   {

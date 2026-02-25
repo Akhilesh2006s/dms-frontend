@@ -8,7 +8,8 @@ import React, { useState, useEffect, useRef } from 'react';
 const ChatbotWidget = ({ 
   apiUrl = 'http://localhost:3000/api/chat/message',
   tenantId,
-  position = 'bottom-right' // bottom-right, bottom-left, top-right, top-left
+  position = 'bottom-right', // bottom-right, bottom-left, top-right, top-left
+  onFormData = null // Callback function to update form fields: (formData) => void
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
@@ -27,7 +28,7 @@ const ChatbotWidget = ({
     if (isOpen && messages.length === 0) {
       setMessages([{
         role: 'assistant',
-        message: 'Hello! I can help you create a deal quickly. Just tell me the details like: "School name ABC, contact person John, phone 9876543210"',
+        message: 'Hello! I can help you create a deal quickly. Just tell me the details naturally, and I\'ll auto-fill the form for you!\n\nI can understand:\n• School name, type, location, zone, address\n• Contact person, mobile, email\n• Contact person 2, mobile 2\n• Products (IIT, VedicMath, etc.) with price, quantity, strength\n• Lead status, branches, student strength\n• Follow-up date, remarks, assigned executive\n\nExample: "School name ABC School, contact person John Doe, phone 9876543210, email john@abc.com, location Delhi, zone North, products IIT and VedicMath, IIT price 5000 quantity 10"',
         timestamp: new Date()
       }]);
     }
@@ -77,6 +78,23 @@ const ChatbotWidget = ({
 
         if (data.session_id) {
           setSessionId(data.session_id);
+        }
+
+        // If form data is returned, auto-fill the form
+        if (data.form_data && onFormData && typeof onFormData === 'function') {
+          try {
+            onFormData(data.form_data);
+            // Show confirmation message
+            setTimeout(() => {
+              setMessages(prev => [...prev, {
+                role: 'system',
+                message: '✅ Form fields have been auto-filled! Please review and submit.',
+                timestamp: new Date()
+              }]);
+            }, 500);
+          } catch (error) {
+            console.error('Error updating form:', error);
+          }
         }
 
         // If lead/deal was created, show success message
@@ -231,7 +249,7 @@ const ChatbotWidget = ({
               </button>
             </div>
             <p className="text-xs text-gray-500 mt-2">
-              💡 Tip: Just describe the deal details naturally, like "School name, contact person, phone number"
+              💡 Tip: Describe all deal details naturally. I'll auto-fill: school name, contacts, products, location, zone, and more!
             </p>
           </div>
         </div>

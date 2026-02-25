@@ -896,13 +896,24 @@ export default function ClientDCPage() {
       // Load existing product details - prioritize dcOrder.products (from Edit PO), then DC.productDetails
       // Convert dcOrder.products format to dcProductRows format
       let productsToShow: any[] = []
+      const dcProductDetails = Array.isArray(fullDC.productDetails) ? fullDC.productDetails : []
       
       // First, try to use products from DcOrder (Edit PO products)
       if (dcOrderProducts.length > 0) {
         productsToShow = dcOrderProducts.map((p: any, idx: number) => ({
           id: `dcorder-${idx + 1}`,
           product: p.product_name || '',
-          class: '1', // Default, as Edit PO doesn't have class
+          // Try to preserve the original class from DC productDetails (by index or matching name)
+          class: (() => {
+            const byIndex = dcProductDetails[idx]
+            if (byIndex && byIndex.class) return byIndex.class
+            const byName = dcProductDetails.find((d: any) => {
+              const dcName = (d.product || d.productName || '').toString().toLowerCase().trim()
+              const orderName = (p.product_name || '').toString().toLowerCase().trim()
+              return dcName !== '' && dcName === orderName
+            })
+            return byName?.class || '1'
+          })(),
           category: autoCategory,
           specs: 'Regular', // Default, as Edit PO doesn't have specs
           subject: undefined,

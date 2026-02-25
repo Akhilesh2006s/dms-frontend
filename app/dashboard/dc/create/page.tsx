@@ -95,6 +95,56 @@ export default function CreateDealPage() {
     setProducts(updated)
   }
 
+  // Callback function to handle form data from chatbot
+  const handleChatbotFormData = (formData: any) => {
+    if (!formData) return
+
+    // Update form fields
+    if (formData.school_name) setForm(prev => ({ ...prev, school_name: formData.school_name }))
+    if (formData.school_type) setForm(prev => ({ ...prev, school_type: formData.school_type }))
+    if (formData.contact_person) setForm(prev => ({ ...prev, contact_person: formData.contact_person }))
+    if (formData.contact_mobile) setForm(prev => ({ ...prev, contact_mobile: formData.contact_mobile }))
+    if (formData.email) setForm(prev => ({ ...prev, email: formData.email }))
+    if (formData.contact_person2) setForm(prev => ({ ...prev, contact_person2: formData.contact_person2 }))
+    if (formData.contact_mobile2) setForm(prev => ({ ...prev, contact_mobile2: formData.contact_mobile2 }))
+    if (formData.location) setForm(prev => ({ ...prev, location: formData.location }))
+    if (formData.address) setForm(prev => ({ ...prev, address: formData.address }))
+    if (formData.zone) setForm(prev => ({ ...prev, zone: formData.zone }))
+    if (formData.lead_status) setForm(prev => ({ ...prev, lead_status: formData.lead_status }))
+    if (formData.branches) setForm(prev => ({ ...prev, branches: String(formData.branches) }))
+    if (formData.strength) setForm(prev => ({ ...prev, strength: String(formData.strength) }))
+    if (formData.remarks) setForm(prev => ({ ...prev, remarks: formData.remarks }))
+    if (formData.follow_up_date) setForm(prev => ({ ...prev, follow_up_date: formData.follow_up_date }))
+    if (formData.assigned_to) setForm(prev => ({ ...prev, assigned_to: formData.assigned_to }))
+
+    // Update products if provided
+    if (formData.products && Array.isArray(formData.products)) {
+      const updatedProducts = [...products]
+      formData.products.forEach((productName: string) => {
+        const productIndex = updatedProducts.findIndex(p => p.name === productName)
+        if (productIndex !== -1) {
+          updatedProducts[productIndex].checked = true
+        }
+      })
+      setProducts(updatedProducts)
+    }
+
+    // Update product details if provided
+    if (formData.product_details && Array.isArray(formData.product_details)) {
+      const updatedProducts = [...products]
+      formData.product_details.forEach((detail: any) => {
+        const productIndex = updatedProducts.findIndex(p => p.name === detail.product_name || p.name === detail.product)
+        if (productIndex !== -1) {
+          updatedProducts[productIndex].checked = true
+          if (detail.price !== undefined) updatedProducts[productIndex].price = detail.price
+          if (detail.quantity !== undefined) updatedProducts[productIndex].quantity = detail.quantity
+          if (detail.strength !== undefined) updatedProducts[productIndex].strength = detail.strength
+        }
+      })
+      setProducts(updatedProducts)
+    }
+  }
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSubmitting(true)
@@ -345,6 +395,7 @@ export default function CreateDealPage() {
         apiUrl="http://localhost:3000/api/chat/message"
         tenantId={tenantId}
         position="bottom-right"
+        onFormData={handleChatbotFormData}
       />
     </div>
   )
