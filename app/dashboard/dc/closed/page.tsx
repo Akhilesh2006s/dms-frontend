@@ -1302,11 +1302,11 @@ export default function ClosedSalesPage() {
               class: row.class || '1',
               category: row.category || (selectedDeal?.school_type === 'Existing' ? 'Existing Students' : 'New Students'),
               productCategory: row.productCategory || undefined,
-              specs: row.specs || 'Regular',
-              subject: row.subject || undefined,
-              strength: Number(row.strength) || 0,
-              quantity: Number(row.strength) || 0, // Quantity should match strength
-              level: row.level || getDefaultLevel(row.product || 'Abacus'),
+          specs: row.specs || 'Regular',
+          subject: row.subject || undefined,
+          strength: Number(row.strength) || 0,
+          quantity: Number(row.strength) || 0, // Quantity should match strength
+          level: row.level || getDefaultLevel(row.product || 'Abacus'),
               term: row.term || 'Term 1',
             }))
           : (dcRequestData.productDetails || []),
@@ -1995,7 +1995,7 @@ export default function ClosedSalesPage() {
                             <Select
                               value={row.product}
                               onValueChange={(value) => {
-                                const updated = [...productRows]
+                              const updated = [...productRows]
                                 updated[idx].product = value
                                 // Default level based on product
                                 updated[idx].level = getDefaultLevel(value)
@@ -2016,7 +2016,7 @@ export default function ClosedSalesPage() {
                                 } else {
                                   updated[idx].subject = undefined
                                 }
-                                setProductRows(updated)
+                              setProductRows(updated)
                               }}
                             >
                               <SelectTrigger className="h-9 text-sm bg-white border-slate-200">
@@ -2043,7 +2043,7 @@ export default function ClosedSalesPage() {
                               placeholder="Class"
                             />
                           </td>
-                      <td className="py-4 px-5">
+                          <td className="py-4 px-5">
                         {hasProductCategories(row.product) ? (
                           <Select
                             value={row.productCategory || ''}
@@ -2051,7 +2051,7 @@ export default function ClosedSalesPage() {
                               const updated = [...productRows]
                               updated[idx].productCategory = value
                               setProductRows(updated)
-                            }}
+                              }}
                           >
                             <SelectTrigger className="h-9 text-sm bg-white border-slate-200 w-32">
                               <SelectValue placeholder="Category" />
@@ -2067,14 +2067,14 @@ export default function ClosedSalesPage() {
                         ) : (
                           <span className="text-xs text-slate-400">-</span>
                         )}
-                      </td>
+                          </td>
                           <td className="py-4 px-5">
                             <Select
                               value={row.specs || ''}
                               onValueChange={(value) => {
-                                const updated = [...productRows]
+                              const updated = [...productRows]
                                 updated[idx].specs = value
-                                setProductRows(updated)
+                              setProductRows(updated)
                               }}
                             >
                               <SelectTrigger className="h-9 text-sm bg-white border-slate-200 w-36">
@@ -2092,12 +2092,12 @@ export default function ClosedSalesPage() {
                           <td className="py-4 px-5">
                             {hasProductSubjects(row.product) && getProductSubjects(row.product).length > 0 ? (
                               <Select
-                                value={row.subject || ''}
+                              value={row.subject || ''}
                                 onValueChange={(value) => {
-                                  const updated = [...productRows]
+                                const updated = [...productRows]
                                   updated[idx].subject = value
-                                  setProductRows(updated)
-                                }}
+                                setProductRows(updated)
+                              }}
                               >
                                 <SelectTrigger className="h-9 text-sm bg-white border-slate-200 w-32">
                                   <SelectValue placeholder="Subject" />
