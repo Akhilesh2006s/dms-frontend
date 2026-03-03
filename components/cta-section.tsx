@@ -48,7 +48,7 @@ export function CTASection() {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
             <a
               className="group inline-flex items-center gap-3 px-8 py-4 md:px-12 md:py-6 bg-gradient-to-r from-white to-slate-100 text-slate-900 rounded-full font-semibold text-base md:text-lg hover:from-slate-50 hover:to-slate-200 transition-all duration-300 hover:scale-105 shadow-2xl"
-              href="https://wa.me/918920660801?text=Hi%2C%20I%E2%80%99d%20like%20a%20C-FORGIA%20CRM%20demo.%20Please%20share%20pricing%20and%20features."
+              href="https://wa.me/918920660801?text=Hi%2C%20I%E2%80%99d%20like%20a%20DMS%20demo.%20Please%20share%20pricing%20and%20features."
               target="_blank"
               rel="noopener noreferrer"
             >

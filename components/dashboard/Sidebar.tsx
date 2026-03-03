@@ -139,127 +139,26 @@ function HoverTooltip({ item, pathname, onClose }: { item: NavItem; pathname: st
   )
 }
 
+// DMS-focused navigation for the 3001 app
 const NAV: NavItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
   {
-    label: 'Clients',
-    icon: Truck,
-    children: [
-      { label: 'Create Sale', href: '/dashboard/dc/create', icon: PlusCircle },
-      { label: 'Closed Sales', href: '/dashboard/dc/closed', icon: CheckCircle2 },
-      { label: 'Saved DC', href: '/dashboard/dc/saved', icon: Save },
-      { label: 'Pending DC', href: '/dashboard/dc/pending', icon: Clock },
-      { label: 'EMP DC', href: '/dashboard/dc/emp', icon: UserCircle2 },
-      { label: 'Term-Wise DC', href: '/dashboard/dc/term-wise', icon: FileText },
-    ],
-  },
-  {
-    label: 'Users / Employees',
+    label: 'Master Data',
     icon: Users,
     children: [
-      { label: 'New Employee', href: '/dashboard/employees/new' },
-      { label: 'Active Employees', href: '/dashboard/employees/active' },
-      { label: 'Inactive Employees', href: '/dashboard/employees/inactive' },
-      { label: 'Pending Leaves', href: '/dashboard/employees/leaves', icon: CalendarCheck2 },
-      { label: 'Zones', href: '/dashboard/employees/zones', icon: Database },
-      { label: 'Clusters', href: '/dashboard/employees/clusters', icon: Database },
+      { label: 'Branches', href: '/dashboard/branches', icon: Building2 },
+      { label: 'Variants', href: '/dashboard/variants', icon: Package },
+      { label: 'Customers', href: '/dashboard/customers', icon: UserCircle2 },
+      { label: 'Leads', href: '/dashboard/leads', icon: Phone },
+      { label: 'Vehicles', href: '/dashboard/vehicles', icon: Truck },
     ],
   },
   {
-    label: 'Executive Managers',
-    icon: Shield,
-    children: [
-      { label: 'All Managers', href: '/dashboard/executive-managers' },
-      { label: 'Create Manager', href: '/dashboard/executive-managers/new' },
-    ],
-  },
-  {
-    label: 'Leave Management',
-    icon: CalendarCheck2,
-    children: [
-      { label: 'Pending Leaves', href: '/dashboard/leaves/pending', icon: Clock },
-      { label: 'Leaves Report', href: '/dashboard/leaves/report', icon: FileText },
-    ],
-  },
-  {
-    label: 'Trainings & Services',
-    icon: GraduationCap,
-    children: [
-      { label: 'Add Trainer', href: '/dashboard/training/trainers/new' },
-      { label: 'Active Trainers', href: '/dashboard/training/trainers/active' },
-      { label: 'Trainers Dashboard', href: '/dashboard/training/dashboard' },
-      { label: 'Assign Training/Service', href: '/dashboard/training/assign' },
-      { label: 'Trainings List', href: '/dashboard/training/list' },
-      { label: 'Services List', href: '/dashboard/training/services' },
-      { label: 'Inactive Trainers', href: '/dashboard/training/trainers/inactive' },
-    ],
-  },
-  {
-    label: 'Warehouse',
-    icon: Boxes,
-    children: [
-      { label: 'Inventory Items', href: '/dashboard/warehouse/inventory-items' },
-      { label: 'Stock', href: '/dashboard/warehouse/stock' },
-      { label: 'DC @ Warehouse', href: '/dashboard/warehouse/dc-at-warehouse' },
-      { label: 'Completed DC', href: '/dashboard/warehouse/completed-dc' },
-      { label: 'Hold DC', href: '/dashboard/warehouse/hold-dc' },
-      { label: 'DC listed', href: '/dashboard/warehouse/dc-listed' },
-      { label: 'Search DC', href: '/dashboard/warehouse/search-dc', adminOnly: true },
-    ],
-  },
-  {
-    label: 'Stock Returns',
-    icon: RefreshCw,
-    children: [
-      { label: 'Employee Returns List', href: '/dashboard/returns/employees' },
-      { label: 'Warehouse Returns List', href: '/dashboard/returns/warehouse' },
-    ],
-  },
-  {
-    label: 'Payments',
+    label: 'Financing',
     icon: CreditCard,
     children: [
-      { label: 'Pending Payments', href: '/dashboard/payments' },
-      { label: 'Add Payment', href: '/dashboard/payments/add-payment' },
-      { label: 'Payments Done', href: '/dashboard/payments/done' },
-      { label: 'Transaction Report', href: '/dashboard/payments/transaction-report' },
-      { label: 'Approval Pending Cash', href: '/dashboard/payments/approval-pending-cash' },
-      { label: 'Approval Pending Cheques', href: '/dashboard/payments/approval-pending-cheques' },
-      { label: 'Approved Payments', href: '/dashboard/payments/approved-payments' },
-      { label: 'HOLD Payments', href: '/dashboard/payments/hold-payments' },
-    ],
-  },
-  {
-    label: 'Expenses',
-    icon: Calculator,
-    children: [
-      { label: 'Pending Expenses List', href: '/dashboard/expenses/pending' },
-      { label: 'Finance Pending Exp List', href: '/dashboard/expenses/finance-pending' },
-    ],
-  },
-  {
-    label: 'Reports',
-    icon: BarChart3,
-    children: [
-      { label: 'Leads', href: '/dashboard/reports/leads' },
-      { label: 'Sales Visit', href: '/dashboard/reports/sales-visit' },
-      { label: 'Employee Track', href: '/dashboard/reports/employee-track' },
-      { label: 'Contact Queries', href: '/dashboard/reports/contact-queries' },
-      { label: 'Change Logs', href: '/dashboard/reports/change-logs' },
-      { label: 'Stock', href: '/dashboard/reports/stock' },
-      { label: 'DC', href: '/dashboard/reports/dc' },
-      { label: 'Returns', href: '/dashboard/reports/returns' },
-      { label: 'All Expenses', href: '/dashboard/reports/expenses' },
-    ],
-  },
-  {
-    label: 'Products',
-    icon: Package,
-    children: [
-      { label: 'All Products', href: '/dashboard/products', icon: Database },
-      { label: 'Add New Product', href: '/dashboard/products/new', icon: PlusCircle },
-      { label: 'Deliverables', href: '/dashboard/products/deliverables', icon: Eye, adminOnly: true },
-      { label: 'Partner', href: '/dashboard/products/vendors', icon: Building2, adminOnly: true },
+      { label: 'FloorPlan Facility', href: '/dashboard/facilities', icon: Building2 },
+      { label: 'VIN Financing', href: '/dashboard/vin-financing', icon: CreditCard },
     ],
   },
   {
@@ -267,9 +166,6 @@ const NAV: NavItem[] = [
     icon: Settings,
     children: [
       { label: 'Change Password', href: '/dashboard/settings/password' },
-      { label: 'App Dashboard Data Upload', href: '/dashboard/settings/upload' },
-      { label: 'SMS', href: '/dashboard/settings/sms' },
-      { label: 'DB Backup', href: '/dashboard/settings/backup' },
     ],
   },
   { label: 'Sign out', icon: LogOut, href: '/auth/login' },

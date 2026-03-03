@@ -33,7 +33,7 @@ export function TestimonialsSection() {
   const testimonials = [
     {
       text:
-        "C-FORGIA made pipeline tracking effortless. We went from scattered Excel sheets to a single CRM dashboard overnight—and our deal velocity doubled!",
+        "This DMS made pipeline tracking effortless. We went from scattered Excel sheets to a single dashboard overnight—and our deal velocity doubled!",
       name: "Shriyasaswi",
       role: "Founder & CEO",
       company: "Amenity Forge"
@@ -47,28 +47,28 @@ export function TestimonialsSection() {
     },
     {
       text:
-        "Integrating web and mobile touchpoints with C-FORGIA was seamless. Our sales reps now manage leads end-to-end from their phones.",
+        "Integrating web and mobile touchpoints with this DMS was seamless. Our sales reps now manage leads end-to-end from their phones.",
       name: "Akhilesh",
       role: "Web & Mobile Development Lead",
       company: "Amenity Forge"
     },
     {
       text:
-        "Onboarding new sales hires is a breeze with C-FORGIA—we just add their email and they're productive in minutes!",
+        "Onboarding new sales hires is a breeze with this DMS—we just add their email and they're productive in minutes!",
       name: "Ruchi Patel",
       role: "Regional Sales Manager",
       company: "Amenity Forge"
     },
     {
       text:
-        "C-FORGIA’s customer support tracking system has made it easy to never miss a follow-up, boosting our client happiness to new highs.",
+        "The DMS customer support tracking system has made it easy to never miss a follow-up, boosting our client happiness to new highs.",
       name: "Alok Verma",
       role: "Customer Success Lead",
       company: "Amenity Forge"
     },
     {
       text:
-        "We now run our pan-India team remotely and collaborate on deals through C-FORGIA's shared notes and notifications—productivity is way up.",
+        "We now run our pan-India team remotely and collaborate on deals through the DMS shared notes and notifications—productivity is way up.",
       name: "Priya Srinivasan",
       role: "National Accounts Director",
       company: "Amenity Forge"

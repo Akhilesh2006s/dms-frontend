@@ -1,6 +1,6 @@
 /**
- * C-FORGIA Chatbot Widget
- * Embed this component in your C-FORGIA CRM to enable AI-powered deal creation
+ * RNXA DMS Chatbot Widget
+ * Embed this component in your DMS to enable AI-powered deal creation
  */
 
 import React, { useState, useEffect, useRef } from 'react';

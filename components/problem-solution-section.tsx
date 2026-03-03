@@ -75,13 +75,13 @@ export function ProblemSolutionSection() {
         >
           <div className="inline-flex items-center px-4 py-2 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white text-sm font-medium mb-6">
             <span className="w-2 h-2 bg-red-400 rounded-full mr-2 animate-pulse"></span>
-            CRM Problems Most Teams Face
+            DMS Problems Most Teams Face
           </div>
           <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-white text-balance mb-4 sm:mb-6">
             Disconnected tools. Lost leads. Slow follow-ups.
           </h2>
           <p className="text-base sm:text-lg md:text-xl text-white/70 max-w-3xl mx-auto font-light leading-relaxed">
-            Spreadsheets, siloed systems, and manual workflows cause leaks in your pipeline and poor customer experience. Here's how C-FORGIA fixes it.
+            Spreadsheets, siloed systems, and manual workflows cause leaks in your pipeline and poor customer experience. Here's how RNXA DMS fixes it.
           </p>
         </div>
 
@@ -141,8 +141,8 @@ export function ProblemSolutionSection() {
 
               {/* Key Stat */}
               <div className="bg-green-500/10 backdrop-blur-sm border border-green-500/20 rounded-xl p-4 sm:p-6 mb-6">
-                <div className="text-3xl sm:text-4xl font-bold text-green-400 mb-2">Unified CRM</div>
-                <p className="text-white/80 text-sm sm:text-base">One place for leads, deals, accounts, activities, and analytics.</p>
+                <div className="text-3xl sm:text-4xl font-bold text-green-400 mb-2">Unified DMS</div>
+                <p className="text-white/80 text-sm sm:text-base">One place for customers, leads, vehicles, facilities, and analytics.</p>
               </div>
 
               {/* Solution Points */}
@@ -194,13 +194,13 @@ export function ProblemSolutionSection() {
             Start Growing Revenue Today
           </h3>
           <p className="text-sm sm:text-base md:text-lg text-white/70 mb-6 sm:mb-8 max-w-2xl mx-auto font-light leading-relaxed">
-            Get a free CRM assessment and see where you can automate and accelerate.
+            Get a free DMS assessment and see where you can automate and accelerate.
           </p>
           <Button
             size="lg"
             className="bg-white text-black rounded-full px-6 sm:px-8 py-3 sm:py-4 text-base sm:text-lg font-medium transition-all duration-300 hover:bg-gray-50 hover:scale-105 hover:shadow-lg group cursor-pointer"
           >
-            Get Free CRM Assessment
+            Get Free DMS Assessment
             <ArrowRight />
           </Button>
         </div>

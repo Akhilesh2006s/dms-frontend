@@ -8,7 +8,7 @@ import { CTASection } from "@/components/cta-section"
 import { Footer } from "@/components/footer"
 import { Card } from "@/components/ui/card"
 
-// CRM central feature block (adapted from Design-landing, with CRM focus)
+// DMS central feature block (adapted from Design-landing, with DMS focus)
 
 function PricingSection() {
   return (
@@ -21,7 +21,7 @@ function PricingSection() {
           <div className="text-center text-4xl font-bold text-blue-400 mb-2">₹1,999</div>
           <div className="text-center text-sm text-gray-400 mb-6">per month, billed monthly</div>
           <ul className="text-gray-200 space-y-2 mb-4 text-sm">
-            <li>All CRM core features</li>
+            <li>All DMS core features</li>
             <li>Unlimited contacts & deals</li>
             <li>Up to 5 user seats</li>
             <li>Email & chat support</li>
@@ -34,7 +34,7 @@ function PricingSection() {
           <div className="text-center text-4xl font-bold text-blue-100 mb-2">₹10,999</div>
           <div className="text-center text-sm text-blue-300 mb-6">billed every 6 months (₹1,833/mo)</div>
           <ul className="text-gray-200 space-y-2 mb-4 text-sm">
-            <li>All CRM core features</li>
+            <li>All DMS core features</li>
             <li>Everything in Monthly</li>
             <li>Up to 10 user seats</li>
             <li>Priority support</li>
@@ -48,7 +48,7 @@ function PricingSection() {
           <div className="text-center text-4xl font-bold text-blue-400 mb-2">₹18,999</div>
           <div className="text-center text-sm text-gray-400 mb-6">billed yearly (₹1,583/mo)</div>
           <ul className="text-gray-200 space-y-2 mb-4 text-sm">
-            <li>All CRM core features</li>
+            <li>All DMS core features</li>
             <li>Everything in 6 Months</li>
             <li>Up to 20 user seats</li>
             <li>Dedicated success manager</li>
@@ -57,7 +57,8 @@ function PricingSection() {
         </div>
       </div>
       <div className="text-xs text-gray-500 mt-8 text-center max-w-md mx-auto">
-        Most leading CRMs in India charge ₹2,000–₹7,000/month per user. C-FORGIA offers transparent, all-inclusive plans for teams at a fraction of that price—with no hidden fees.
+        Most leading DMS products in India charge ₹2,000–₹7,000/month per user. RNXA DMS offers transparent,
+        all-inclusive plans for teams at a fraction of that price—with no hidden fees.
       </div>
     </section>
   )

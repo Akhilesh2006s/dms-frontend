@@ -22,9 +22,9 @@ const caveat = Caveat({
 })
 
 export const metadata: Metadata = {
-  title: "C-FORGIA CRM — Amenity Forge",
+  title: "RNXA DMS — Dealership Management System",
   description:
-    "C-FORGIA is a modern, AI‑powered CRM by Amenity Forge. Track leads, deals, and analytics in one fast, beautiful dashboard.",
+    "RNXA DMS is a modern, AI‑powered DMS. Manage customers, leads, vehicles, and financing in one fast, beautiful dashboard.",
   generator: "v0.app",
   icons: {
     icon: "/logo.png",

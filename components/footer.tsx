@@ -42,7 +42,7 @@ export function Footer() {
 
       <div className="grid w-full gap-8 xl:grid-cols-3 xl:gap-8">
         <AnimatedContainer className="space-y-4">
-          <Image src="/logo.png" alt="C-FORGIA Logo" width={64} height={64} className="size-16" />
+          <Image src="/logo.png" alt="RNXA DMS Logo" width={64} height={64} className="size-16" />
           <div className="text-muted-foreground mt-8 text-sm md:mt-0 md:block hidden">
             <p>© {new Date().getFullYear()} Amenity Forge. All rights reserved.</p>
           </div>
