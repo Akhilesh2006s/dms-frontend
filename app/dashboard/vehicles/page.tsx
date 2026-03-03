@@ -16,6 +16,7 @@ type Vehicle = {
   oem?: string
   model?: string
   variant?: string
+  variant_id?: string
   fuel_type?: string
   transmission?: string
   purchase_date?: string
@@ -128,6 +129,7 @@ export default function VehiclesPage() {
                 <th className="px-3 py-2 text-left">VIN</th>
                 <th className="px-3 py-2 text-left">Stock No</th>
                 <th className="px-3 py-2 text-left">Model / Variant</th>
+                <th className="px-3 py-2 text-left">OEM</th>
                 <th className="px-3 py-2 text-left">Fuel / Transmission</th>
                 <th className="px-3 py-2 text-left">Branch</th>
                 <th className="px-3 py-2 text-left">Status</th>
@@ -146,7 +148,9 @@ export default function VehiclesPage() {
                   <td className="px-3 py-2 text-neutral-900">
                     <div>{v.model || '-'}</div>
                     <div className="text-[11px] text-neutral-500">{v.variant || '-'}</div>
+                    <div className="text-[10px] font-mono text-neutral-400">{v.variant_id || ''}</div>
                   </td>
+                  <td className="px-3 py-2 text-neutral-700">{v.oem || '-'}</td>
                   <td className="px-3 py-2 text-neutral-700">
                     <div>{v.fuel_type || '-'}</div>
                     <div className="text-[11px] text-neutral-500">{v.transmission || '-'}</div>
