@@ -16,6 +16,9 @@ type Vehicle = {
   oem?: string
   model?: string
   variant?: string
+  fuel_type?: string
+  transmission?: string
+  purchase_date?: string
   branch_id?: string
   inventory_status?: string
   cost_price_inr?: number
@@ -123,9 +126,12 @@ export default function VehiclesPage() {
               <tr className="bg-neutral-50 border-b border-neutral-200 text-neutral-700">
                 <th className="px-3 py-2 text-left">Vehicle ID</th>
                 <th className="px-3 py-2 text-left">VIN</th>
+                <th className="px-3 py-2 text-left">Stock No</th>
                 <th className="px-3 py-2 text-left">Model / Variant</th>
+                <th className="px-3 py-2 text-left">Fuel / Transmission</th>
                 <th className="px-3 py-2 text-left">Branch</th>
                 <th className="px-3 py-2 text-left">Status</th>
+                <th className="px-3 py-2 text-left">Purchase Date</th>
                 <th className="px-3 py-2 text-right">MRP</th>
                 <th className="px-3 py-2 text-right">Cost</th>
                 <th className="px-3 py-2 text-right">Asking</th>
@@ -136,12 +142,20 @@ export default function VehiclesPage() {
                 <tr key={v._id} className="border-b last:border-0 hover:bg-neutral-50">
                   <td className="px-3 py-2 font-mono text-[11px] md:text-xs text-neutral-700">{v.vehicle_id}</td>
                   <td className="px-3 py-2 font-mono text-[11px] md:text-xs text-neutral-700">{v.vin}</td>
+                  <td className="px-3 py-2 font-mono text-[11px] md:text-xs text-neutral-700">{v.stock_no || '-'}</td>
                   <td className="px-3 py-2 text-neutral-900">
                     <div>{v.model || '-'}</div>
                     <div className="text-[11px] text-neutral-500">{v.variant || '-'}</div>
                   </td>
+                  <td className="px-3 py-2 text-neutral-700">
+                    <div>{v.fuel_type || '-'}</div>
+                    <div className="text-[11px] text-neutral-500">{v.transmission || '-'}</div>
+                  </td>
                   <td className="px-3 py-2 text-neutral-700">{v.branch_id || '-'}</td>
                   <td className="px-3 py-2 text-neutral-700">{v.inventory_status || '-'}</td>
+                  <td className="px-3 py-2 text-neutral-700">
+                    {v.purchase_date ? new Date(v.purchase_date).toLocaleDateString('en-IN') : '-'}
+                  </td>
                   <td className="px-3 py-2 text-right">
                     {v.mrp_inr ? v.mrp_inr.toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '-'}
                   </td>
