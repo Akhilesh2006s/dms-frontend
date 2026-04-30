@@ -32,6 +32,7 @@ export default function VehiclesPage() {
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null)
   const [form, setForm] = useState({
     vehicle_id: '',
     vin: '',
@@ -72,8 +73,8 @@ export default function VehiclesPage() {
     }
     setSaving(true)
     try {
-      await apiRequest<Vehicle>('/dms/vehicles', {
-        method: 'POST',
+      await apiRequest<Vehicle>(editingVehicleId ? `/dms/vehicles/${editingVehicleId}` : '/dms/vehicles', {
+        method: editingVehicleId ? 'PUT' : 'POST',
         body: JSON.stringify({
           ...form,
           mrp_inr: form.mrp_inr ? Number(form.mrp_inr) : undefined,
@@ -82,6 +83,7 @@ export default function VehiclesPage() {
         }),
       })
       setOpen(false)
+      setEditingVehicleId(null)
       setForm({
         vehicle_id: '',
         vin: '',
@@ -101,9 +103,35 @@ export default function VehiclesPage() {
     }
   }
 
+  const startEdit = (vehicle: Vehicle) => {
+    setEditingVehicleId(vehicle.vehicle_id)
+    setForm({
+      vehicle_id: vehicle.vehicle_id,
+      vin: vehicle.vin,
+      model: vehicle.model || '',
+      variant: vehicle.variant || '',
+      branch_id: vehicle.branch_id || '',
+      inventory_status: vehicle.inventory_status || 'In Stock',
+      mrp_inr: vehicle.mrp_inr ? String(vehicle.mrp_inr) : '',
+      cost_price_inr: vehicle.cost_price_inr ? String(vehicle.cost_price_inr) : '',
+      current_asking_price_inr: vehicle.current_asking_price_inr ? String(vehicle.current_asking_price_inr) : '',
+    })
+    setOpen(true)
+  }
+
+  const handleDelete = async (vehicleId: string) => {
+    if (!confirm(`Delete vehicle ${vehicleId}?`)) return
+    try {
+      await apiRequest(`/dms/vehicles/${vehicleId}`, { method: 'DELETE' })
+      await load()
+    } catch (e: any) {
+      alert(e?.message || 'Failed to delete vehicle')
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-semibold text-neutral-900">Vehicles</h1>
           <p className="text-sm text-neutral-500 mt-1">
@@ -137,6 +165,7 @@ export default function VehiclesPage() {
                 <th className="px-3 py-2 text-right">MRP</th>
                 <th className="px-3 py-2 text-right">Cost</th>
                 <th className="px-3 py-2 text-right">Asking</th>
+                <th className="px-3 py-2 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -171,6 +200,16 @@ export default function VehiclesPage() {
                       ? v.current_asking_price_inr.toLocaleString('en-IN', { maximumFractionDigits: 0 })
                       : '-'}
                   </td>
+                  <td className="px-3 py-2">
+                    <div className="flex justify-end gap-2">
+                      <Button size="sm" variant="outline" onClick={() => startEdit(v)}>
+                        Edit
+                      </Button>
+                      <Button size="sm" variant="destructive" onClick={() => handleDelete(v.vehicle_id)}>
+                        Delete
+                      </Button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -181,7 +220,7 @@ export default function VehiclesPage() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
-            <DialogTitle>Add Vehicle</DialogTitle>
+            <DialogTitle>{editingVehicleId ? 'Edit Vehicle' : 'Add Vehicle'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -191,6 +230,7 @@ export default function VehiclesPage() {
                   value={form.vehicle_id}
                   onChange={(e) => handleChange('vehicle_id', e.target.value)}
                   placeholder="VEH-0001"
+                  disabled={Boolean(editingVehicleId)}
                 />
               </div>
               <div>
@@ -199,6 +239,7 @@ export default function VehiclesPage() {
                   value={form.vin}
                   onChange={(e) => handleChange('vin', e.target.value)}
                   placeholder="MALH0D2DC9IS0001"
+                  disabled={Boolean(editingVehicleId)}
                 />
               </div>
             </div>
@@ -266,11 +307,18 @@ export default function VehiclesPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setOpen(false)
+                setEditingVehicleId(null)
+              }}
+              disabled={saving}
+            >
               Cancel
             </Button>
             <Button onClick={handleSubmit} disabled={saving} className="bg-neutral-900 text-white">
-              {saving ? 'Saving…' : 'Save Vehicle'}
+              {saving ? 'Saving…' : editingVehicleId ? 'Update Vehicle' : 'Save Vehicle'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -24,6 +24,7 @@ export default function VariantsPage() {
 
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [editingVariantId, setEditingVariantId] = useState<string | null>(null)
   const [form, setForm] = useState({
     variant_id: '',
     model: '',
@@ -61,11 +62,12 @@ export default function VariantsPage() {
     }
     setSaving(true)
     try {
-      await apiRequest<Variant>('/dms/variants', {
-        method: 'POST',
+      await apiRequest<Variant>(editingVariantId ? `/dms/variants/${editingVariantId}` : '/dms/variants', {
+        method: editingVariantId ? 'PUT' : 'POST',
         body: JSON.stringify(form),
       })
       setOpen(false)
+      setEditingVariantId(null)
       setForm({
         variant_id: '',
         model: '',
@@ -82,9 +84,32 @@ export default function VariantsPage() {
     }
   }
 
+  const startEdit = (variant: Variant) => {
+    setEditingVariantId(variant.variant_id)
+    setForm({
+      variant_id: variant.variant_id,
+      model: variant.model,
+      variant: variant.variant,
+      fuel_type: variant.fuel_type || '',
+      transmission: variant.transmission || '',
+      oem: variant.oem || 'Hyundai',
+    })
+    setOpen(true)
+  }
+
+  const handleDelete = async (variantId: string) => {
+    if (!confirm(`Delete variant ${variantId}?`)) return
+    try {
+      await apiRequest(`/dms/variants/${variantId}`, { method: 'DELETE' })
+      await load()
+    } catch (e: any) {
+      alert(e?.message || 'Failed to delete variant')
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-semibold text-neutral-900">Variants</h1>
           <p className="text-sm text-neutral-500 mt-1">
@@ -113,6 +138,7 @@ export default function VariantsPage() {
                 <th className="px-3 py-2 text-left">Fuel</th>
                 <th className="px-3 py-2 text-left">Transmission</th>
                 <th className="px-3 py-2 text-left">OEM</th>
+                <th className="px-3 py-2 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -124,6 +150,16 @@ export default function VariantsPage() {
                   <td className="px-3 py-2 text-neutral-700">{v.fuel_type || '-'}</td>
                   <td className="px-3 py-2 text-neutral-700">{v.transmission || '-'}</td>
                   <td className="px-3 py-2 text-neutral-700">{v.oem || '-'}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex justify-end gap-2">
+                      <Button size="sm" variant="outline" onClick={() => startEdit(v)}>
+                        Edit
+                      </Button>
+                      <Button size="sm" variant="destructive" onClick={() => handleDelete(v.variant_id)}>
+                        Delete
+                      </Button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -134,7 +170,7 @@ export default function VariantsPage() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
-            <DialogTitle>Add Variant</DialogTitle>
+            <DialogTitle>{editingVariantId ? 'Edit Variant' : 'Add Variant'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div>
@@ -143,6 +179,7 @@ export default function VariantsPage() {
                 value={form.variant_id}
                 onChange={(e) => handleChange('variant_id', e.target.value)}
                 placeholder="VAR-CRETA-SX-P"
+                disabled={Boolean(editingVariantId)}
               />
             </div>
             <div>
@@ -191,7 +228,10 @@ export default function VariantsPage() {
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setOpen(false)}
+              onClick={() => {
+                setOpen(false)
+                setEditingVariantId(null)
+              }}
               disabled={saving}
             >
               Cancel
@@ -201,7 +241,7 @@ export default function VariantsPage() {
               disabled={saving}
               className="bg-neutral-900 text-white"
             >
-              {saving ? 'Saving…' : 'Save Variant'}
+              {saving ? 'Saving…' : editingVariantId ? 'Update Variant' : 'Save Variant'}
             </Button>
           </DialogFooter>
         </DialogContent>

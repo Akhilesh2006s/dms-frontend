@@ -23,6 +23,7 @@ export default function CustomersPage() {
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null)
   const [form, setForm] = useState({
     customer_id: '',
     full_name: '',
@@ -60,11 +61,12 @@ export default function CustomersPage() {
     }
     setSaving(true)
     try {
-      await apiRequest<Customer>('/dms/customers', {
-        method: 'POST',
+      await apiRequest<Customer>(editingCustomerId ? `/dms/customers/${editingCustomerId}` : '/dms/customers', {
+        method: editingCustomerId ? 'PUT' : 'POST',
         body: JSON.stringify(form),
       })
       setOpen(false)
+      setEditingCustomerId(null)
       setForm({
         customer_id: '',
         full_name: '',
@@ -81,9 +83,32 @@ export default function CustomersPage() {
     }
   }
 
+  const startEdit = (customer: Customer) => {
+    setEditingCustomerId(customer.customer_id)
+    setForm({
+      customer_id: customer.customer_id,
+      full_name: customer.full_name,
+      phone: customer.phone,
+      email: customer.email || '',
+      city: customer.city || '',
+      locality: customer.locality || '',
+    })
+    setOpen(true)
+  }
+
+  const handleDelete = async (customerId: string) => {
+    if (!confirm(`Delete customer ${customerId}?`)) return
+    try {
+      await apiRequest(`/dms/customers/${customerId}`, { method: 'DELETE' })
+      await load()
+    } catch (e: any) {
+      alert(e?.message || 'Failed to delete customer')
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-semibold text-neutral-900">Customers</h1>
           <p className="text-sm text-neutral-500 mt-1">
@@ -112,6 +137,7 @@ export default function CustomersPage() {
                 <th className="px-3 py-2 text-left">Email</th>
                 <th className="px-3 py-2 text-left">City</th>
                 <th className="px-3 py-2 text-left">Locality</th>
+                <th className="px-3 py-2 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -123,6 +149,16 @@ export default function CustomersPage() {
                   <td className="px-3 py-2 text-neutral-700">{c.email || '-'}</td>
                   <td className="px-3 py-2 text-neutral-700">{c.city || '-'}</td>
                   <td className="px-3 py-2 text-neutral-700">{c.locality || '-'}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex justify-end gap-2">
+                      <Button size="sm" variant="outline" onClick={() => startEdit(c)}>
+                        Edit
+                      </Button>
+                      <Button size="sm" variant="destructive" onClick={() => handleDelete(c.customer_id)}>
+                        Delete
+                      </Button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -133,7 +169,7 @@ export default function CustomersPage() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
-            <DialogTitle>Add Customer</DialogTitle>
+            <DialogTitle>{editingCustomerId ? 'Edit Customer' : 'Add Customer'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div>
@@ -142,6 +178,7 @@ export default function CustomersPage() {
                 value={form.customer_id}
                 onChange={(e) => handleChange('customer_id', e.target.value)}
                 placeholder="CUST-0001"
+                disabled={Boolean(editingCustomerId)}
               />
             </div>
             <div>
@@ -188,11 +225,18 @@ export default function CustomersPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setOpen(false)
+                setEditingCustomerId(null)
+              }}
+              disabled={saving}
+            >
               Cancel
             </Button>
             <Button onClick={handleSubmit} disabled={saving} className="bg-neutral-900 text-white">
-              {saving ? 'Saving…' : 'Save Customer'}
+              {saving ? 'Saving…' : editingCustomerId ? 'Update Customer' : 'Save Customer'}
             </Button>
           </DialogFooter>
         </DialogContent>

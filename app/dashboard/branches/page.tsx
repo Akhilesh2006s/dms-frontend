@@ -22,6 +22,7 @@ export default function BranchesPage() {
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [editingBranchId, setEditingBranchId] = useState<string | null>(null)
   const [form, setForm] = useState({
     branch_id: '',
     branch_name: '',
@@ -58,11 +59,12 @@ export default function BranchesPage() {
     }
     setSaving(true)
     try {
-      await apiRequest<Branch>('/dms/branches', {
-        method: 'POST',
+      await apiRequest<Branch>(editingBranchId ? `/dms/branches/${editingBranchId}` : '/dms/branches', {
+        method: editingBranchId ? 'PUT' : 'POST',
         body: JSON.stringify(form),
       })
       setOpen(false)
+      setEditingBranchId(null)
       setForm({
         branch_id: '',
         branch_name: '',
@@ -78,9 +80,31 @@ export default function BranchesPage() {
     }
   }
 
+  const startEdit = (branch: Branch) => {
+    setEditingBranchId(branch.branch_id)
+    setForm({
+      branch_id: branch.branch_id,
+      branch_name: branch.branch_name,
+      city: branch.city || '',
+      state: branch.state || '',
+      oem: branch.oem || 'Hyundai',
+    })
+    setOpen(true)
+  }
+
+  const handleDelete = async (branchId: string) => {
+    if (!confirm(`Delete branch ${branchId}?`)) return
+    try {
+      await apiRequest(`/dms/branches/${branchId}`, { method: 'DELETE' })
+      await load()
+    } catch (e: any) {
+      alert(e?.message || 'Failed to delete branch')
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-semibold text-neutral-900">Branches</h1>
           <p className="text-sm text-neutral-500 mt-1">
@@ -106,6 +130,7 @@ export default function BranchesPage() {
                 <th className="px-3 py-2 text-left">City</th>
                 <th className="px-3 py-2 text-left">State</th>
                 <th className="px-3 py-2 text-left">OEM</th>
+                <th className="px-3 py-2 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -116,6 +141,16 @@ export default function BranchesPage() {
                   <td className="px-3 py-2 text-neutral-700">{b.city || '-'}</td>
                   <td className="px-3 py-2 text-neutral-700">{b.state || '-'}</td>
                   <td className="px-3 py-2 text-neutral-700">{b.oem || '-'}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex justify-end gap-2">
+                      <Button size="sm" variant="outline" onClick={() => startEdit(b)}>
+                        Edit
+                      </Button>
+                      <Button size="sm" variant="destructive" onClick={() => handleDelete(b.branch_id)}>
+                        Delete
+                      </Button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -126,7 +161,7 @@ export default function BranchesPage() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
-            <DialogTitle>Add Branch</DialogTitle>
+            <DialogTitle>{editingBranchId ? 'Edit Branch' : 'Add Branch'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div>
@@ -135,6 +170,7 @@ export default function BranchesPage() {
                 value={form.branch_id}
                 onChange={(e) => handleChange('branch_id', e.target.value)}
                 placeholder="BR-HYD-HN"
+                disabled={Boolean(editingBranchId)}
               />
             </div>
             <div>
@@ -173,11 +209,18 @@ export default function BranchesPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setOpen(false)
+                setEditingBranchId(null)
+              }}
+              disabled={saving}
+            >
               Cancel
             </Button>
             <Button onClick={handleSubmit} disabled={saving} className="bg-neutral-900 text-white">
-              {saving ? 'Saving…' : 'Save Branch'}
+              {saving ? 'Saving…' : editingBranchId ? 'Update Branch' : 'Save Branch'}
             </Button>
           </DialogFooter>
         </DialogContent>

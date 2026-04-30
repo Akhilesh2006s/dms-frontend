@@ -28,6 +28,7 @@ export default function FacilitiesPage() {
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [editingFacilityId, setEditingFacilityId] = useState<string | null>(null)
   const [form, setForm] = useState({
     facility_id: '',
     branch_id: '',
@@ -68,8 +69,8 @@ export default function FacilitiesPage() {
     }
     setSaving(true)
     try {
-      await apiRequest<Facility>('/dms/facilities', {
-        method: 'POST',
+      await apiRequest<Facility>(editingFacilityId ? `/dms/facilities/${editingFacilityId}` : '/dms/facilities', {
+        method: editingFacilityId ? 'PUT' : 'POST',
         body: JSON.stringify({
           ...form,
           interest_rate_apr: form.interest_rate_apr ? Number(form.interest_rate_apr) : undefined,
@@ -78,6 +79,7 @@ export default function FacilitiesPage() {
         }),
       })
       setOpen(false)
+      setEditingFacilityId(null)
       setForm({
         facility_id: '',
         branch_id: '',
@@ -97,9 +99,35 @@ export default function FacilitiesPage() {
     }
   }
 
+  const startEdit = (facility: Facility) => {
+    setEditingFacilityId(facility.facility_id)
+    setForm({
+      facility_id: facility.facility_id,
+      branch_id: facility.branch_id || '',
+      lender_name: facility.lender_name || '',
+      interest_rate_apr: facility.interest_rate_apr ? String(facility.interest_rate_apr) : '',
+      funding_cap_pct: facility.funding_cap_pct ? String(facility.funding_cap_pct) : '',
+      funding_cap_amount_inr: facility.funding_cap_amount_inr ? String(facility.funding_cap_amount_inr) : '',
+      start_date: facility.start_date ? new Date(facility.start_date).toISOString().slice(0, 10) : '',
+      end_date: facility.end_date ? new Date(facility.end_date).toISOString().slice(0, 10) : '',
+      is_active: facility.is_active || 'Y',
+    })
+    setOpen(true)
+  }
+
+  const handleDelete = async (facilityId: string) => {
+    if (!confirm(`Delete facility ${facilityId}?`)) return
+    try {
+      await apiRequest(`/dms/facilities/${facilityId}`, { method: 'DELETE' })
+      await load()
+    } catch (e: any) {
+      alert(e?.message || 'Failed to delete facility')
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-semibold text-neutral-900">FloorPlan Facilities</h1>
           <p className="text-sm text-neutral-500 mt-1">
@@ -132,6 +160,7 @@ export default function FacilitiesPage() {
                 <th className="px-3 py-2 text-left">Start</th>
                 <th className="px-3 py-2 text-left">End</th>
                 <th className="px-3 py-2 text-left">Active</th>
+                <th className="px-3 py-2 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -158,6 +187,16 @@ export default function FacilitiesPage() {
                     {f.end_date ? new Date(f.end_date).toLocaleDateString('en-IN') : '-'}
                   </td>
                   <td className="px-3 py-2 text-neutral-700">{f.is_active || '-'}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex justify-end gap-2">
+                      <Button size="sm" variant="outline" onClick={() => startEdit(f)}>
+                        Edit
+                      </Button>
+                      <Button size="sm" variant="destructive" onClick={() => handleDelete(f.facility_id)}>
+                        Delete
+                      </Button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -168,7 +207,7 @@ export default function FacilitiesPage() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
-            <DialogTitle>Add Facility</DialogTitle>
+            <DialogTitle>{editingFacilityId ? 'Edit Facility' : 'Add Facility'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -178,6 +217,7 @@ export default function FacilitiesPage() {
                   value={form.facility_id}
                   onChange={(e) => handleChange('facility_id', e.target.value)}
                   placeholder="FP-HDFC-HYD-HN-01"
+                  disabled={Boolean(editingFacilityId)}
                 />
               </div>
               <div>
@@ -253,11 +293,18 @@ export default function FacilitiesPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setOpen(false)
+                setEditingFacilityId(null)
+              }}
+              disabled={saving}
+            >
               Cancel
             </Button>
             <Button onClick={handleSubmit} disabled={saving} className="bg-neutral-900 text-white">
-              {saving ? 'Saving…' : 'Save Facility'}
+              {saving ? 'Saving…' : editingFacilityId ? 'Update Facility' : 'Save Facility'}
             </Button>
           </DialogFooter>
         </DialogContent>

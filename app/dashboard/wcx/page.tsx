@@ -5,6 +5,9 @@ import { Card } from '@/components/ui/card'
 import { apiRequest } from '@/lib/api'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
 
 type WcxExposure = {
   exposure_id: string
@@ -34,6 +37,16 @@ export default function WcxPage() {
   const [modelFilter, setModelFilter] = useState('')
   const [riskFilter, setRiskFilter] = useState('')
   const [branchFilter, setBranchFilter] = useState('')
+  const [editOpen, setEditOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [editingExposureId, setEditingExposureId] = useState<string | null>(null)
+  const [form, setForm] = useState({
+    risk_tag: '',
+    ageing_bucket: '',
+    recommended_discount_pct: '',
+    recommended_price_inr: '',
+    margin_pct_after_discount: '',
+  })
 
   const load = async () => {
     setLoading(true)
@@ -67,6 +80,54 @@ export default function WcxPage() {
     total: items.length,
     workingCapital: items.reduce((s, i) => s + (i.working_capital_locked_inr || 0), 0),
     interestExposure: items.reduce((s, i) => s + (i.interest_exposure_inr || 0), 0),
+  }
+
+  const startEdit = (row: WcxExposure) => {
+    setEditingExposureId(row.exposure_id)
+    setForm({
+      risk_tag: row.risk_tag || '',
+      ageing_bucket: row.ageing_bucket || '',
+      recommended_discount_pct:
+        row.recommended_discount_pct !== undefined ? String(row.recommended_discount_pct) : '',
+      recommended_price_inr: row.recommended_price_inr !== undefined ? String(row.recommended_price_inr) : '',
+      margin_pct_after_discount:
+        row.margin_pct_after_discount !== undefined ? String(row.margin_pct_after_discount) : '',
+    })
+    setEditOpen(true)
+  }
+
+  const handleUpdate = async () => {
+    if (!editingExposureId) return
+    setSaving(true)
+    try {
+      await apiRequest(`/wcx/${editingExposureId}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          risk_tag: form.risk_tag,
+          ageing_bucket: form.ageing_bucket,
+          recommended_discount_pct: form.recommended_discount_pct ? Number(form.recommended_discount_pct) : undefined,
+          recommended_price_inr: form.recommended_price_inr ? Number(form.recommended_price_inr) : undefined,
+          margin_pct_after_discount: form.margin_pct_after_discount ? Number(form.margin_pct_after_discount) : undefined,
+        }),
+      })
+      setEditOpen(false)
+      setEditingExposureId(null)
+      await load()
+    } catch (e: any) {
+      alert(e?.message || 'Failed to update WCX exposure')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (exposureId: string) => {
+    if (!confirm(`Delete exposure ${exposureId}?`)) return
+    try {
+      await apiRequest(`/wcx/${exposureId}`, { method: 'DELETE' })
+      await load()
+    } catch (e: any) {
+      alert(e?.message || 'Failed to delete WCX exposure')
+    }
   }
 
   return (
@@ -168,6 +229,7 @@ export default function WcxPage() {
                 <th className="px-3 py-2 text-right">Reco Disc %</th>
                 <th className="px-3 py-2 text-right">Reco Price</th>
                 <th className="px-3 py-2 text-right">Margin %</th>
+                <th className="px-3 py-2 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -220,12 +282,76 @@ export default function WcxPage() {
                   <td className="px-3 py-2 text-right">
                     {(i.margin_pct_after_discount * 100).toFixed(1)}%
                   </td>
+                  <td className="px-3 py-2">
+                    <div className="flex justify-end gap-2">
+                      <Button size="sm" variant="outline" onClick={() => startEdit(i)}>
+                        Edit
+                      </Button>
+                      <Button size="sm" variant="destructive" onClick={() => handleDelete(i.exposure_id)}>
+                        Delete
+                      </Button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </Card>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Edit WCX Exposure</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label>Risk Tag</Label>
+                <Input value={form.risk_tag} onChange={(e) => setForm((p) => ({ ...p, risk_tag: e.target.value }))} />
+              </div>
+              <div>
+                <Label>Ageing Bucket</Label>
+                <Input
+                  value={form.ageing_bucket}
+                  onChange={(e) => setForm((p) => ({ ...p, ageing_bucket: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label>Reco Discount % (decimal)</Label>
+                <Input
+                  value={form.recommended_discount_pct}
+                  onChange={(e) => setForm((p) => ({ ...p, recommended_discount_pct: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>Reco Price</Label>
+                <Input
+                  value={form.recommended_price_inr}
+                  onChange={(e) => setForm((p) => ({ ...p, recommended_price_inr: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>Margin % (decimal)</Label>
+                <Input
+                  value={form.margin_pct_after_discount}
+                  onChange={(e) => setForm((p) => ({ ...p, margin_pct_after_discount: e.target.value }))}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdate} disabled={saving} className="bg-neutral-900 text-white">
+              {saving ? 'Saving...' : 'Update Exposure'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

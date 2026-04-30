@@ -37,17 +37,40 @@ export default function NewEmployeePage() {
 
   const loadZones = async () => {
     try {
-      const data = await apiRequest<any[]>('/zones-clusters')
+      const [zcRows, zoneDocs, clusterDocs] = await Promise.all([
+        apiRequest<any[]>('/zones-clusters').catch(() => []),
+        apiRequest<any[]>('/zones').catch(() => []),
+        apiRequest<any[]>('/clusters').catch(() => []),
+      ])
       const zoneMap: Record<string, string[]> = {}
-      data.forEach((zc) => {
+      const clusterNames = (Array.isArray(clusterDocs) ? clusterDocs : [])
+        .map((c) => (c?.name || '').trim())
+        .filter(Boolean)
+      const uniqPush = (arr: string[], v: string) => {
+        if (!arr.includes(v)) arr.push(v)
+      }
+
+      for (const zc of Array.isArray(zcRows) ? zcRows : []) {
         const zone = (zc.zone || '').trim()
-        if (!zone) return
+        if (!zone) continue
         if (!zoneMap[zone]) zoneMap[zone] = []
-        if (zc.cluster && !zoneMap[zone].includes(zc.cluster)) {
-          zoneMap[zone].push(zc.cluster)
+        const cl = (zc.cluster || '').trim()
+        if (cl) uniqPush(zoneMap[zone], cl)
+      }
+
+      const zoneNames = (Array.isArray(zoneDocs) ? zoneDocs : [])
+        .map((z) => (z?.name || '').trim())
+        .filter(Boolean)
+      const allZoneKeys = new Set([...Object.keys(zoneMap), ...zoneNames])
+
+      for (const zone of allZoneKeys) {
+        const mapped = zoneMap[zone]
+        if (!mapped || mapped.length === 0) {
+          zoneMap[zone] = [...clusterNames]
         }
-      })
-      setZones(Object.keys(zoneMap).sort())
+      }
+
+      setZones(Array.from(allZoneKeys).sort())
       setClustersByZone(zoneMap)
     } catch (e) {
       console.error('Failed to load zones & clusters', e)

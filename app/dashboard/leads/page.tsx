@@ -25,6 +25,7 @@ export default function LeadsPage() {
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [editingLeadId, setEditingLeadId] = useState<string | null>(null)
   const [form, setForm] = useState({
     full_name: '',
     phone: '',
@@ -59,14 +60,15 @@ export default function LeadsPage() {
     }
     setSaving(true)
     try {
-      await apiRequest<Lead>('/dms/leads', {
-        method: 'POST',
+      await apiRequest<Lead>(editingLeadId ? `/dms/leads/${editingLeadId}` : '/dms/leads', {
+        method: editingLeadId ? 'PUT' : 'POST',
         body: JSON.stringify({
           ...form,
           budget_inr: form.budget_inr ? Number(form.budget_inr) : undefined,
         }),
       })
       setOpen(false)
+      setEditingLeadId(null)
       setForm({
         full_name: '',
         phone: '',
@@ -86,6 +88,32 @@ export default function LeadsPage() {
     }
   }
 
+  const startEdit = (lead: Lead) => {
+    setEditingLeadId(lead._id)
+    setForm({
+      full_name: lead.full_name || '',
+      phone: lead.phone || '',
+      preferred_mode: lead.preferred_mode || '',
+      preferred_variant_id: lead.preferred_variant_id || '',
+      budget_inr: lead.budget_inr ? String(lead.budget_inr) : '',
+      branch_preference_id: lead.branch_preference_id || '',
+      lead_status: lead.lead_status || 'New',
+      lead_source: lead.lead_source || '',
+    })
+    setOpen(true)
+  }
+
+  const handleDelete = async (leadId: string) => {
+    if (!confirm('Delete this lead?')) return
+    try {
+      await apiRequest(`/dms/leads/${leadId}`, { method: 'DELETE' })
+      const data = await apiRequest<Lead[]>('/dms/leads')
+      setLeads(Array.isArray(data) ? data : [])
+    } catch (e: any) {
+      alert(e?.message || 'Failed to delete lead')
+    }
+  }
+
   const totals = {
     total: safeLeads.length,
     contacted: safeLeads.filter((l) => l.lead_status === 'Contacted').length,
@@ -95,7 +123,7 @@ export default function LeadsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
       <div>
         <h1 className="text-2xl md:text-3xl font-semibold text-neutral-900">Leads</h1>
         </div>
@@ -117,7 +145,7 @@ export default function LeadsPage() {
         <div className="p-4 text-sm text-neutral-700">
           {!loading && safeLeads.length === 0 && 'No leads yet.'}
           {safeLeads.slice(0, 50).map((l) => (
-            <div key={l._id} className="grid grid-cols-2 md:grid-cols-6 gap-2 py-2 border-b last:border-0">
+            <div key={l._id} className="grid grid-cols-2 md:grid-cols-7 gap-2 py-2 border-b last:border-0 items-center">
               <div className="font-medium text-neutral-900">{l.full_name || 'Lead'}</div>
               <div className="text-neutral-500 text-xs md:text-sm">{l.phone || '-'}</div>
               <div className="text-neutral-500 text-xs md:text-sm">
@@ -132,6 +160,14 @@ export default function LeadsPage() {
               <div className="text-neutral-500 text-xs md:text-sm">
                 {l.branch_preference_id || '-'}
               </div>
+              <div className="col-span-2 md:col-span-1 flex justify-end gap-2">
+                <Button size="sm" variant="outline" onClick={() => startEdit(l)}>
+                  Edit
+                </Button>
+                <Button size="sm" variant="destructive" onClick={() => handleDelete(l._id)}>
+                  Delete
+                </Button>
+              </div>
             </div>
           ))}
         </div>
@@ -140,7 +176,7 @@ export default function LeadsPage() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
-            <DialogTitle>Add Lead</DialogTitle>
+            <DialogTitle>{editingLeadId ? 'Edit Lead' : 'Add Lead'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -217,11 +253,18 @@ export default function LeadsPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setOpen(false)
+                setEditingLeadId(null)
+              }}
+              disabled={saving}
+            >
               Cancel
             </Button>
             <Button onClick={handleSubmit} disabled={saving} className="bg-neutral-900 text-white">
-              {saving ? 'Saving…' : 'Save Lead'}
+              {saving ? 'Saving…' : editingLeadId ? 'Update Lead' : 'Save Lead'}
             </Button>
           </DialogFooter>
         </DialogContent>

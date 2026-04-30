@@ -24,6 +24,7 @@ export default function VinFinancingPage() {
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [editingVin, setEditingVin] = useState<string | null>(null)
   const [form, setForm] = useState({
     vin: '',
     facility_id: '',
@@ -62,8 +63,8 @@ export default function VinFinancingPage() {
     }
     setSaving(true)
     try {
-      await apiRequest<VinFinance>('/dms/vin-financing', {
-        method: 'POST',
+      await apiRequest<VinFinance>(editingVin ? `/dms/vin-financing/${editingVin}` : '/dms/vin-financing', {
+        method: editingVin ? 'PUT' : 'POST',
         body: JSON.stringify({
           ...form,
           financed_principal_inr: form.financed_principal_inr ? Number(form.financed_principal_inr) : undefined,
@@ -73,6 +74,7 @@ export default function VinFinancingPage() {
         }),
       })
       setOpen(false)
+      setEditingVin(null)
       setForm({
         vin: '',
         facility_id: '',
@@ -90,9 +92,33 @@ export default function VinFinancingPage() {
     }
   }
 
+  const startEdit = (item: VinFinance) => {
+    setEditingVin(item.vin)
+    setForm({
+      vin: item.vin,
+      facility_id: item.facility_id || '',
+      drawdown_date: item.drawdown_date ? new Date(item.drawdown_date).toISOString().slice(0, 10) : '',
+      financed_principal_inr: item.financed_principal_inr ? String(item.financed_principal_inr) : '',
+      outstanding_principal_inr: item.outstanding_principal_inr ? String(item.outstanding_principal_inr) : '',
+      last_curtailment_date: item.last_curtailment_date ? new Date(item.last_curtailment_date).toISOString().slice(0, 10) : '',
+      status: item.status || 'Active',
+    })
+    setOpen(true)
+  }
+
+  const handleDelete = async (vin: string) => {
+    if (!confirm(`Delete VIN financing record for ${vin}?`)) return
+    try {
+      await apiRequest(`/dms/vin-financing/${vin}`, { method: 'DELETE' })
+      await load()
+    } catch (e: any) {
+      alert(e?.message || 'Failed to delete VIN financing row')
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-semibold text-neutral-900">VIN Financing</h1>
           <p className="text-sm text-neutral-500 mt-1">
@@ -123,6 +149,7 @@ export default function VinFinancingPage() {
                 <th className="px-3 py-2 text-right">Outstanding</th>
                 <th className="px-3 py-2 text-left">Last Curtailment</th>
                 <th className="px-3 py-2 text-left">Status</th>
+                <th className="px-3 py-2 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -149,6 +176,16 @@ export default function VinFinancingPage() {
                       : '-'}
                   </td>
                   <td className="px-3 py-2 text-neutral-700">{v.status || '-'}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex justify-end gap-2">
+                      <Button size="sm" variant="outline" onClick={() => startEdit(v)}>
+                        Edit
+                      </Button>
+                      <Button size="sm" variant="destructive" onClick={() => handleDelete(v.vin)}>
+                        Delete
+                      </Button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -159,7 +196,7 @@ export default function VinFinancingPage() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
-            <DialogTitle>Add VIN Financing</DialogTitle>
+            <DialogTitle>{editingVin ? 'Edit VIN Financing' : 'Add VIN Financing'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -169,6 +206,7 @@ export default function VinFinancingPage() {
                   value={form.vin}
                   onChange={(e) => handleChange('vin', e.target.value)}
                   placeholder="MALH0D2DC9IS0001"
+                  disabled={Boolean(editingVin)}
                 />
               </div>
               <div>
@@ -226,11 +264,18 @@ export default function VinFinancingPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setOpen(false)
+                setEditingVin(null)
+              }}
+              disabled={saving}
+            >
               Cancel
             </Button>
             <Button onClick={handleSubmit} disabled={saving} className="bg-neutral-900 text-white">
-              {saving ? 'Saving…' : 'Save VIN Financing'}
+              {saving ? 'Saving…' : editingVin ? 'Update VIN Financing' : 'Save VIN Financing'}
             </Button>
           </DialogFooter>
         </DialogContent>
